@@ -1,4 +1,23 @@
 {
   "item.wishing_willow.wishing_willow": "许愿柳",
-  "tooltip.wishing_willow.wishing_willow": "这似乎只是一截普通的柳枝。"
+  "tooltip.wishing_willow.wishing_willow": "这似乎只是一截普通的柳枝。",
+  "screen.wishing_willow.wish.title": "许下你的愿望",
+  "screen.wishing_willow.wish.placeholder": "我希望……",
+  "screen.wishing_willow.wish.input": "愿望内容",
+  "screen.wishing_willow.wish.submit": "许愿",
+  "screen.wishing_willow.cancel": "取消",
+  "screen.wishing_willow.confirm.title": "最后的确认",
+  "screen.wishing_willow.confirm.warning": "愿望一旦说出口，就无法收回。",
+  "screen.wishing_willow.confirm.accept": "确定",
+  "screen.wishing_willow.confirm.back": "返回",
+  "message.wishing_willow.heard": "你的愿望已经被听见。",
+  "message.wishing_willow.rejected.empty": "愿望不能为空。",
+  "message.wishing_willow.rejected.too_long": "这个愿望太长了。",
+  "message.wishing_willow.rejected.invalid_characters": "愿望中包含无法接受的字符。",
+  "message.wishing_willow.rejected.not_holding": "许愿柳已经不在你的手中。",
+  "message.wishing_willow.rejected.busy": "你已经在许愿了。",
+  "message.wishing_willow.rejected.duplicate": "这个愿望已经提交过了。",
+  "message.wishing_willow.rejected.cooldown": "请稍等片刻再许愿。",
+  "message.wishing_willow.rejected.interrupted": "许愿被打断了。",
+  "message.wishing_willow.rejected.timeout": "许愿柳重新归于沉寂。"
 }

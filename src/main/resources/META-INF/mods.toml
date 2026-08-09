@@ -9,6 +9,7 @@ version="${mod_version}"
 displayName="${mod_name}"
 displayURL="https://github.com/ikunkk02-afk/Wishing-Willow"
 authors="${mod_authors}"
+logoFile="logo.png"
 description='''${mod_description}'''
 
 [[dependencies.${mod_id}]]
@@ -23,4 +24,11 @@ modId="minecraft"
 mandatory=true
 versionRange="${minecraft_version_range}"
 ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="geckolib"
+mandatory=true
+versionRange="[4.8.4,5)"
+ordering="AFTER"
 side="BOTH"
