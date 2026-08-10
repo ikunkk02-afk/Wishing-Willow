@@ -1,5 +1,12 @@
 package com.ikunkk02.wishingwillow.wish;
 
+import com.ikunkk02.wishingwillow.ai.AiConfig;
+import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
+import com.ikunkk02.wishingwillow.ai.AiExecutionMode;
+import com.ikunkk02.wishingwillow.ai.AiProviderType;
+import com.ikunkk02.wishingwillow.ai.InterpretationState;
+import com.ikunkk02.wishingwillow.ai.WishInterpretation;
+import com.ikunkk02.wishingwillow.ai.WishInterpretationValidator;
 import com.ikunkk02.wishingwillow.item.WishingWillowItem;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
@@ -62,7 +69,15 @@ public final class WishManager {
         return true;
     }
 
-    public static WishResult submit(ServerPlayer player, UUID requestId, InteractionHand hand, String rawWish) {
+    public static WishResult submit(
+            ServerPlayer player,
+            UUID requestId,
+            InteractionHand hand,
+            String rawWish,
+            AiExecutionMode executionMode,
+            AiProviderType providerType,
+            String model
+    ) {
         long gameTime = player.serverLevel().getGameTime();
         UUID playerId = player.getUUID();
 
@@ -79,6 +94,12 @@ public final class WishManager {
 
         if (ACTIVE_SESSIONS.containsKey(playerId)) {
             return reject(player, requestId, WishRejectionReason.BUSY);
+        }
+
+        if (executionMode != AiExecutionMode.PLAYER_PROVIDED
+                || providerType == null
+                || !isValidModel(model)) {
+            return reject(player, requestId, WishRejectionReason.AI_NOT_CONFIGURED);
         }
 
         WishTextValidator.Validation validation = WishTextValidator.validate(rawWish);
@@ -101,7 +122,10 @@ public final class WishManager {
                 gameTime,
                 System.currentTimeMillis(),
                 hand,
-                itemInstanceId
+                itemInstanceId,
+                executionMode,
+                providerType,
+                model.strip()
         );
 
         ACTIVE_SESSIONS.put(playerId, session);
@@ -111,7 +135,10 @@ public final class WishManager {
         persist(player.server, session);
         ModNetworking.sendToPlayer(
                 player,
-                new WishStartedPacket(session.sessionId(), hand, itemInstanceId, stack.copy())
+                new WishStartedPacket(
+                        session.sessionId(), hand, itemInstanceId, stack.copy(),
+                        session.rawWish(), session.providerType(), session.model()
+                )
         );
         ((WishingWillowItem) stack.getItem()).triggerWishAnimation(player, itemInstanceId);
         return WishResult.accepted(session);
@@ -127,6 +154,58 @@ public final class WishManager {
             handleSnap(player, session);
         } else if (event == WishAnimationEvent.FINISH && session.state() == WishState.SNAPPED) {
             finish(player.server, session, player);
+        }
+    }
+
+    public static void handleInterpretationResult(
+            ServerPlayer player,
+            UUID sessionId,
+            InterpretationState state,
+            AiErrorCategory errorCategory,
+            @Nullable WishInterpretation interpretation
+    ) {
+        if (state != InterpretationState.SUCCESS
+                && state != InterpretationState.AI_REQUEST_FAILED
+                && state != InterpretationState.INVALID_RESPONSE) {
+            return;
+        }
+        WishSavedData data = WishSavedData.get(player.server);
+        WishRecord record = data.getBySession(sessionId);
+        if (record == null
+                || !record.playerId().equals(player.getUUID())
+                || record.interpretationState() != InterpretationState.REQUESTING) {
+            return;
+        }
+
+        WishInterpretation acceptedInterpretation = null;
+        AiErrorCategory acceptedError = errorCategory == null ? AiErrorCategory.UNKNOWN : errorCategory;
+        if (state == InterpretationState.SUCCESS) {
+            if (interpretation == null) {
+                return;
+            }
+            try {
+                WishInterpretationValidator.validate(interpretation);
+            } catch (IllegalArgumentException exception) {
+                state = InterpretationState.INVALID_RESPONSE;
+                acceptedError = AiErrorCategory.MALFORMED_RESPONSE;
+            }
+            if (state == InterpretationState.SUCCESS) {
+                acceptedInterpretation = interpretation;
+                acceptedError = AiErrorCategory.NONE;
+            }
+        } else if (acceptedError == AiErrorCategory.NONE) {
+            acceptedError = state == InterpretationState.INVALID_RESPONSE
+                    ? AiErrorCategory.MALFORMED_RESPONSE
+                    : AiErrorCategory.UNKNOWN;
+        }
+
+        long now = System.currentTimeMillis();
+        WishSession active = ACTIVE_SESSIONS.get(player.getUUID());
+        if (active != null && active.sessionId().equals(sessionId)) {
+            active.completeInterpretation(state, acceptedError, acceptedInterpretation, now);
+            persist(player.server, active);
+        } else {
+            data.updateInterpretation(sessionId, state, acceptedError, acceptedInterpretation, now);
         }
     }
 
@@ -157,6 +236,7 @@ public final class WishManager {
             stack.shrink(1);
         }
         session.transitionTo(WishState.SNAPPED, gameTime);
+        session.markInterpretationRequesting(System.currentTimeMillis());
         persist(player.server, session);
 
         ServerLevel level = player.serverLevel();
@@ -242,6 +322,7 @@ public final class WishManager {
     private static void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             completeOrCancelForLifecycle(player);
+            WishSavedData.get(player.server).failPendingForPlayer(player.getUUID());
             RECENT_REQUESTS.remove(player.getUUID());
             LAST_SUBMISSIONS.remove(player.getUUID());
         }
@@ -274,6 +355,7 @@ public final class WishManager {
                 cancel(server, session, null, WishRejectionReason.INTERRUPTED);
             }
         }
+        WishSavedData.get(server).failAllPending();
     }
 
     private static void onServerStopped(ServerStoppedEvent event) {
@@ -319,5 +401,17 @@ public final class WishManager {
 
     private static void persist(MinecraftServer server, WishSession session) {
         WishSavedData.get(server).update(session);
+    }
+
+    private static boolean isValidModel(String model) {
+        if (model == null || model.isBlank() || model.length() > AiConfig.MAX_MODEL_LENGTH) {
+            return false;
+        }
+        for (int index = 0; index < model.length(); index++) {
+            if (Character.isISOControl(model.charAt(index))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

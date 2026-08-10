@@ -1,5 +1,7 @@
 package com.ikunkk02.wishingwillow.client.gui;
 
+import com.ikunkk02.wishingwillow.ai.AiConfig;
+import com.ikunkk02.wishingwillow.ai.AiConfigManager;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.SubmitWishPacket;
 import net.minecraft.client.gui.GuiGraphics;
@@ -45,7 +47,18 @@ public final class ConfirmWishScreen extends Screen {
             return;
         }
         submitted = true;
-        ModNetworking.sendToServer(new SubmitWishPacket(UUID.randomUUID(), hand, wish));
+        AiConfig config = AiConfigManager.getInstance().get();
+        if (!config.isConfigured()) {
+            submitted = false;
+            if (minecraft != null) {
+                minecraft.setScreen(new AiNotConfiguredScreen(this));
+            }
+            return;
+        }
+        ModNetworking.sendToServer(new SubmitWishPacket(
+                UUID.randomUUID(), hand, wish,
+                config.executionMode(), config.providerType(), config.model()
+        ));
         if (minecraft != null) {
             minecraft.setScreen(null);
         }

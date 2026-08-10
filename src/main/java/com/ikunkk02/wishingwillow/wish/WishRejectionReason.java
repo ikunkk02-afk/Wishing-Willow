@@ -5,6 +5,7 @@ public enum WishRejectionReason {
     EMPTY,
     TOO_LONG,
     INVALID_CHARACTERS,
+    AI_NOT_CONFIGURED,
     NOT_HOLDING,
     BUSY,
     DUPLICATE,

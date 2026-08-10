@@ -3,6 +3,7 @@ package com.ikunkk02.wishingwillow.network;
 import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
 import com.ikunkk02.wishingwillow.network.packet.SubmitWishPacket;
+import com.ikunkk02.wishingwillow.network.packet.SubmitWishInterpretationPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishAnimationEventPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
@@ -14,7 +15,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetworking {
-    private static final String PROTOCOL_VERSION = "2";
+    private static final String PROTOCOL_VERSION = "3";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(WishingWillow.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
@@ -47,10 +48,15 @@ public final class ModNetworking {
                 .decoder(WishAnimationEventPacket::decode)
                 .consumerMainThread(WishAnimationEventPacket::handle)
                 .add();
-        CHANNEL.messageBuilder(WishStatePacket.class, id, NetworkDirection.PLAY_TO_CLIENT)
+        CHANNEL.messageBuilder(WishStatePacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(WishStatePacket::encode)
                 .decoder(WishStatePacket::decode)
                 .consumerMainThread(WishStatePacket::handle)
+                .add();
+        CHANNEL.messageBuilder(SubmitWishInterpretationPacket.class, id, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(SubmitWishInterpretationPacket::encode)
+                .decoder(SubmitWishInterpretationPacket::decode)
+                .consumerMainThread(SubmitWishInterpretationPacket::handle)
                 .add();
     }
 

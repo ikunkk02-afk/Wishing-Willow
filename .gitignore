@@ -32,3 +32,4 @@ crash-reports/
 local.properties
 .env
 .env.*
+**/wishing_willow/ai-client.json
