@@ -11,6 +11,8 @@ import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
 import net.minecraft.client.Minecraft;
+import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
+import com.ikunkk02.wishingwillow.client.gui.ExecutionSettingsScreen;
 
 public final class ClientPacketHandlers {
     private ClientPacketHandlers() {
@@ -41,5 +43,10 @@ public final class ClientPacketHandlers {
 
     public static void startPlanning(WishPlanningRequestPacket packet) {
         ClientWishPlanningCoordinator.start(packet);
+    }
+
+    public static void executionSettings(ExecutionSettingsSnapshot settings) {
+        Minecraft minecraft=Minecraft.getInstance();
+        if(minecraft.screen instanceof ExecutionSettingsScreen screen)screen.apply(settings);
     }
 }

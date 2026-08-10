@@ -43,7 +43,7 @@ minecraft {
         }
 
         gameTestServer {
-            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'forge.enabledGameTestNamespaces', 'minecraft'
         }
 
         data {
@@ -106,6 +106,15 @@ tasks.named('test', Test).configure {
     testLogging {
         events 'passed', 'skipped', 'failed'
     }
+}
+
+tasks.register('prepareGameTestStructures', Copy) {
+    from 'src/gametest/resources/gameteststructures'
+    into 'run/gameteststructures'
+}
+
+tasks.named('compileJava').configure {
+    dependsOn tasks.named('prepareGameTestStructures')
 }
 
 tasks.named('processResources', ProcessResources).configure {

@@ -1,21 +1,29 @@
 package com.ikunkk02.wishingwillow;
 
+import com.mojang.logging.LogUtils;
 import com.ikunkk02.wishingwillow.event.CommonModEvents;
 import com.ikunkk02.wishingwillow.event.VillagerTradeEvents;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.registry.ModItems;
 import com.ikunkk02.wishingwillow.wish.WishManager;
+import com.ikunkk02.wishingwillow.execution.WishExecutionConfig;
+import com.ikunkk02.wishingwillow.execution.WishExecutionManager;
+import com.ikunkk02.wishingwillow.execution.WishExecutionGameTests;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
+import net.minecraftforge.fml.ModLoadingContext;
+import net.minecraftforge.fml.config.ModConfig;
 import software.bernie.geckolib.GeckoLib;
+import org.slf4j.Logger;
 
 @Mod(WishingWillow.MOD_ID)
 public final class WishingWillow {
     public static final String MOD_ID = "wishing_willow";
+    public static final Logger LOGGER = LogUtils.getLogger();
 
     public WishingWillow(FMLJavaModLoadingContext context) {
         GeckoLib.initialize();
@@ -24,8 +32,12 @@ public final class WishingWillow {
         ModItems.register(modEventBus);
         modEventBus.addListener(CommonModEvents::addCreativeTabItems);
         modEventBus.addListener(this::commonSetup);
+        modEventBus.addListener(WishExecutionGameTests::register);
         VillagerTradeEvents.register();
         WishManager.register();
+        WishExecutionManager.register();
+        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, WishExecutionConfig.SPEC,
+                "wishing_willow-server.toml");
         DistExecutor.unsafeRunWhenOn(
                 Dist.CLIENT,
                 () -> () -> com.ikunkk02.wishingwillow.client.ClientSetup.register(context)

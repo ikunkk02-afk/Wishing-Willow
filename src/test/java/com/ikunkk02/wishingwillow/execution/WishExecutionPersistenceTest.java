@@ -1,0 +1,11 @@
+package com.ikunkk02.wishingwillow.execution;
+
+import org.junit.jupiter.api.Test;
+import java.util.UUID;
+import static org.junit.jupiter.api.Assertions.*;
+
+class WishExecutionPersistenceTest {
+    @Test void roundTripsStatesBindingsAndResources(){UUID execution=UUID.randomUUID(),plan=UUID.randomUUID(),session=UUID.randomUUID(),owner=UUID.randomUUID(),entity=UUID.randomUUID();WishExecutionRecord record=new WishExecutionRecord(execution,plan,session,owner,2,100);record.step(0).schedule(2500);record.step(0).transition(WishStepExecutionState.WAITING_DELAY,100);record.bindEntity(0,entity);record.selectResource(0,"minecraft:diamond");record.transition(WishExecutionState.SCHEDULED,100);WishExecutionRecord loaded=WishExecutionRecord.load(record.save());assertEquals(execution,loaded.executionId());assertEquals(WishStepExecutionState.WAITING_DELAY,loaded.step(0).state());assertEquals(2500,loaded.step(0).executeAtGameTime());assertEquals(entity,loaded.entitiesForStep(0).get(0));assertEquals("minecraft:diamond",loaded.selectedResource(0));}
+    @Test void runningStepBecomesStaleOnRecovery(){WishExecutionRecord record=new WishExecutionRecord(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),1,0);record.step(0).transition(WishStepExecutionState.RUNNING,0);assertEquals(WishStepExecutionState.STALE,WishExecutionRecord.load(record.save()).step(0).state());}
+    @Test void runningBlockBatchResumesFromPersistentCursor(){WishExecutionRecord record=new WishExecutionRecord(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),1,0);record.journal(0);record.step(0).transition(WishStepExecutionState.RUNNING,0);record.transition(WishExecutionState.RUNNING,0);WishExecutionRecord loaded=WishExecutionRecord.load(record.save());assertEquals(WishExecutionState.SCHEDULED,loaded.state());assertEquals(WishStepExecutionState.WAITING_DELAY,loaded.step(0).state());}
+}

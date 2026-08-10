@@ -19,7 +19,7 @@ public final class WishingWillowSettingsScreen extends Screen {
     @Override
     protected void init() {
         int x = width / 2 - 100;
-        int y = Math.max(48, height / 2 - 50);
+        int y = Math.max(40, height / 2 - 64);
         addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.settings.ai"),
                         button -> minecraft.setScreen(new AiSettingsScreen(this)))
                 .bounds(x, y, 200, 20).build());
@@ -29,8 +29,11 @@ public final class WishingWillowSettingsScreen extends Screen {
         addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.settings.research"),
                         button -> minecraft.setScreen(new ResearchSettingsScreen(this)))
                 .bounds(x, y + 52, 200, 20).build());
+        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.settings.execution"),
+                        button -> minecraft.setScreen(new ExecutionSettingsScreen(this)))
+                .bounds(x, y + 78, 200, 20).build());
         addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> onClose())
-                .bounds(x, y + 88, 200, 20).build());
+                .bounds(x, y + 112, 200, 20).build());
     }
 
     @Override

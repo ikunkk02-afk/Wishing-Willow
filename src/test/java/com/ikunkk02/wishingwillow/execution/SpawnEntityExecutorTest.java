@@ -1,0 +1,3 @@
+package com.ikunkk02.wishingwillow.execution;
+import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;import com.ikunkk02.wishingwillow.planning.WishActionType;import org.junit.jupiter.api.Test;import java.util.UUID;import static org.junit.jupiter.api.Assertions.*;
+class SpawnEntityExecutorTest {@Test void spawnIsRegisteredAndOnlyBoundEntitiesAreTracked(){assertNotNull(WishActionRegistry.defaults().get(WishActionType.SPAWN_ENTITY));WishExecutionRecord r=new WishExecutionRecord(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),1,0);UUID entity=UUID.randomUUID();r.bindEntity(0,entity);assertEquals(java.util.List.of(entity),r.allEntities());}}

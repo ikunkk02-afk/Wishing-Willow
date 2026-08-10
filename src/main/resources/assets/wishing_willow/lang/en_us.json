@@ -165,5 +165,17 @@
   "screen.wishing_willow.knowledge.manual_url.title": "Set a Research Page",
   "screen.wishing_willow.knowledge.manual_url.help": "Paste a CurseForge, GitHub, Modrinth, wiki, or official HTTPS page.",
   "screen.wishing_willow.knowledge.manual_url.submit": "Research",
-  "screen.wishing_willow.knowledge.manual_url.invalid": "Enter a valid HTTPS research page. It will still be safety checked."
+  "screen.wishing_willow.knowledge.manual_url.invalid": "Enter a valid HTTPS research page. It will still be safety checked.",
+  "screen.wishing_willow.settings.execution": "Wish Execution Settings",
+  "screen.wishing_willow.execution.title": "Wish Execution Settings",
+  "screen.wishing_willow.execution.enabled": "Enable Wish Execution",
+  "screen.wishing_willow.execution.third_party": "Third-party Entities",
+  "screen.wishing_willow.execution.blocks": "Block Modification",
+  "screen.wishing_willow.execution.explosions": "Explosions",
+  "screen.wishing_willow.execution.destructive": "Destructive Explosions",
+  "screen.wishing_willow.execution.cross_dimension": "Cross-dimension Teleport",
+  "screen.wishing_willow.execution.safe_mode": "Debug Safe Mode",
+  "screen.wishing_willow.execution.max_severity": "Max Destructive Severity",
+  "screen.wishing_willow.execution.save": "Save Server Settings",
+  "screen.wishing_willow.execution.read_only": "Only a server administrator can change these settings."
 }

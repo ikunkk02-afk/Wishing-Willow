@@ -13,6 +13,7 @@ import com.ikunkk02.wishingwillow.planning.WishContextCollector;
 import com.ikunkk02.wishingwillow.planning.WishPlanError;
 import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import com.ikunkk02.wishingwillow.planning.WishPlanStore;
+import com.ikunkk02.wishingwillow.execution.WishExecutionManager;
 import com.ikunkk02.wishingwillow.item.WishingWillowItem;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
@@ -240,7 +241,10 @@ public final class WishManager {
                 || !attempt.playerId.equals(player.getUUID())) return;
         PLANNING_ATTEMPTS.remove(sessionId);
         WishRecord record = WishSavedData.get(player.server).getBySession(sessionId);
-        if (record == null || record.interpretation() == null) return;
+        if (record == null || record.interpretation() == null
+                || !record.playerId().equals(player.getUUID())
+                || record.planState() == WishPlanState.READY
+                || record.executionId() != null) return;
         if (error != WishPlanError.NONE || catalog == null || draftJson == null) {
             if (error == WishPlanError.NO_CANDIDATES || error == WishPlanError.UNSATISFIED_CAPABILITIES) {
                 WishPlanStore.partial(player.server, sessionId, WishPlanError.UNSATISFIED_CAPABILITIES);
@@ -250,7 +254,11 @@ public final class WishManager {
             return;
         }
         try {
-            WishPlanStore.accept(player.server, sessionId, record.interpretation(), draftJson, catalog);
+            WishPlanStore.accept(player.server, sessionId, attemptId, record.interpretation(), draftJson, catalog);
+            WishRecord accepted = WishSavedData.get(player.server).getBySession(sessionId);
+            if (accepted != null && accepted.planState() == WishPlanState.READY && accepted.plan() != null) {
+                WishExecutionManager.accept(player, accepted.plan());
+            }
         } catch (IllegalArgumentException exception) {
             WishPlanStore.fail(player.server, sessionId, planError(exception));
         }
