@@ -35,6 +35,13 @@ public final class WishingWillowPrompt {
             13. required_capabilities must contain 1-12 unique values selected only from the allowed list below.
             14. Write literal_goal, loophole, twisted_outcome, and reasoning_summary in the same language as the player's wish.
                 Keep intent and all enum/capability values in English exactly as specified.
+            15. Preserve every concrete requested noun, target, and quantity in literal_goal. A number attached to an item or
+                material is its requested quantity, not a percentage, safety rating, duration, or metaphor.
+            16. If the player asks to receive, obtain, own, or possess an item or material, required_capabilities must include
+                GIVE_ITEM. Do not replace the requested item outcome with hallucination, immortality, a power change, or an
+                unrelated entity/event.
+            17. Add another capability only when it directly implements the same twisted outcome. Every capability must have a
+                clear causal role described by twisted_outcome; never add capabilities merely to make the result more dramatic.
 
             Output JSON fields, exactly:
             {

@@ -24,5 +24,9 @@ class WishingWillowPromptTest {
         assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("STALKING_ENTITY"));
         assertFalse(WishingWillowPrompt.SYSTEM_PROMPT.contains("KNOWN_CAPABILITY"));
         assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("same language as the player's wish"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("requested quantity"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("required_capabilities must include"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("GIVE_ITEM"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("Every capability must have a"));
     }
 }

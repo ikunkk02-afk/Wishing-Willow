@@ -107,6 +107,7 @@ class OpenAiCompatibleProviderTest {
         assertEquals(AiOutputMode.JSON_OBJECT, response.outputMode());
         assertEquals(2, calls.get());
         assertTrue(requestBody.get().contains("\"type\":\"json_object\""));
+        assertTrue(requestBody.get().contains("\"temperature\":0.0"));
         org.junit.jupiter.api.Assertions.assertFalse(requestBody.get().contains("json_schema"));
         String systemMessage = com.google.gson.JsonParser.parseString(requestBody.get()).getAsJsonObject()
                 .getAsJsonArray("messages").get(0).getAsJsonObject().get("content").getAsString();

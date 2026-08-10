@@ -49,6 +49,19 @@ class WishInterpreterRepairTest {
         assertEquals(2, provider.requests.size());
     }
 
+    @Test
+    void retriesOneProviderLevelMalformedEnvelopeWithTheRepairContract() {
+        FailureThenResponseProvider provider = new FailureThenResponseProvider(VALID);
+
+        WishInterpretationResult result = new WishInterpreter(config -> provider)
+                .interpret(config(), "I want ten diamonds").join();
+
+        assertEquals(InterpretationState.SUCCESS, result.state());
+        assertEquals(2, provider.requests.size());
+        assertTrue(provider.requests.get(1).systemMessage()
+                .contains("repairing one previous invalid response"));
+    }
+
     private static AiConfig config() {
         return new AiConfig(AiExecutionMode.PLAYER_PROVIDED, AiProviderType.CUSTOM,
                 "https://example.invalid/v1", "", "test-model");
@@ -69,6 +82,33 @@ class WishInterpreterRepairTest {
             requests.add(request);
             return CompletableFuture.completedFuture(
                     new AiResponse(responses.remove(), 200, AiOutputMode.JSON_OBJECT));
+        }
+
+        @Override
+        public CompletableFuture<AiModelListResult> listModels() {
+            return CompletableFuture.completedFuture(AiModelListResult.unsupported(501));
+        }
+    }
+
+    private static final class FailureThenResponseProvider implements AiProvider {
+        private final String response;
+        private final java.util.ArrayList<AiRequest> requests = new java.util.ArrayList<>();
+
+        private FailureThenResponseProvider(String response) {
+            this.response = response;
+        }
+
+        @Override public AiProviderType type() { return AiProviderType.CUSTOM; }
+
+        @Override
+        public CompletableFuture<AiResponse> complete(AiRequest request) {
+            requests.add(request);
+            if (requests.size() == 1) {
+                return CompletableFuture.failedFuture(
+                        new AiRequestException(AiErrorCategory.MALFORMED_RESPONSE, 200, false));
+            }
+            return CompletableFuture.completedFuture(
+                    new AiResponse(response, 200, AiOutputMode.JSON_OBJECT));
         }
 
         @Override

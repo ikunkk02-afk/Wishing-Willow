@@ -258,6 +258,9 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         body.addProperty("model", config.model());
         body.addProperty("stream", false);
         body.addProperty("max_tokens", request.maxTokens());
+        if (request.outputMode() != AiOutputMode.TEXT) {
+            body.addProperty("temperature", 0.0);
+        }
         if (config.providerType() == AiProviderType.DEEPSEEK) {
             JsonObject thinking = new JsonObject();
             thinking.addProperty("type", "disabled");
