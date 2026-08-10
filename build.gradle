@@ -56,6 +56,9 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 
 repositories {
     mavenCentral()
+    flatDir {
+        dirs 'run/deobf-mods'
+    }
     maven {
         name = 'GeckoLib'
         url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
@@ -68,6 +71,26 @@ repositories {
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     implementation fg.deobf("software.bernie.geckolib:geckolib-forge-${minecraft_version}:${geckolib_version}")
+
+    // Production Create jars use obfuscated Minecraft names. When present in the local, ignored
+    // research test pack, let ForgeGradle remap them before the userdev client loads Flywheel mixins.
+    fileTree('run/deobf-mods') { include 'create-*.jar' }.each { File createJar ->
+        def createVersion = createJar.name.substring('create-'.length(), createJar.name.length() - '.jar'.length())
+        runtimeOnly fg.deobf("local.research:create:${createVersion}")
+    }
+    fileTree('run/deobf-mods') { include 'modernfix-forge-*.jar' }.each { File modernFixJar ->
+        def modernFixVersion = modernFixJar.name.substring('modernfix-forge-'.length(), modernFixJar.name.length() - '.jar'.length())
+        runtimeOnly fg.deobf("local.research:modernfix-forge:${modernFixVersion}")
+    }
+    fileTree('run/deobf-mods') { include 'architectury-*-forge.jar' }.each { File architecturyJar ->
+        def architecturyVersion = architecturyJar.name.substring('architectury-'.length(), architecturyJar.name.length() - '-forge.jar'.length())
+        runtimeOnly fg.deobf("local.research:architectury:${architecturyVersion}:forge")
+    }
+    fileTree('run/deobf-mods') { include 'cavedweller-*.jar' }.each { File caveDwellerJar ->
+        def caveDwellerVersion = caveDwellerJar.name.substring('cavedweller-'.length(), caveDwellerJar.name.length() - '.jar'.length())
+        runtimeOnly fg.deobf("local.research:cavedweller:${caveDwellerVersion}")
+    }
+
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }

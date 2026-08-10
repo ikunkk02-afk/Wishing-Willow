@@ -192,7 +192,8 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             body.add("response_format", responseFormat);
         } else if (request.outputMode() == AiOutputMode.JSON_SCHEMA) {
             JsonObject jsonSchema = new JsonObject();
-            jsonSchema.addProperty("name", "wish_interpretation");
+            jsonSchema.addProperty("name", request.jsonSchemaName() == null
+                    ? "structured_response" : request.jsonSchemaName());
             jsonSchema.addProperty("strict", true);
             jsonSchema.add("schema", request.jsonSchema());
             JsonObject responseFormat = new JsonObject();

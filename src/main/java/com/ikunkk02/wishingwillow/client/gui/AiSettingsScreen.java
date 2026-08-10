@@ -7,6 +7,7 @@ import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
 import com.ikunkk02.wishingwillow.ai.AiModelListResult;
 import com.ikunkk02.wishingwillow.ai.AiProviderType;
 import com.ikunkk02.wishingwillow.ai.AiService;
+import com.ikunkk02.wishingwillow.research.ModResearchManager;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
@@ -244,6 +245,7 @@ public final class AiSettingsScreen extends Screen {
             return;
         }
         if (AiConfigManager.getInstance().save(config)) {
+            ModResearchManager.getInstance().resumeWaitingForAi();
             if (minecraft != null) {
                 minecraft.setScreen(parent);
             }

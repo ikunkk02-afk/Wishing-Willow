@@ -26,3 +26,16 @@ Wishing Willow stores player-provided OpenAI-compatible settings in:
 The API key is a local client credential. The first version stores it as plain text so the mod can reconnect between
 sessions. Do not share or upload this file, include it in bug reports, or commit it to source control. The credential is
 never sent through Minecraft networking and is never written to a world save or `WishSavedData`.
+
+## Local mod research
+
+The client builds a read-only knowledge base for the installed modpack under:
+
+```text
+.minecraft/config/wishing_willow/knowledge/
+```
+
+It sends only public mod metadata, the mod file name and SHA-512, public project text, and namespaced registry IDs to
+research services and the configured AI provider. It never sends local paths, player or server identifiers, world seeds,
+credentials, chat, or save files. The optional CurseForge API key is stored only in
+`.minecraft/config/wishing_willow/research-client.json`; it is never logged, cached with knowledge, or sent to AI.

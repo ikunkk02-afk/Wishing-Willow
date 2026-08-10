@@ -33,3 +33,5 @@ local.properties
 .env
 .env.*
 **/wishing_willow/ai-client.json
+**/wishing_willow/research-client.json
+**/wishing_willow/knowledge/
