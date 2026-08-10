@@ -10,6 +10,7 @@ import net.minecraft.util.FormattedCharSequence;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import com.ikunkk02.wishingwillow.client.planning.PlanningDebugController;
 
 public final class AiTestResultScreen extends Screen {
     private final Screen parent;
@@ -25,11 +26,14 @@ public final class AiTestResultScreen extends Screen {
 
     @Override
     protected void init() {
+        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.ai.test.result.plan"),
+                        button -> PlanningDebugController.run(this, wish, interpretation))
+                .bounds(width / 2 - 106, height - 28, 100, 20).build());
         addRenderableWidget(Button.builder(
                         Component.translatable("screen.wishing_willow.ai.test.result.back"),
                         button -> onClose()
                 )
-                .bounds(width / 2 - 50, height - 28, 100, 20)
+                .bounds(width / 2 + 6, height - 28, 100, 20)
                 .build());
     }
 

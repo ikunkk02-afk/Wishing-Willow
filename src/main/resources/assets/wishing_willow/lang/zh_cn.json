@@ -159,6 +159,8 @@
   ,"screen.wishing_willow.knowledge.field.selected_url": "选中页面"
   ,"screen.wishing_willow.knowledge.field.source_status": "研究来源状态"
   ,"screen.wishing_willow.knowledge.field.identity_debug": "身份匹配调试因素"
+  ,"screen.wishing_willow.ai.test.result.plan": "测试规划"
+  ,"screen.wishing_willow.plan_preview.title": "愿望计划预览"
   ,"screen.wishing_willow.knowledge.manual_url": "手动指定页面"
   ,"screen.wishing_willow.knowledge.manual_url.title": "手动指定研究页面"
   ,"screen.wishing_willow.knowledge.manual_url.help": "粘贴 CurseForge、GitHub、Modrinth、Wiki 或官网 HTTPS 页面。"

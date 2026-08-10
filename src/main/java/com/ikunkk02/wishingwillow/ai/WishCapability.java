@@ -35,5 +35,7 @@ public enum WishCapability {
     ENTITY_RECREATION,
     IMITATION,
     STRONG_WEAPON,
-    POWERFUL_ENEMY
+    POWERFUL_ENEMY,
+    SPACECRAFT,
+    SPACE_TRAVEL
 }

@@ -40,7 +40,12 @@ public final class WishSavedData extends SavedData {
     }
 
     public void update(WishSession session) {
-        update(WishRecord.fromSession(session));
+        WishRecord fresh = WishRecord.fromSession(session);
+        WishRecord existing = wishesBySession.get(session.sessionId());
+        if (existing != null) {
+            fresh = fresh.withPlanning(existing.planState(), existing.planError(), existing.plan());
+        }
+        update(fresh);
     }
 
     public void update(WishRecord record) {
@@ -81,6 +86,10 @@ public final class WishSavedData extends SavedData {
                 .filter(record -> record.playerId().equals(playerId))
                 .sorted(Comparator.comparingLong(WishRecord::submittedAtEpochMillis))
                 .toList();
+    }
+
+    public List<WishRecord> allRecords() {
+        return List.copyOf(wishesBySession.values());
     }
 
     public void failPendingForPlayer(UUID playerId) {

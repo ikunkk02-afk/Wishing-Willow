@@ -159,6 +159,8 @@
   "screen.wishing_willow.knowledge.field.selected_url": "Selected page",
   "screen.wishing_willow.knowledge.field.source_status": "Source status",
   "screen.wishing_willow.knowledge.field.identity_debug": "Identity debug factors",
+  "screen.wishing_willow.ai.test.result.plan": "Test planning",
+  "screen.wishing_willow.plan_preview.title": "Wish Plan Preview",
   "screen.wishing_willow.knowledge.manual_url": "Set Research Page",
   "screen.wishing_willow.knowledge.manual_url.title": "Set a Research Page",
   "screen.wishing_willow.knowledge.manual_url.help": "Paste a CurseForge, GitHub, Modrinth, wiki, or official HTTPS page.",

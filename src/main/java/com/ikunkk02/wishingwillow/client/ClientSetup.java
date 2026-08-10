@@ -7,6 +7,12 @@ import com.ikunkk02.wishingwillow.research.KnowledgeBaseSnapshot;
 import com.ikunkk02.wishingwillow.research.KnowledgeEntry;
 import com.ikunkk02.wishingwillow.research.ModResearchManager;
 import com.ikunkk02.wishingwillow.research.ResearchState;
+import com.ikunkk02.wishingwillow.ai.WishCapability;
+import com.ikunkk02.wishingwillow.ai.WishDelivery;
+import com.ikunkk02.wishingwillow.ai.WishInterpretation;
+import com.ikunkk02.wishingwillow.ai.WishTone;
+import com.ikunkk02.wishingwillow.client.planning.PlanningDebugController;
+import com.ikunkk02.wishingwillow.planning.CapabilityMatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.Commands;
@@ -81,6 +87,16 @@ public final class ClientSetup {
                                         })
                                         .executes(context -> knowledge(context.getSource(),
                                                 StringArgumentType.getString(context, "modid")))))
+                        .then(Commands.literal("match")
+                                .then(Commands.argument("capability", StringArgumentType.word())
+                                        .suggests((context,builder)->{for(WishCapability capability:WishCapability.values())builder.suggest(capability.name());return builder.buildFuture();})
+                                        .executes(context -> match(context.getSource(),StringArgumentType.getString(context,"capability")))))
+                        .then(Commands.literal("plan").then(Commands.literal("test")
+                                .then(Commands.argument("wish",StringArgumentType.greedyString()).executes(context->{
+                                    String wish=StringArgumentType.getString(context,"wish");
+                                    Minecraft minecraft=Minecraft.getInstance();minecraft.execute(()->PlanningDebugController.run(minecraft.screen,wish,null));
+                                    context.getSource().sendSuccess(()->Component.literal("Wishing Willow planning test started."),false);return 1;
+                                }))))
                         .then(Commands.literal("settings").executes(context -> {
                             Minecraft minecraft = Minecraft.getInstance();
                             minecraft.execute(() -> minecraft.setScreen(new WishingWillowSettingsScreen(minecraft.screen)));
@@ -161,5 +177,16 @@ public final class ClientSetup {
         ModResearchManager.getInstance().knowledgeBase().snapshot().entries()
                 .forEach(entry -> builder.suggest(entry.installed().modId()));
         return builder.buildFuture();
+    }
+
+    private static int match(net.minecraft.commands.CommandSourceStack source,String name){
+        final WishCapability capability;try{capability=WishCapability.valueOf(name.toUpperCase(java.util.Locale.ROOT));}catch(IllegalArgumentException exception){source.sendFailure(Component.literal("Unknown capability: "+name));return 0;}
+        ModResearchManager manager=ModResearchManager.getInstance();
+        WishInterpretation interpretation=new WishInterpretation(1,"debug_match","Debug capability match","Debug only","Debug only","Debug only",WishTone.NEUTRAL,50,WishDelivery.HIDDEN,java.util.List.of(capability));
+        var catalog=new CapabilityMatcher().match(name,interpretation,manager.knowledgeBase().snapshot(),manager.registrySnapshot());
+        source.sendSuccess(()->Component.literal(capability.name()+" top candidates:"),false);
+        if(catalog.candidates().isEmpty())source.sendSuccess(()->Component.literal("UNSATISFIED"),false);
+        catalog.candidates().stream().limit(5).forEach(candidate->source.sendSuccess(()->Component.literal(candidate.candidateId()+" "+candidate.sourceModName()+" "+candidate.matchType()+" "+candidate.matchScore()+"%"+(candidate.registryResource()==null?"":" "+candidate.registryResource().id())),false));
+        return catalog.candidates().isEmpty()?0:1;
     }
 }

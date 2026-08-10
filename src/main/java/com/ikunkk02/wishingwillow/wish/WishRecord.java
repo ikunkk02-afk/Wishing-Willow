@@ -8,6 +8,10 @@ import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.ai.WishDelivery;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishTone;
+import com.ikunkk02.wishingwillow.planning.WishPlan;
+import com.ikunkk02.wishingwillow.planning.WishPlanError;
+import com.ikunkk02.wishingwillow.planning.WishPlanNbt;
+import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -33,8 +37,21 @@ public record WishRecord(
         AiProviderType providerType,
         String model,
         long interpretationUpdatedAtEpochMillis,
-        @Nullable WishInterpretation interpretation
+        @Nullable WishInterpretation interpretation,
+        WishPlanState planState,
+        WishPlanError planError,
+        @Nullable WishPlan plan
 ) {
+    public WishRecord(UUID sessionId, UUID playerId, String rawWish, ResourceLocation dimension,
+                      long submittedGameTime, long submittedAtEpochMillis, WishState state,
+                      InterpretationState interpretationState, AiErrorCategory aiErrorCategory,
+                      AiExecutionMode aiExecutionMode, AiProviderType providerType, String model,
+                      long interpretationUpdatedAtEpochMillis, @Nullable WishInterpretation interpretation) {
+        this(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis, state,
+                interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
+                interpretationUpdatedAtEpochMillis, interpretation,
+                WishPlanState.NOT_PLANNED, WishPlanError.NONE, null);
+    }
     public static WishRecord fromSession(WishSession session) {
         return new WishRecord(
                 session.sessionId(),
@@ -50,7 +67,10 @@ public record WishRecord(
                 session.providerType(),
                 session.model(),
                 session.interpretationUpdatedAtEpochMillis(),
-                session.interpretation()
+                session.interpretation(),
+                WishPlanState.NOT_PLANNED,
+                WishPlanError.NONE,
+                null
         );
     }
 
@@ -62,8 +82,15 @@ public record WishRecord(
     ) {
         return new WishRecord(
                 sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
-                state, newState, errorCategory, aiExecutionMode, providerType, model, updatedAt, newInterpretation
+                state, newState, errorCategory, aiExecutionMode, providerType, model, updatedAt, newInterpretation,
+                planState, planError, plan
         );
+    }
+
+    public WishRecord withPlanning(WishPlanState newState, WishPlanError error, @Nullable WishPlan newPlan) {
+        return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
+                state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
+                interpretationUpdatedAtEpochMillis, interpretation, newState, error, newPlan);
     }
 
     public CompoundTag save() {
@@ -84,6 +111,9 @@ public record WishRecord(
         if (interpretation != null) {
             tag.put("Interpretation", saveInterpretation(interpretation));
         }
+        tag.putString("PlanState", planState.name());
+        tag.putString("PlanError", planError.name());
+        if (plan != null) tag.put("WishPlan", WishPlanNbt.save(plan));
         return tag;
     }
 
@@ -123,6 +153,23 @@ public record WishRecord(
             interpretationState = InterpretationState.INVALID_RESPONSE;
             errorCategory = AiErrorCategory.MALFORMED_RESPONSE;
         }
+        WishPlanState planState = safeEnum(WishPlanState.class, tag.getString("PlanState"), WishPlanState.NOT_PLANNED);
+        WishPlanError planError = safeEnum(WishPlanError.class, tag.getString("PlanError"), WishPlanError.NONE);
+        WishPlan plan = null;
+        if (tag.contains("WishPlan", Tag.TAG_COMPOUND)) {
+            try { plan = WishPlanNbt.load(tag.getCompound("WishPlan")); }
+            catch (RuntimeException ignored) { planState = WishPlanState.STALE; planError = WishPlanError.STALE_RESOURCE; }
+        }
+        if (planState == WishPlanState.MATCHING || planState == WishPlanState.PLANNING
+                || planState == WishPlanState.VALIDATING) {
+            planState = WishPlanState.FAILED;
+            planError = WishPlanError.DISCONNECTED;
+            plan = null;
+        }
+        if ((planState == WishPlanState.READY || planState == WishPlanState.STALE) && plan == null) {
+            planState = WishPlanState.STALE;
+            planError = WishPlanError.STALE_RESOURCE;
+        }
         return new WishRecord(
                 tag.getUUID("SessionId"),
                 tag.getUUID("PlayerId"),
@@ -139,7 +186,10 @@ public record WishRecord(
                 tag.contains("InterpretationUpdatedAt", Tag.TAG_LONG)
                         ? tag.getLong("InterpretationUpdatedAt")
                         : tag.getLong("SubmittedAt"),
-                interpretation
+                interpretation,
+                planState,
+                planError,
+                plan
         );
     }
 

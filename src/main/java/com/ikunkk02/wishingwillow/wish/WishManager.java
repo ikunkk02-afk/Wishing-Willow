@@ -7,6 +7,12 @@ import com.ikunkk02.wishingwillow.ai.AiProviderType;
 import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishInterpretationValidator;
+import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
+import com.ikunkk02.wishingwillow.planning.CapabilityCatalog;
+import com.ikunkk02.wishingwillow.planning.WishContextCollector;
+import com.ikunkk02.wishingwillow.planning.WishPlanError;
+import com.ikunkk02.wishingwillow.planning.WishPlanState;
+import com.ikunkk02.wishingwillow.planning.WishPlanStore;
 import com.ikunkk02.wishingwillow.item.WishingWillowItem;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
@@ -25,6 +31,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import software.bernie.geckolib.animatable.GeoItem;
 
@@ -45,6 +52,7 @@ public final class WishManager {
     private static final Map<UUID, WishSession> ACTIVE_SESSIONS = new HashMap<>();
     private static final Map<UUID, ArrayDeque<UUID>> RECENT_REQUESTS = new HashMap<>();
     private static final Map<UUID, Long> LAST_SUBMISSIONS = new HashMap<>();
+    private static final Map<UUID, PlanningAttempt> PLANNING_ATTEMPTS = new HashMap<>();
 
     private WishManager() {
     }
@@ -55,6 +63,7 @@ public final class WishManager {
         MinecraftForge.EVENT_BUS.addListener(WishManager::onLivingDeath);
         MinecraftForge.EVENT_BUS.addListener(WishManager::onServerStopping);
         MinecraftForge.EVENT_BUS.addListener(WishManager::onServerStopped);
+        MinecraftForge.EVENT_BUS.addListener(WishManager::onServerStarted);
     }
 
     public static boolean tryOpenScreen(ServerPlayer player, InteractionHand hand) {
@@ -207,6 +216,44 @@ public final class WishManager {
         } else {
             data.updateInterpretation(sessionId, state, acceptedError, acceptedInterpretation, now);
         }
+        if (state == InterpretationState.SUCCESS && acceptedInterpretation != null) {
+            beginPlanning(player, sessionId, acceptedInterpretation);
+        } else {
+            WishPlanStore.fail(player.server, sessionId, WishPlanError.AI_REQUEST_FAILED);
+        }
+    }
+
+    public static void handlePlanningProgress(ServerPlayer player, UUID sessionId, UUID attemptId,
+                                              WishPlanState state) {
+        PlanningAttempt attempt = PLANNING_ATTEMPTS.get(sessionId);
+        if (attempt == null || !attempt.attemptId.equals(attemptId)
+                || !attempt.playerId.equals(player.getUUID())
+                || (state != WishPlanState.PLANNING && state != WishPlanState.VALIDATING)) return;
+        WishPlanStore.updateState(player.server, sessionId, state);
+    }
+
+    public static void handlePlanSubmission(ServerPlayer player, UUID sessionId, UUID attemptId,
+                                            WishPlanError error, @Nullable CapabilityCatalog catalog,
+                                            @Nullable String draftJson) {
+        PlanningAttempt attempt = PLANNING_ATTEMPTS.get(sessionId);
+        if (attempt == null || !attempt.attemptId.equals(attemptId)
+                || !attempt.playerId.equals(player.getUUID())) return;
+        PLANNING_ATTEMPTS.remove(sessionId);
+        WishRecord record = WishSavedData.get(player.server).getBySession(sessionId);
+        if (record == null || record.interpretation() == null) return;
+        if (error != WishPlanError.NONE || catalog == null || draftJson == null) {
+            if (error == WishPlanError.NO_CANDIDATES || error == WishPlanError.UNSATISFIED_CAPABILITIES) {
+                WishPlanStore.partial(player.server, sessionId, WishPlanError.UNSATISFIED_CAPABILITIES);
+                return;
+            }
+            WishPlanStore.fail(player.server, sessionId, error == WishPlanError.NONE ? WishPlanError.UNKNOWN : error);
+            return;
+        }
+        try {
+            WishPlanStore.accept(player.server, sessionId, record.interpretation(), draftJson, catalog);
+        } catch (IllegalArgumentException exception) {
+            WishPlanStore.fail(player.server, sessionId, planError(exception));
+        }
     }
 
     @Nullable
@@ -325,6 +372,7 @@ public final class WishManager {
             WishSavedData.get(player.server).failPendingForPlayer(player.getUUID());
             RECENT_REQUESTS.remove(player.getUUID());
             LAST_SUBMISSIONS.remove(player.getUUID());
+            failPlanningForPlayer(player.server, player.getUUID());
         }
     }
 
@@ -356,12 +404,21 @@ public final class WishManager {
             }
         }
         WishSavedData.get(server).failAllPending();
+        for (UUID sessionId : List.copyOf(PLANNING_ATTEMPTS.keySet())) {
+            WishPlanStore.fail(server, sessionId, WishPlanError.DISCONNECTED);
+        }
+        PLANNING_ATTEMPTS.clear();
+    }
+
+    private static void onServerStarted(ServerStartedEvent event) {
+        WishPlanStore.revalidateAll(event.getServer());
     }
 
     private static void onServerStopped(ServerStoppedEvent event) {
         ACTIVE_SESSIONS.clear();
         RECENT_REQUESTS.clear();
         LAST_SUBMISSIONS.clear();
+        PLANNING_ATTEMPTS.clear();
     }
 
     private static void cancel(
@@ -414,4 +471,30 @@ public final class WishManager {
         }
         return true;
     }
+
+    private static void beginPlanning(ServerPlayer player, UUID sessionId, WishInterpretation interpretation) {
+        WishRecord record = WishSavedData.get(player.server).getBySession(sessionId);
+        if (record == null || record.planState() == WishPlanState.READY) return;
+        UUID attemptId = UUID.randomUUID();
+        PLANNING_ATTEMPTS.put(sessionId, new PlanningAttempt(attemptId, player.getUUID()));
+        WishPlanStore.updateState(player.server, sessionId, WishPlanState.MATCHING);
+        ModNetworking.sendToPlayer(player, new WishPlanningRequestPacket(sessionId, attemptId, record.rawWish(),
+                record.providerType(), record.model(), interpretation, WishContextCollector.collect(player)));
+    }
+
+    private static void failPlanningForPlayer(MinecraftServer server, UUID playerId) {
+        List<UUID> sessions = PLANNING_ATTEMPTS.entrySet().stream()
+                .filter(entry -> entry.getValue().playerId.equals(playerId)).map(Map.Entry::getKey).toList();
+        sessions.forEach(session -> {
+            PLANNING_ATTEMPTS.remove(session);
+            WishPlanStore.fail(server, session, WishPlanError.DISCONNECTED);
+        });
+    }
+
+    private static WishPlanError planError(IllegalArgumentException exception) {
+        try { return WishPlanError.valueOf(exception.getMessage()); }
+        catch (RuntimeException ignored) { return WishPlanError.UNKNOWN; }
+    }
+
+    private record PlanningAttempt(UUID attemptId, UUID playerId) { }
 }

@@ -88,6 +88,10 @@ public final class ModResearchManager {
         return Map.copyOf(registrySnapshot.countsForMod(modId));
     }
 
+    public RegistrySnapshot registrySnapshot() {
+        return registrySnapshot;
+    }
+
     public void start() {
         long run = generation.incrementAndGet();
         knowledgeBase.setState(KnowledgeBaseState.RUNNING);

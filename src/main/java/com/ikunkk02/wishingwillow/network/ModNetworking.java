@@ -7,6 +7,9 @@ import com.ikunkk02.wishingwillow.network.packet.SubmitWishInterpretationPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishAnimationEventPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
+import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
+import com.ikunkk02.wishingwillow.network.packet.WishPlanningProgressPacket;
+import com.ikunkk02.wishingwillow.network.packet.SubmitWishPlanPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkDirection;
@@ -15,7 +18,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetworking {
-    private static final String PROTOCOL_VERSION = "3";
+    private static final String PROTOCOL_VERSION = "4";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(WishingWillow.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
@@ -53,11 +56,20 @@ public final class ModNetworking {
                 .decoder(WishStatePacket::decode)
                 .consumerMainThread(WishStatePacket::handle)
                 .add();
-        CHANNEL.messageBuilder(SubmitWishInterpretationPacket.class, id, NetworkDirection.PLAY_TO_SERVER)
+        CHANNEL.messageBuilder(SubmitWishInterpretationPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(SubmitWishInterpretationPacket::encode)
                 .decoder(SubmitWishInterpretationPacket::decode)
                 .consumerMainThread(SubmitWishInterpretationPacket::handle)
                 .add();
+        CHANNEL.messageBuilder(WishPlanningRequestPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(WishPlanningRequestPacket::encode).decoder(WishPlanningRequestPacket::decode)
+                .consumerMainThread(WishPlanningRequestPacket::handle).add();
+        CHANNEL.messageBuilder(WishPlanningProgressPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(WishPlanningProgressPacket::encode).decoder(WishPlanningProgressPacket::decode)
+                .consumerMainThread(WishPlanningProgressPacket::handle).add();
+        CHANNEL.messageBuilder(SubmitWishPlanPacket.class, id, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(SubmitWishPlanPacket::encode).decoder(SubmitWishPlanPacket::decode)
+                .consumerMainThread(SubmitWishPlanPacket::handle).add();
     }
 
     public static void sendToPlayer(ServerPlayer player, Object packet) {
