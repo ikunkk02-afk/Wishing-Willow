@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 
 class CapabilityMatcherTest {
     @Test void exactVerifiedHorrorCandidateBeatsLowConfidenceIdentifiedCandidate(){
@@ -31,7 +32,7 @@ class CapabilityMatcherTest {
         var second=PlanningFixtures.entry("otherhorror","Other Horror",KnowledgeLevel.VERIFIED,0.9,
                 WishCapability.FRIENDLY_ENTITY,FeatureType.ENTITY,RegistryEntryType.ENTITY,"otherhorror:companion",80,90);
         var registry=PlanningFixtures.registry(Map.of(RegistryEntryType.ENTITY,List.of("cavedweller:cave_dweller","otherhorror:companion")));
-        var catalog=new CapabilityMatcher().match("company",PlanningFixtures.interpretation(60,WishDelivery.HIDDEN,WishCapability.PERSISTENT_FOLLOWER),
+        var catalog=new CapabilityMatcher().match("company",PlanningFixtures.interpretation(61,WishDelivery.HIDDEN,WishCapability.PERSISTENT_FOLLOWER),
                 new KnowledgeBaseSnapshot(KnowledgeBaseState.READY,false,List.of(first,second)),registry);
         var modCandidates=catalog.candidates().stream().filter(c->c.sourceKind()==CandidateSourceKind.MOD_FEATURE).toList();
         assertTrue(modCandidates.stream().allMatch(c->c.matchType()==MatchType.COMPATIBLE));
@@ -53,7 +54,7 @@ class CapabilityMatcherTest {
         var entries=java.util.stream.IntStream.range(0,40).mapToObj(i->PlanningFixtures.entry("weakmod"+i,"Mod "+i,KnowledgeLevel.VERIFIED,0.9,
                 WishCapability.STALKING_ENTITY,FeatureType.ENTITY,RegistryEntryType.ENTITY,"weakmod"+i+":watcher",80,80)).toList();
         Map<RegistryEntryType,List<String>> values=Map.of(RegistryEntryType.ENTITY,entries.stream().map(e->e.knowledge().features().get(0).registryCandidates().get(0)).toList());
-        var catalog=new CapabilityMatcher().match("watcher",PlanningFixtures.interpretation(60,WishDelivery.HIDDEN,WishCapability.STALKING_ENTITY),
+        var catalog=new CapabilityMatcher().match("watcher",PlanningFixtures.interpretation(61,WishDelivery.HIDDEN,WishCapability.STALKING_ENTITY),
                 new KnowledgeBaseSnapshot(KnowledgeBaseState.READY,false,entries),PlanningFixtures.registry(values));
         assertEquals(5,catalog.candidates().size());
         assertTrue(catalog.candidates().size()<=CapabilityCatalog.MAX_CANDIDATES);
@@ -89,5 +90,19 @@ class CapabilityMatcherTest {
 
         assertTrue(java.util.stream.Stream.of(safeNight,strongest,diamonds,hiddenPlace)
                 .flatMap(catalog->catalog.candidates().stream()).noneMatch(c->c.providedCapability()==WishCapability.EXPLOSION));
+    }
+
+    @Test void executionSettingsRemoveThirdPartyCandidatesBeforePlanning(){
+        var thirdParty=PlanningFixtures.entry("cavedweller","Cave Dweller",KnowledgeLevel.VERIFIED,0.95,
+                WishCapability.STALKING_ENTITY,FeatureType.ENTITY,RegistryEntryType.ENTITY,
+                "cavedweller:cave_dweller",95,95);
+        var registry=PlanningFixtures.registry(Map.of(RegistryEntryType.ENTITY,
+                List.of("cavedweller:cave_dweller","minecraft:wolf")));
+        var settings=new ExecutionSettingsSnapshot(true,false,true,true,false,false,false,80,false);
+        var catalog=new CapabilityMatcher().match("company",
+                PlanningFixtures.interpretation(70,WishDelivery.HIDDEN,WishCapability.STALKING_ENTITY),
+                new KnowledgeBaseSnapshot(KnowledgeBaseState.READY,false,List.of(thirdParty)),registry,settings);
+        assertTrue(catalog.candidates().stream().noneMatch(candidate->candidate.registryResource()!=null
+                && candidate.registryResource().id().startsWith("cavedweller:")));
     }
 }

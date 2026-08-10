@@ -10,6 +10,11 @@ import com.google.gson.stream.JsonToken;
 import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.ai.WishDelivery;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
+import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
+import com.ikunkk02.wishingwillow.execution.WishActionPolicy;
+import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptError;
+import com.ikunkk02.wishingwillow.execution.WishPolicyDecision;
+import com.ikunkk02.wishingwillow.execution.WishSafetyPolicy;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 
 import java.util.ArrayList;
@@ -33,6 +38,13 @@ public final class WishPlanValidator {
 
     public static WishPlanValidation parseAndValidate(String raw, WishInterpretation interpretation,
                                                       CapabilityCatalog catalog, PlanningEnvironment environment) {
+        return parseAndValidate(raw, interpretation, catalog, environment,
+                ExecutionSettingsSnapshot.permissive());
+    }
+
+    public static WishPlanValidation parseAndValidate(String raw, WishInterpretation interpretation,
+                                                      CapabilityCatalog catalog, PlanningEnvironment environment,
+                                                      ExecutionSettingsSnapshot settings) {
         if (raw == null || raw.length() > MAX_AI_JSON) throw invalid(WishPlanError.INVALID_JSON);
         final JsonObject root;
         try {
@@ -81,17 +93,23 @@ public final class WishPlanValidator {
             if (candidate == null || candidate.requestedCapability() != capability) {
                 throw invalid(WishPlanError.INVALID_CANDIDATE);
             }
-            validateCandidate(candidate, action, environment);
+            validateCandidateEnvironment(candidate, environment);
             WishTargetType target = enumValue(step, "target", WishTargetType.class);
             JsonObject parameters = step.getAsJsonObject("parameters");
             if (parameters == null) throw invalid(WishPlanError.INVALID_PARAMETER);
-            validateParameters(action, parameters, severity, candidate, target);
+            WishPolicyDecision actionDecision = WishActionPolicy.validate(candidate.reference(), action,
+                    parameters, target, timing, delay, trigger, severity);
+            if (!actionDecision.allowed()) throw policyInvalid(actionDecision.error());
             String reason = string(step, "selection_reason", MAX_REASON);
             String signature = action + "|" + candidateId + "|" + timing + "|" + delay + "|" + trigger
                     + "|" + parameters;
-            if (!unique.add(signature)) throw invalid(WishPlanError.INVALID_PARAMETER);
-            steps.add(new WishPlanStep(index, timing, delay, trigger, action, capability, candidateId,
-                    target, parameters, reason, candidate.reference()));
+            if (!unique.add(signature) && action != WishActionType.GIVE_ITEM
+                    && action != WishActionType.REMOVE_ITEM) throw invalid(WishPlanError.INVALID_PARAMETER);
+            WishPlanStep planned = new WishPlanStep(index, timing, delay, trigger, action, capability, candidateId,
+                    target, parameters, reason, candidate.reference());
+            WishPolicyDecision safetyDecision = WishSafetyPolicy.validate(planned, severity, settings);
+            if (!safetyDecision.allowed()) throw policyInvalid(safetyDecision.error());
+            steps.add(planned);
             covered.add(capability);
         }
         validateDelivery(delivery, steps);
@@ -107,6 +125,12 @@ public final class WishPlanValidator {
     }
 
     public static void validateStored(WishPlan plan, PlanningEnvironment environment) {
+        validateStored(plan, environment, ExecutionSettingsSnapshot.permissive());
+    }
+
+    public static void validateStored(WishPlan plan, PlanningEnvironment environment,
+                                      ExecutionSettingsSnapshot settings) {
+        int destructive = 0;
         for (WishPlanStep step : plan.steps()) {
             CandidateReference reference = step.candidateReference();
             if (!environment.modPresent(reference.sourceModId(), reference.sourceModVersion())) {
@@ -117,42 +141,27 @@ public final class WishPlanValidator {
                     throw invalid(WishPlanError.STALE_RESOURCE);
                 }
             }
+            WishPolicyDecision actionDecision = WishActionPolicy.validate(reference, step.action(),
+                    step.parameters(), step.target(), step.timing(), step.delaySeconds(), step.trigger(),
+                    plan.severity());
+            if (!actionDecision.allowed()) throw policyInvalid(actionDecision.error());
+            WishPolicyDecision safetyDecision = WishSafetyPolicy.validate(step, plan.severity(), settings);
+            if (!safetyDecision.allowed()) throw policyInvalid(safetyDecision.error());
+            destructive += WishPlanBudget.destructiveCost(step);
+        }
+        if (destructive > WishPlanBudget.maxDestructiveCost(plan.severity())) {
+            throw invalid(WishPlanError.BUDGET_EXCEEDED);
         }
     }
 
-    private static void validateCandidate(CapabilityCandidate candidate, WishActionType action,
-                                          PlanningEnvironment environment) {
+    private static void validateCandidateEnvironment(CapabilityCandidate candidate,
+                                                     PlanningEnvironment environment) {
         if (!environment.modLoaded(candidate.sourceModId(), candidate.sourceModVersion())) {
             throw invalid(WishPlanError.MISSING_MOD);
         }
         if (candidate.registryResource() != null
                 && !environment.contains(candidate.registryResource().type(), candidate.registryResource().id())) {
             throw invalid(WishPlanError.INVALID_REGISTRY);
-        }
-        RegistryEntryType expected = resourceType(action);
-        if (expected != null && (candidate.registryResource() == null
-                || candidate.registryResource().type() != expected)) {
-            throw invalid(WishPlanError.INVALID_ACTION);
-        }
-        if (action == WishActionType.START_PREDEFINED_EVENT && candidate.sourceKind() != CandidateSourceKind.MOD_FEATURE) {
-            throw invalid(WishPlanError.INVALID_ACTION);
-        }
-        if (candidate.sourceKind() == CandidateSourceKind.VANILLA_BUILTIN
-                && (!candidate.sourceModId().equals("minecraft") || candidate.registryResource() != null
-                || !Set.of(WishCapability.CHANGE_TIME, WishCapability.CHANGE_WEATHER, WishCapability.TELEPORT,
-                WishCapability.EXPLOSION, WishCapability.LIGHTNING, WishCapability.PLAYER_ATTRIBUTE,
-                WishCapability.REPUTATION, WishCapability.MOB_BEHAVIOR, WishCapability.HEALING,
-                WishCapability.DAMAGE, WishCapability.INVENTORY_CHANGE, WishCapability.BLOCK_CHANGE)
-                .contains(candidate.providedCapability()))) {
-            throw invalid(WishPlanError.INVALID_CANDIDATE);
-        }
-        if (candidate.sourceKind() == CandidateSourceKind.VANILLA_REGISTRY
-                && (!candidate.sourceModId().equals("minecraft") || candidate.registryResource() == null
-                || !candidate.registryResource().id().startsWith("minecraft:"))) {
-            throw invalid(WishPlanError.INVALID_CANDIDATE);
-        }
-        if (!supportsAction(candidate.providedCapability(), action)) {
-            throw invalid(WishPlanError.INVALID_ACTION);
         }
     }
 
@@ -301,6 +310,30 @@ public final class WishPlanValidator {
         } catch (Exception exception) {
             throw invalid(WishPlanError.INVALID_JSON);
         }
+    }
+    private static IllegalArgumentException policyInvalid(WishExecutionAcceptError error) {
+        WishPlanError mapped = switch (error) {
+            case EXECUTION_DISABLED -> WishPlanError.EXECUTION_DISABLED;
+            case INVALID_CANDIDATE -> WishPlanError.INVALID_CANDIDATE;
+            case INVALID_RESOURCE, INVALID_ACTION_CAPABILITY -> WishPlanError.INVALID_ACTION;
+            case STALE_RESOURCE -> WishPlanError.STALE_RESOURCE;
+            case INVALID_PARAMETER -> WishPlanError.INVALID_PARAMETER;
+            case INVALID_EVENT -> WishPlanError.INVALID_EVENT;
+            case UNTRUSTED_REGISTRY_CANDIDATE -> WishPlanError.UNTRUSTED_REGISTRY_CANDIDATE;
+            case UNSUPPORTED_ACTION -> WishPlanError.UNSUPPORTED_ACTION;
+            case BUDGET_EXCEEDED -> WishPlanError.BUDGET_EXCEEDED;
+            case RISK_TOO_HIGH -> WishPlanError.RISK_TOO_HIGH;
+            case THIRD_PARTY_ENTITY_DISABLED -> WishPlanError.THIRD_PARTY_ENTITY_DISABLED;
+            case THIRD_PARTY_ENTITY_SEVERITY -> WishPlanError.THIRD_PARTY_ENTITY_SEVERITY;
+            case BLOCK_MODIFICATION_DISABLED -> WishPlanError.BLOCK_MODIFICATION_DISABLED;
+            case EXPLOSIONS_DISABLED -> WishPlanError.EXPLOSIONS_DISABLED;
+            case DESTRUCTIVE_EXPLOSIONS_DISABLED -> WishPlanError.DESTRUCTIVE_EXPLOSIONS_DISABLED;
+            case CROSS_DIMENSION_TELEPORT_DISABLED -> WishPlanError.CROSS_DIMENSION_TELEPORT_DISABLED;
+            case DESTRUCTIVE_SEVERITY_DISABLED -> WishPlanError.DESTRUCTIVE_SEVERITY_DISABLED;
+            case DEBUG_SAFE_MODE -> WishPlanError.DEBUG_SAFE_MODE;
+            default -> WishPlanError.UNKNOWN;
+        };
+        return invalid(mapped);
     }
     private static IllegalArgumentException invalid(WishPlanError error) { return new IllegalArgumentException(error.name()); }
 }

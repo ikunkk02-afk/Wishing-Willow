@@ -57,12 +57,12 @@ public final class ClientWishPlanningCoordinator {
         KnowledgeBaseSnapshot knowledge = research.knowledgeBase().snapshot();
         RegistrySnapshot registry = research.registrySnapshot();
         CompletableFuture.supplyAsync(() -> MATCHER.match(packet.originalWish(), packet.interpretation(),
-                        knowledge, registry), MATCH_EXECUTOR)
+                        knowledge, registry, packet.executionSettings()), MATCH_EXECUTOR)
                 .thenCompose(catalog -> {
                     clientSend(new WishPlanningProgressPacket(packet.sessionId(), packet.attemptId(),
                             WishPlanState.PLANNING), requestGeneration);
                     return PLANNER.plan(config, packet.originalWish(), packet.interpretation(), packet.context(),
-                                    catalog, new RegistrySnapshotEnvironment(registry))
+                                    catalog, new RegistrySnapshotEnvironment(registry), packet.executionSettings())
                             .thenApply(result -> new Completed(result, catalog));
                 })
                 .exceptionally(throwable -> new Completed(WishPlanResult.failed(WishPlanError.UNKNOWN), null))

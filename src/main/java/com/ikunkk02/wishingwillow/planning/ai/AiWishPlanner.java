@@ -17,6 +17,7 @@ import com.ikunkk02.wishingwillow.planning.WishPlanResult;
 import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import com.ikunkk02.wishingwillow.planning.WishPlanValidation;
 import com.ikunkk02.wishingwillow.planning.WishPlanValidator;
+import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -35,10 +36,20 @@ public final class AiWishPlanner {
                                                   WishContextSnapshot context,
                                                   CapabilityCatalog catalog,
                                                   PlanningEnvironment environment) {
+        return plan(config, originalWish, interpretation, context, catalog, environment,
+                ExecutionSettingsSnapshot.permissive());
+    }
+
+    public CompletableFuture<WishPlanResult> plan(AiConfig config, String originalWish,
+                                                  WishInterpretation interpretation,
+                                                  WishContextSnapshot context,
+                                                  CapabilityCatalog catalog,
+                                                  PlanningEnvironment environment,
+                                                  ExecutionSettingsSnapshot settings) {
         if (!config.isConfigured()) return CompletableFuture.completedFuture(WishPlanResult.failed(WishPlanError.AI_REQUEST_FAILED));
         if (catalog.candidates().isEmpty()) return CompletableFuture.completedFuture(WishPlanResult.failed(WishPlanError.NO_CANDIDATES));
         AiRequest request = new AiRequest(WishPlannerPrompt.SYSTEM_PROMPT,
-                WishPlannerPrompt.userMessage(originalWish, interpretation, context, catalog),
+                WishPlannerPrompt.userMessage(originalWish, interpretation, context, catalog, settings),
                 2800, AiOutputMode.JSON_SCHEMA, WishPlannerPrompt.jsonSchema(catalog));
         AiProvider provider = providers.apply(config);
         return provider.complete(request).handle((response, throwable) -> {
@@ -50,15 +61,15 @@ public final class AiWishPlanner {
             }
             try {
                 WishPlanValidation validation = WishPlanValidator.parseAndValidate(
-                        response.assistantContent(), interpretation, catalog, environment);
+                        response.assistantContent(), interpretation, catalog, environment, settings);
                 if (validation.state() == WishPlanState.READY) {
                     return CompletableFuture.completedFuture(WishPlanResult.success(validation.draft()));
                 }
                 return repair(provider, originalWish, interpretation, context, catalog, environment,
-                        response.assistantContent(), WishPlanError.UNSATISFIED_CAPABILITIES);
+                        settings, response.assistantContent(), WishPlanError.UNSATISFIED_CAPABILITIES);
             } catch (IllegalArgumentException exception) {
                 return repair(provider, originalWish, interpretation, context, catalog, environment,
-                        response.assistantContent(), parseError(exception));
+                        settings, response.assistantContent(), parseError(exception));
             }
         }).thenCompose(Function.identity());
     }
@@ -70,6 +81,7 @@ public final class AiWishPlanner {
             WishContextSnapshot context,
             CapabilityCatalog catalog,
             PlanningEnvironment environment,
+            ExecutionSettingsSnapshot settings,
             String invalidCandidate,
             WishPlanError validationError
     ) {
@@ -84,7 +96,7 @@ public final class AiWishPlanner {
         AiRequest repairRequest = new AiRequest(
                 WishPlannerPrompt.SYSTEM_PROMPT + repairRules,
                 WishPlannerPrompt.repairMessage(originalWish, interpretation, context, catalog,
-                        validationError, invalidCandidate),
+                        settings, validationError, invalidCandidate),
                 2800,
                 AiOutputMode.JSON_SCHEMA,
                 WishPlannerPrompt.jsonSchema(catalog)
@@ -97,14 +109,20 @@ public final class AiWishPlanner {
             }
             try {
                 WishPlanValidation validation = WishPlanValidator.parseAndValidate(
-                        response.assistantContent(), interpretation, catalog, environment);
-                return validation.state() == WishPlanState.READY
-                        ? WishPlanResult.success(validation.draft())
+                        response.assistantContent(), interpretation, catalog, environment, settings);
+                if (validation.state() == WishPlanState.READY) return WishPlanResult.success(validation.draft());
+                return coversPrimary(interpretation, validation)
+                        ? WishPlanResult.partial(validation.draft())
                         : WishPlanResult.failed(WishPlanError.UNSATISFIED_CAPABILITIES);
             } catch (IllegalArgumentException exception) {
                 return WishPlanResult.failed(parseError(exception));
             }
         });
+    }
+
+    private static boolean coversPrimary(WishInterpretation interpretation, WishPlanValidation validation) {
+        return !interpretation.requiredCapabilities().isEmpty()
+                && !validation.unfulfilledCapabilities().contains(interpretation.requiredCapabilities().get(0));
     }
 
     private static WishPlanError parseError(IllegalArgumentException exception) {

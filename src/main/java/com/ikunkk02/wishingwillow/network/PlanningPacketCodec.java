@@ -15,6 +15,7 @@ import com.ikunkk02.wishingwillow.research.FeatureType;
 import com.ikunkk02.wishingwillow.research.KnowledgeLevel;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 import com.ikunkk02.wishingwillow.research.VerifiedRegistryResource;
+import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import net.minecraft.network.FriendlyByteBuf;
 
 import java.util.ArrayList;
@@ -62,6 +63,19 @@ public final class PlanningPacketCodec {
         for(int x=0;x<nearbyCount;x++) nearby.add(new WishContextSnapshot.NearbyEntitySummary(b.readUtf(256),b.readVarInt()));
         return new WishContextSnapshot(dimension,gameTime,phase,weather,health,maxHealth,hunger,xp,gameMode,biome,y,
                 environment,held,armor,nearby,b.readVarInt(),b.readVarInt());
+    }
+
+    public static void writeExecutionSettings(FriendlyByteBuf b, ExecutionSettingsSnapshot s) {
+        b.writeBoolean(s.enabled()); b.writeBoolean(s.thirdPartyEntities());
+        b.writeBoolean(s.blockModification()); b.writeBoolean(s.explosions());
+        b.writeBoolean(s.destructiveExplosions()); b.writeBoolean(s.crossDimensionTeleport());
+        b.writeBoolean(s.debugSafeMode()); b.writeVarInt(s.maximumDestructiveSeverity());
+    }
+
+    public static ExecutionSettingsSnapshot readExecutionSettings(FriendlyByteBuf b) {
+        return new ExecutionSettingsSnapshot(b.readBoolean(), b.readBoolean(), b.readBoolean(),
+                b.readBoolean(), b.readBoolean(), b.readBoolean(), b.readBoolean(),
+                b.readVarInt(), false);
     }
 
     public static void writeCatalog(FriendlyByteBuf b, CapabilityCatalog catalog) {

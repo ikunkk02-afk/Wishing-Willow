@@ -10,6 +10,8 @@ import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishTone;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptError;
+import com.ikunkk02.wishingwillow.execution.WishExecutionState;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -37,6 +39,23 @@ class WishSavedDataTest {
         WishRecord loaded = WishRecord.load(requesting.save());
         assertEquals(InterpretationState.AI_REQUEST_FAILED, loaded.interpretationState());
         assertEquals(AiErrorCategory.DISCONNECTED, loaded.aiErrorCategory());
+    }
+
+    @Test
+    void executionFailureDetailRoundTripsAndLegacyFieldsDefaultSafely(){
+        WishRecord failed=record(UUID.randomUUID(),UUID.randomUUID(),100L,InterpretationState.SUCCESS)
+                .withExecution(null,WishExecutionState.FAILED,WishExecutionAcceptError.RISK_TOO_HIGH,
+                        "step=0 action=SPAWN_ENTITY risk=85");
+        WishRecord loaded=WishRecord.load(failed.save());
+        assertEquals(WishExecutionState.FAILED,loaded.executionState());
+        assertEquals(WishExecutionAcceptError.RISK_TOO_HIGH,loaded.executionError());
+        assertEquals("step=0 action=SPAWN_ENTITY risk=85",loaded.executionErrorDetail());
+
+        CompoundTag legacy=record(UUID.randomUUID(),UUID.randomUUID(),200L,InterpretationState.SUCCESS).save();
+        legacy.remove("ExecutionError");legacy.remove("ExecutionErrorDetail");
+        WishRecord legacyLoaded=WishRecord.load(legacy);
+        assertEquals(WishExecutionAcceptError.NONE,legacyLoaded.executionError());
+        assertEquals("",legacyLoaded.executionErrorDetail());
     }
 
     private static WishRecord record(UUID session, UUID player, long submittedAt, InterpretationState state) {

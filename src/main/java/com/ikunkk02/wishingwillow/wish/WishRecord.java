@@ -13,6 +13,7 @@ import com.ikunkk02.wishingwillow.planning.WishPlanError;
 import com.ikunkk02.wishingwillow.planning.WishPlanNbt;
 import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import com.ikunkk02.wishingwillow.execution.WishExecutionState;
+import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptError;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -43,7 +44,9 @@ public record WishRecord(
         WishPlanError planError,
         @Nullable WishPlan plan,
         @Nullable UUID executionId,
-        WishExecutionState executionState
+        WishExecutionState executionState,
+        WishExecutionAcceptError executionError,
+        String executionErrorDetail
 ) {
     public WishRecord(UUID sessionId, UUID playerId, String rawWish, ResourceLocation dimension,
                       long submittedGameTime, long submittedAtEpochMillis, WishState state,
@@ -53,7 +56,8 @@ public record WishRecord(
         this(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis, state,
                 interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
                 interpretationUpdatedAtEpochMillis, interpretation,
-                WishPlanState.NOT_PLANNED, WishPlanError.NONE, null, null, WishExecutionState.NOT_ACCEPTED);
+                WishPlanState.NOT_PLANNED, WishPlanError.NONE, null, null, WishExecutionState.NOT_ACCEPTED,
+                WishExecutionAcceptError.NONE, "");
     }
     public static WishRecord fromSession(WishSession session) {
         return new WishRecord(
@@ -75,7 +79,9 @@ public record WishRecord(
                 WishPlanError.NONE,
                 null,
                 null,
-                WishExecutionState.NOT_ACCEPTED
+                WishExecutionState.NOT_ACCEPTED,
+                WishExecutionAcceptError.NONE,
+                ""
         );
     }
 
@@ -88,20 +94,27 @@ public record WishRecord(
         return new WishRecord(
                 sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
                 state, newState, errorCategory, aiExecutionMode, providerType, model, updatedAt, newInterpretation,
-                planState, planError, plan, executionId, executionState
+                planState, planError, plan, executionId, executionState, executionError, executionErrorDetail
         );
     }
 
     public WishRecord withPlanning(WishPlanState newState, WishPlanError error, @Nullable WishPlan newPlan) {
         return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
                 state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
-                interpretationUpdatedAtEpochMillis, interpretation, newState, error, newPlan, executionId, executionState);
+                interpretationUpdatedAtEpochMillis, interpretation, newState, error, newPlan, executionId, executionState,
+                executionError, executionErrorDetail);
     }
 
     public WishRecord withExecution(@Nullable UUID id, WishExecutionState newState) {
+        return withExecution(id, newState, WishExecutionAcceptError.NONE, "");
+    }
+
+    public WishRecord withExecution(@Nullable UUID id, WishExecutionState newState,
+                                    WishExecutionAcceptError error, String detail) {
         return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
                 state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
-                interpretationUpdatedAtEpochMillis, interpretation, planState, planError, plan, id, newState);
+                interpretationUpdatedAtEpochMillis, interpretation, planState, planError, plan, id, newState,
+                error == null ? WishExecutionAcceptError.UNKNOWN : error, sanitizeDetail(detail));
     }
 
     public CompoundTag save() {
@@ -127,6 +140,8 @@ public record WishRecord(
         if (plan != null) tag.put("WishPlan", WishPlanNbt.save(plan));
         if (executionId != null) tag.putUUID("ExecutionId", executionId);
         tag.putString("ExecutionState", executionState.name());
+        tag.putString("ExecutionError", executionError.name());
+        tag.putString("ExecutionErrorDetail", sanitizeDetail(executionErrorDetail));
         return tag;
     }
 
@@ -186,9 +201,22 @@ public record WishRecord(
         UUID executionId = tag.hasUUID("ExecutionId") ? tag.getUUID("ExecutionId") : null;
         WishExecutionState executionState = safeEnum(WishExecutionState.class,
                 tag.getString("ExecutionState"), WishExecutionState.NOT_ACCEPTED);
+        WishExecutionAcceptError executionError = safeEnum(WishExecutionAcceptError.class,
+                tag.getString("ExecutionError"), WishExecutionAcceptError.NONE);
+        String executionErrorDetail = tag.getString("ExecutionErrorDetail");
         if (executionId == null && executionState != WishExecutionState.NOT_ACCEPTED
                 && executionState != WishExecutionState.FAILED) {
             executionState = WishExecutionState.STALE;
+        }
+        if(executionId==null&&loadedState==WishState.CANCELLED){
+            executionState=WishExecutionState.CANCELLED;
+            executionError=WishExecutionAcceptError.NONE;
+            executionErrorDetail="wish lifecycle cancelled";
+        }else if(executionId==null&&executionState==WishExecutionState.NOT_ACCEPTED
+                &&planState==WishPlanState.FAILED){
+            executionState=WishExecutionState.FAILED;
+            executionError=WishExecutionAcceptError.VALIDATION_FAILED;
+            executionErrorDetail="planning="+planError.name();
         }
         return new WishRecord(
                 tag.getUUID("SessionId"),
@@ -211,7 +239,9 @@ public record WishRecord(
                 planError,
                 plan,
                 executionId,
-                executionState
+                executionState,
+                executionError,
+                sanitizeDetail(executionErrorDetail)
         );
     }
 
@@ -267,5 +297,11 @@ public record WishRecord(
         } catch (IllegalArgumentException exception) {
             return fallback;
         }
+    }
+
+    private static String sanitizeDetail(String detail) {
+        if (detail == null) return "";
+        String clean = detail.replace('\n', ' ').replace('\r', ' ').trim();
+        return clean.length() > 256 ? clean.substring(0, 256) : clean;
     }
 }

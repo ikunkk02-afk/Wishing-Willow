@@ -36,7 +36,7 @@ class WishPlanValidatorTest {
         String step="{\"step_index\":%d,\"timing\":\"IMMEDIATE\",\"delay_seconds\":0,\"trigger\":\"NONE\",\"action\":\"SPAWN_ENTITY\",\"capability\":\"STALKING_ENTITY\",\"candidate_id\":\"candidate-001\",\"target\":\"PLAYER\",\"parameters\":{\"count\":1,\"distance_min\":24,\"distance_max\":40},\"selection_reason\":\"test\"}";
         String json="{\"schema_version\":1,\"summary\":\"x\",\"delivery\":\"HIDDEN\",\"severity\":10,\"estimated_duration\":\"SHORT\",\"steps\":["+step.formatted(0)+","+step.formatted(1)+","+step.formatted(2)+"]}";
         assertError(WishPlanError.BUDGET_EXCEEDED,()->WishPlanValidator.parseAndValidate(json,interpretation,PlanningFixtures.catalog(candidate),PlanningFixtures.environment(true,true)));
-        var immediate=PlanningFixtures.interpretation(30,WishDelivery.IMMEDIATE,WishCapability.STALKING_ENTITY);
+        var immediate=PlanningFixtures.interpretation(61,WishDelivery.IMMEDIATE,WishCapability.STALKING_ENTITY);
         String delayed=PlanningFixtures.planJson(immediate,"candidate-001","{\"count\":1,\"distance_min\":24,\"distance_max\":40}",WishActionType.SPAWN_ENTITY,WishCapability.STALKING_ENTITY)
                 .replace("\"timing\":\"IMMEDIATE\"","\"timing\":\"DELAYED\"").replace("\"delay_seconds\":0","\"delay_seconds\":120").replace("\"trigger\":\"NONE\"","\"trigger\":\"AFTER_DELAY\"");
         assertError(WishPlanError.DELIVERY_CONFLICT,()->WishPlanValidator.parseAndValidate(delayed,immediate,PlanningFixtures.catalog(candidate),PlanningFixtures.environment(true,true)));

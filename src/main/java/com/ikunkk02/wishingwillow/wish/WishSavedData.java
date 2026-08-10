@@ -43,7 +43,9 @@ public final class WishSavedData extends SavedData {
         WishRecord fresh = WishRecord.fromSession(session);
         WishRecord existing = wishesBySession.get(session.sessionId());
         if (existing != null) {
-            fresh = fresh.withPlanning(existing.planState(), existing.planError(), existing.plan());
+            fresh = fresh.withPlanning(existing.planState(), existing.planError(), existing.plan())
+                    .withExecution(existing.executionId(), existing.executionState(),
+                            existing.executionError(), existing.executionErrorDetail());
         }
         update(fresh);
     }

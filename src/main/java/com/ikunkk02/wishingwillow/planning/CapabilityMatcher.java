@@ -10,6 +10,11 @@ import com.ikunkk02.wishingwillow.research.KnowledgeLevel;
 import com.ikunkk02.wishingwillow.research.ModFeature;
 import com.ikunkk02.wishingwillow.research.VerifiedRegistryResource;
 import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
+import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
+import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
+import com.ikunkk02.wishingwillow.execution.WishSafetyPolicy;
+import com.ikunkk02.wishingwillow.execution.WishActionPolicy;
+import com.ikunkk02.wishingwillow.WishingWillow;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -38,6 +43,13 @@ public final class CapabilityMatcher {
 
     public CapabilityCatalog match(String originalWish, WishInterpretation interpretation,
                                    KnowledgeBaseSnapshot knowledge, RegistrySnapshot registry) {
+        return match(originalWish, interpretation, knowledge, registry,
+                ExecutionSettingsSnapshot.permissive());
+    }
+
+    public CapabilityCatalog match(String originalWish, WishInterpretation interpretation,
+                                   KnowledgeBaseSnapshot knowledge, RegistrySnapshot registry,
+                                   ExecutionSettingsSnapshot settings) {
         Map<WishCapability, List<CapabilityCandidate>> ranked = new LinkedHashMap<>();
         String relevanceText = originalWish + " " + interpretation.literalGoal() + " " + interpretation.twistedOutcome();
         for (WishCapability requested : interpretation.requiredCapabilities()) {
@@ -63,7 +75,11 @@ public final class CapabilityMatcher {
                     }
                 }
             }
-            List<CapabilityCandidate> top = candidates.stream().distinct().sorted(order()).limit(MAX_PER_CAPABILITY).toList();
+            List<CapabilityCandidate> top = candidates.stream().distinct()
+                    .filter(candidate -> executableCandidate(candidate)
+                            && WishSafetyPolicy.candidateAllowed(candidate.reference(),
+                            interpretation.severity(), settings))
+                    .sorted(order()).limit(MAX_PER_CAPABILITY).toList();
             ranked.put(requested, top);
         }
 
@@ -88,6 +104,14 @@ public final class CapabilityMatcher {
         }
         return CapabilityCatalog.create(sets, catalogCandidates, knowledge.state().name(),
                 knowledgeDigest(knowledge), registry.digest());
+    }
+
+    private static boolean executableCandidate(CapabilityCandidate candidate) {
+        if (candidate.registryResource() != null) return true;
+        if (WishActionPolicy.isTrustedBuiltin(candidate.reference())) return true;
+        return candidate.sourceKind() == CandidateSourceKind.MOD_FEATURE
+                && candidate.sourceModId().equals(WishingWillow.MOD_ID)
+                && PredefinedWishEventRegistry.contains(candidate.featureName());
     }
 
     private static CapabilityCandidate candidate(KnowledgeEntry entry, ModFeature feature,

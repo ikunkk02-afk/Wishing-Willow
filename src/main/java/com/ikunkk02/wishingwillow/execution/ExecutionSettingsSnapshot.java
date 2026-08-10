@@ -9,4 +9,7 @@ public record ExecutionSettingsSnapshot(boolean enabled,boolean thirdPartyEntiti
             WishExecutionConfig.BLOCK_MODIFICATION.get(),WishExecutionConfig.EXPLOSIONS.get(),
             WishExecutionConfig.DESTRUCTIVE_EXPLOSIONS.get(),WishExecutionConfig.CROSS_DIMENSION_TELEPORT.get(),
             WishExecutionConfig.DEBUG_SAFE_MODE.get(),WishExecutionConfig.MAX_DESTRUCTIVE_SEVERITY.get(),canEdit);}
+    public static ExecutionSettingsSnapshot planning(){return current(false);}
+    public static ExecutionSettingsSnapshot permissive(){return new ExecutionSettingsSnapshot(
+            true,true,true,true,true,true,false,100,false);}
 }

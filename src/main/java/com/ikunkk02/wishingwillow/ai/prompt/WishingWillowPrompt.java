@@ -42,7 +42,9 @@ public final class WishingWillowPrompt {
                 unrelated entity/event.
             17. Add another capability only when it directly implements the same twisted outcome. Every capability must have a
                 clear causal role described by twisted_outcome; never add capabilities merely to make the result more dramatic.
-            18. intent is a short English machine label, not prose. It must use lowercase snake_case with no spaces and match
+            18. Put the single primary capability that most directly realizes twisted_outcome first in required_capabilities.
+                Any later capabilities are supporting capabilities and must remain causally necessary to the same outcome.
+            19. intent is a short English machine label, not prose. It must use lowercase snake_case with no spaces and match
                 ^[a-z][a-z0-9_-]{0,63}$ exactly (for example: obtain_diamonds, companionship, change_time).
 
             Output JSON fields, exactly:

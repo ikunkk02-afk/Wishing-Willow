@@ -17,6 +17,7 @@ import com.ikunkk02.wishingwillow.planning.WishStepTiming;
 import com.ikunkk02.wishingwillow.planning.WishTargetType;
 import com.ikunkk02.wishingwillow.planning.WishTriggerType;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
+import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 
 import java.util.Map;
 
@@ -42,6 +43,13 @@ public final class WishPlannerPrompt {
 
     public static String userMessage(String originalWish, WishInterpretation interpretation,
                                      WishContextSnapshot context, CapabilityCatalog catalog) {
+        return userMessage(originalWish, interpretation, context, catalog,
+                ExecutionSettingsSnapshot.permissive());
+    }
+
+    public static String userMessage(String originalWish, WishInterpretation interpretation,
+                                     WishContextSnapshot context, CapabilityCatalog catalog,
+                                     ExecutionSettingsSnapshot settings) {
         JsonObject root = new JsonObject();
         root.addProperty("original_wish", clean(originalWish, 512));
         root.add("wish_interpretation", JsonParser.parseString(
@@ -64,6 +72,16 @@ public final class WishPlannerPrompt {
             candidates.add(value);
         }
         root.add("candidate_catalog_untrusted", candidates);
+        JsonObject policy = new JsonObject();
+        policy.addProperty("third_party_entities", settings.thirdPartyEntities());
+        policy.addProperty("block_modification", settings.blockModification() && !settings.debugSafeMode());
+        policy.addProperty("explosions", settings.explosions());
+        policy.addProperty("destructive_explosions", settings.destructiveExplosions() && !settings.debugSafeMode());
+        policy.addProperty("cross_dimension_teleport", settings.crossDimensionTeleport());
+        policy.addProperty("debug_safe_mode", settings.debugSafeMode());
+        policy.addProperty("maximum_destructive_severity", settings.maximumDestructiveSeverity());
+        policy.addProperty("debug_safe_max_explosion_power", settings.debugSafeMode() ? 2 : 8);
+        root.add("server_execution_policy", policy);
         return "<UNTRUSTED_PLANNING_DATA_JSON>\n" + GSON.toJson(root)
                 + "\n</UNTRUSTED_PLANNING_DATA_JSON>";
     }
@@ -118,6 +136,14 @@ public final class WishPlannerPrompt {
     public static String repairMessage(String originalWish, WishInterpretation interpretation,
                                        WishContextSnapshot context, CapabilityCatalog catalog,
                                        WishPlanError error, String invalidCandidate) {
+        return repairMessage(originalWish, interpretation, context, catalog,
+                ExecutionSettingsSnapshot.permissive(), error, invalidCandidate);
+    }
+
+    public static String repairMessage(String originalWish, WishInterpretation interpretation,
+                                       WishContextSnapshot context, CapabilityCatalog catalog,
+                                       ExecutionSettingsSnapshot settings,
+                                       WishPlanError error, String invalidCandidate) {
         String candidate = invalidCandidate == null ? "" : invalidCandidate;
         if (candidate.length() > WishPlanValidator.MAX_AI_JSON) {
             candidate = candidate.substring(0, WishPlanValidator.MAX_AI_JSON);
@@ -128,7 +154,7 @@ public final class WishPlannerPrompt {
         repair.addProperty("maximum_destructive_cost",
                 WishPlanBudget.maxDestructiveCost(interpretation.severity()));
         repair.addProperty("invalid_plan_candidate", candidate);
-        return userMessage(originalWish, interpretation, context, catalog)
+        return userMessage(originalWish, interpretation, context, catalog, settings)
                 + "\n<UNTRUSTED_INVALID_PLAN_JSON>\n" + GSON.toJson(repair)
                 + "\n</UNTRUSTED_INVALID_PLAN_JSON>";
     }
