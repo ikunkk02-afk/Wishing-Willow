@@ -112,7 +112,7 @@ public final class FirstPersonWishRenderer {
         float recoil = Mth.sin(snap * (float) Math.PI) * 0.07F;
         poseStack.translate(
                 side * Mth.lerp(prepare, 0.28F, 0.0F) + side * recoil,
-                Mth.lerp(prepare, -0.34F, -0.10F) + recoil * 0.25F,
+                Mth.lerp(prepare, -0.40F, -0.16F) + recoil * 0.25F,
                 Mth.lerp(prepare, -1.0F, -1.05F)
         );
         poseStack.mulPose(Axis.ZP.rotationDegrees(
