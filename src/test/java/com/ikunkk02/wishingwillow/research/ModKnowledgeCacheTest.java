@@ -5,6 +5,10 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import com.google.gson.Gson;
+import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -35,5 +39,26 @@ class ModKnowledgeCacheTest {
         Files.createDirectories(path.getParent());
         Files.writeString(path, "not-json");
         assertNull(cache.load(fingerprint));
+    }
+
+    @Test
+    void migratesSchemaOneAndLegacySourceNamesWithoutLosingKnowledge() throws Exception {
+        ModKnowledgeCache cache = new ModKnowledgeCache(temporary.resolve("knowledge"));
+        ModFingerprint fingerprint = new ModFingerprint("legacy", "1", "legacy.jar", "d".repeat(128));
+        KnowledgeEntry legacy = new KnowledgeEntry(1, ModFingerprintServiceTest.info("legacy", "1", "legacy.jar", "content"),
+                fingerprint, ModCategory.CONTENT, ResearchState.READY, KnowledgeLevel.UNDERSTOOD,
+                Set.of(ResearchSource.CURSEFORGE, ResearchSource.SOURCE_README), List.of(), null,
+                "registry-digest", "", 123L);
+        Path path = cache.root().resolve("mods").resolve("legacy-" + fingerprint.sha512() + ".json");
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, new Gson().toJson(legacy), StandardCharsets.UTF_8);
+
+        KnowledgeEntry migrated = cache.load(fingerprint);
+        assertEquals(2, migrated.schemaVersion());
+        assertEquals(KnowledgeLevel.UNDERSTOOD, migrated.knowledgeLevel());
+        assertEquals("registry-digest", migrated.registryDigest());
+        assertEquals(Set.of(ResearchSource.CURSEFORGE_API, ResearchSource.GITHUB_README), migrated.sources());
+        assertEquals(com.ikunkk02.wishingwillow.research.web.IdentityConfidenceLevel.UNRESOLVED,
+                migrated.webResearch().identity().level());
     }
 }

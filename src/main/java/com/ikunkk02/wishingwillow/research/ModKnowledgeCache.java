@@ -42,16 +42,27 @@ public final class ModKnowledgeCache {
                 return null;
             }
             KnowledgeEntry entry = GSON.fromJson(Files.readString(path, StandardCharsets.UTF_8), KnowledgeEntry.class);
-            if (entry == null || entry.schemaVersion() != 1
+            if (entry == null || (entry.schemaVersion() != 1 && entry.schemaVersion() != 2)
                     || !entry.fingerprint().cacheKey().equals(fingerprint.cacheKey())) {
                 return null;
             }
-            return entry;
+            return entry.schemaVersion() == 2 ? entry : new KnowledgeEntry(2, entry.installed(), entry.fingerprint(),
+                    entry.category(), entry.state(), entry.knowledgeLevel(), migrateSources(entry.sources()),
+                    entry.documents(), entry.knowledge(), entry.registryDigest(), entry.errorCode(), entry.updatedAt());
         } catch (Exception exception) {
             LOGGER.warn("Ignoring one invalid Wishing Willow knowledge cache entry: {}",
                     exception.getClass().getSimpleName());
             return null;
         }
+    }
+
+    private static java.util.Set<ResearchSource> migrateSources(java.util.Set<ResearchSource> values) {
+        java.util.Set<ResearchSource> migrated = new java.util.LinkedHashSet<>();
+        for (ResearchSource value : values) {
+            migrated.add(value == ResearchSource.CURSEFORGE ? ResearchSource.CURSEFORGE_API
+                    : value == ResearchSource.SOURCE_README ? ResearchSource.GITHUB_README : value);
+        }
+        return migrated;
     }
 
     public synchronized void save(KnowledgeEntry entry) {

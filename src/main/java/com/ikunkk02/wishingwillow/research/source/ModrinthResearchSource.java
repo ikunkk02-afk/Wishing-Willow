@@ -145,11 +145,11 @@ public final class ModrinthResearchSource implements ResearchProvider {
             return http.get(readme, Map.of("Accept", "application/vnd.github.raw+json"))
                     .handle((readmeResponse, throwable) -> {
                         if (throwable == null && readmeResponse.status() == 200) {
-                            documents.add(new ResearchDocument(ResearchSource.SOURCE_README,
+                            documents.add(new ResearchDocument(ResearchSource.GITHUB_README,
                                     string(project, "title") + " README",
                                     ResearchText.sanitize(readmeResponse.body(), "text/markdown"),
                                     string(project, "source_url")));
-                            sources.add(ResearchSource.SOURCE_README);
+                            sources.add(ResearchSource.GITHUB_README);
                         }
                         return new SourceResearchResult(true, confidence, categories, documents, sources, projectId);
                     });

@@ -1,5 +1,8 @@
 package com.ikunkk02.wishingwillow.research.source;
 
+import com.ikunkk02.wishingwillow.research.web.UrlSafetyValidator;
+import com.ikunkk02.wishingwillow.research.web.WebResearchBudget;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.Inet4Address;
@@ -25,15 +28,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class ResearchHttpClient {
     public static final int MAX_RESPONSE_BYTES = 512 * 1024;
-    private static final Set<String> TRUSTED_HOSTS = Set.of(
-            "api.modrinth.com", "api.curseforge.com", "api.github.com",
-            "github.com", "raw.githubusercontent.com", "modrinth.com",
-            "curseforge.com", "www.curseforge.com"
-    );
     private final ExecutorService executor;
     private final HttpClient client;
     private final Semaphore permits = new Semaphore(3);
     private final boolean allowLoopbackForTests;
+    private final UrlSafetyValidator validator;
 
     public ResearchHttpClient() {
         this(false);
@@ -41,6 +40,7 @@ public final class ResearchHttpClient {
 
     ResearchHttpClient(boolean allowLoopbackForTests) {
         this.allowLoopbackForTests = allowLoopbackForTests;
+        this.validator = new UrlSafetyValidator(allowLoopbackForTests);
         AtomicInteger sequence = new AtomicInteger();
         ThreadFactory factory = runnable -> {
             Thread thread = new Thread(runnable, "wishing-willow-research-http-" + sequence.incrementAndGet());
@@ -56,12 +56,19 @@ public final class ResearchHttpClient {
     }
 
     public CompletableFuture<HttpResult> get(URI uri, Map<String, String> headers) {
-        return CompletableFuture.supplyAsync(() -> request(uri, headers, 0), executor);
+        return CompletableFuture.supplyAsync(() -> request(uri, headers, 0, 2, true, false), executor);
     }
 
-    private HttpResult request(URI initial, Map<String, String> headers, int redirectCount) {
-        URI uri = validate(initial);
+    public CompletableFuture<HttpResult> getWeb(URI uri, Map<String, String> headers) {
+        return CompletableFuture.supplyAsync(() -> request(uri, headers, 0,
+                WebResearchBudget.MAX_REDIRECTS, false, true), executor);
+    }
+
+    private HttpResult request(URI initial, Map<String, String> headers, int redirectCount,
+                               int maxRedirects, boolean platformOnly, boolean publicWeb) {
+        URI uri = validate(initial, platformOnly);
         int attempts = 0;
+        int maxAttempts = publicWeb ? 2 : 3;
         while (true) {
             attempts++;
             try {
@@ -69,7 +76,8 @@ public final class ResearchHttpClient {
                 HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                         .timeout(Duration.ofSeconds(20))
                         .header("Accept", "application/json,text/plain,text/markdown,text/html;q=0.8")
-                        .header("User-Agent", "ikunkk02-afk/Wishing-Willow/1.0.0")
+                        .header("User-Agent", "Wishing-Willow/1.0.0 Minecraft-Mod-Researcher "
+                                + "(+https://github.com/ikunkk02-afk/Wishing-Willow)")
                         .GET();
                 headers.forEach(builder::header);
                 HttpResponse<InputStream> response;
@@ -81,25 +89,29 @@ public final class ResearchHttpClient {
                 int status = response.statusCode();
                 if (status >= 300 && status < 400 && response.headers().firstValue("Location").isPresent()) {
                     close(response.body());
-                    if (redirectCount >= 2) {
+                    if (redirectCount >= maxRedirects) {
                         throw new ResearchHttpException("TOO_MANY_REDIRECTS", status);
                     }
                     return request(uri.resolve(response.headers().firstValue("Location").orElseThrow()),
-                            headers, redirectCount + 1);
+                            headers, redirectCount + 1, maxRedirects, platformOnly, publicWeb);
                 }
                 String body = readLimited(response.body());
-                if ((status == 429 || status >= 500) && attempts < 3) {
+                if (!publicWeb && (status == 429 || status >= 500) && attempts < maxAttempts) {
                     sleep(retryMillis(response, attempts));
+                    continue;
+                }
+                if (publicWeb && status >= 500 && attempts < maxAttempts) {
+                    sleep(1000L);
                     continue;
                 }
                 return new HttpResult(status,
                         response.headers().firstValue("Content-Type").orElse("application/octet-stream"),
-                        body, response.headers().map());
+                        body, response.headers().map(), uri);
             } catch (InterruptedException exception) {
                 Thread.currentThread().interrupt();
                 throw new ResearchHttpException("INTERRUPTED", 0, exception);
             } catch (IOException exception) {
-                if (attempts < 3) {
+                if (attempts < maxAttempts) {
                     sleep(1000L << (attempts - 1));
                     continue;
                 }
@@ -109,62 +121,27 @@ public final class ResearchHttpClient {
     }
 
     URI validate(URI uri) {
-        boolean schemeAllowed = "https".equalsIgnoreCase(uri.getScheme())
-                || (allowLoopbackForTests && "http".equalsIgnoreCase(uri.getScheme()));
-        if (!schemeAllowed || uri.getUserInfo() != null
-                || uri.getHost() == null || (!allowLoopbackForTests && uri.getPort() != -1 && uri.getPort() != 443)) {
-            throw new ResearchHttpException("UNSAFE_URL", 0);
-        }
-        String host = uri.getHost().toLowerCase(Locale.ROOT);
-        if (!TRUSTED_HOSTS.contains(host) && !allowLoopbackForTests) {
-            throw new ResearchHttpException("UNTRUSTED_HOST", 0);
-        }
+        return validate(uri, true);
+    }
+
+    URI validate(URI uri, boolean platformOnly) {
         try {
-            for (InetAddress address : InetAddress.getAllByName(host)) {
-                if (!isAllowedResolvedAddress(host, address) && !allowLoopbackForTests) {
-                    throw new ResearchHttpException("UNSAFE_ADDRESS", 0);
-                }
-            }
-        } catch (IOException exception) {
-            throw new ResearchHttpException("DNS", 0, exception);
+            return validator.validate(uri, platformOnly);
+        } catch (UrlSafetyValidator.UnsafeUrlException exception) {
+            throw new ResearchHttpException(exception.getMessage(), 0, exception);
         }
-        return uri;
     }
 
     static boolean isAllowedResolvedAddress(String host, InetAddress address) {
-        // Clash and similar TUN proxies intentionally synthesize 198.18.0.0/15 answers. This
-        // exception is limited to compile-time platform hosts; URI IP literals never reach it.
-        return isPublic(address) || (TRUSTED_HOSTS.contains(host.toLowerCase(Locale.ROOT))
-                && isProxyBenchmarkAddress(address));
+        return UrlSafetyValidator.isAllowedAddress(host, address);
     }
 
     static boolean isProxyBenchmarkAddress(InetAddress address) {
-        byte[] bytes = address.getAddress();
-        return address instanceof Inet4Address && (bytes[0] & 0xff) == 198
-                && ((bytes[1] & 0xff) == 18 || (bytes[1] & 0xff) == 19);
+        return UrlSafetyValidator.isProxyBenchmarkAddress(address);
     }
 
     static boolean isPublic(InetAddress address) {
-        if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress()
-                || address.isSiteLocalAddress() || address.isMulticastAddress()) {
-            return false;
-        }
-        byte[] bytes = address.getAddress();
-        if (address instanceof Inet4Address) {
-            int a = bytes[0] & 0xff;
-            int b = bytes[1] & 0xff;
-            return !(a == 0 || a == 10 || a == 127 || a >= 224
-                    || (a == 100 && b >= 64 && b <= 127)
-                    || (a == 169 && b == 254) || (a == 172 && b >= 16 && b <= 31)
-                    || (a == 192 && (b == 0 || b == 168)) || (a == 198 && (b == 18 || b == 19))
-                    || (a == 203 && b == 0));
-        }
-        if (address instanceof Inet6Address) {
-            int first = bytes[0] & 0xff;
-            return (first & 0xfe) != 0xfc && !(first == 0x20 && (bytes[1] & 0xff) == 0x01
-                    && (bytes[2] & 0xff) == 0x0d && (bytes[3] & 0xff) == 0xb8);
-        }
-        return false;
+        return UrlSafetyValidator.isPublic(address);
     }
 
     private static String readLimited(InputStream stream) throws IOException {
@@ -210,7 +187,8 @@ public final class ResearchHttpClient {
         }
     }
 
-    public record HttpResult(int status, String contentType, String body, Map<String, List<String>> headers) {
+    public record HttpResult(int status, String contentType, String body,
+                             Map<String, List<String>> headers, URI finalUri) {
     }
 
     public static final class ResearchHttpException extends RuntimeException {

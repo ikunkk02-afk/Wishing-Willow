@@ -124,6 +124,87 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         });
     }
 
+    @Override
+    public CompletableFuture<AiToolResponse> completeTools(AiToolRequest request) {
+        return sendToolOnce(request);
+    }
+
+    private CompletableFuture<AiToolResponse> sendToolOnce(AiToolRequest request) {
+        JsonObject body = new JsonObject();
+        body.addProperty("model", config.model());
+        body.addProperty("stream", false);
+        body.addProperty("max_tokens", request.maxTokens());
+        if (config.providerType() == AiProviderType.DEEPSEEK) {
+            JsonObject thinking = new JsonObject(); thinking.addProperty("type", "disabled"); body.add("thinking", thinking);
+        }
+        JsonArray messages = new JsonArray();
+        for (AiConversationMessage value : request.messages()) messages.add(toolMessage(value));
+        body.add("messages", messages);
+        JsonArray tools = new JsonArray();
+        for (AiToolDefinition definition : request.tools()) {
+            JsonObject function = new JsonObject();
+            function.addProperty("name", definition.name());
+            function.addProperty("description", definition.description());
+            function.add("parameters", definition.parameters());
+            JsonObject tool = new JsonObject(); tool.addProperty("type", "function"); tool.add("function", function); tools.add(tool);
+        }
+        body.add("tools", tools); body.addProperty("tool_choice", "auto");
+        HttpRequest httpRequest = authorizedRequest(endpoints.chatCompletions())
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body), StandardCharsets.UTF_8))
+                .timeout(requestTimeout).build();
+        return sendBody(httpRequest).thenApply(response -> {
+            int status = response.statusCode();
+            if (status < 200 || status >= 300) {
+                String lower = response.body().toLowerCase(Locale.ROOT);
+                boolean unsupported = (status == 400 || status == 404 || status == 422)
+                        && (lower.contains("tool") || lower.contains("function"))
+                        && (lower.contains("unsupported") || lower.contains("unknown") || lower.contains("not support"));
+                throw new AiRequestException(unsupported ? AiErrorCategory.UNSUPPORTED_FEATURE
+                        : classifyHttp(status, response.body()), status, false);
+            }
+            try {
+                JsonObject root = JsonParser.parseString(response.body()).getAsJsonObject();
+                JsonObject message = root.getAsJsonArray("choices").get(0).getAsJsonObject().getAsJsonObject("message");
+                String content = message.has("content") && !message.get("content").isJsonNull()
+                        ? message.get("content").getAsString() : "";
+                List<AiToolCall> calls = new ArrayList<>();
+                if (message.has("tool_calls") && message.get("tool_calls").isJsonArray()) {
+                    for (JsonElement element : message.getAsJsonArray("tool_calls")) {
+                        JsonObject call = element.getAsJsonObject(); JsonObject function = call.getAsJsonObject("function");
+                        calls.add(new AiToolCall(call.get("id").getAsString(), function.get("name").getAsString(),
+                                function.get("arguments").getAsString()));
+                    }
+                }
+                if (content.isBlank() && calls.isEmpty()) throw new IllegalStateException();
+                return new AiToolResponse(content, calls, status);
+            } catch (RuntimeException exception) {
+                if (exception instanceof AiRequestException requestException) throw requestException;
+                throw new AiRequestException(AiErrorCategory.MALFORMED_RESPONSE, status, false);
+            }
+        });
+    }
+
+    private static JsonObject toolMessage(AiConversationMessage value) {
+        JsonObject message = new JsonObject(); message.addProperty("role", value.role());
+        if (value.role().equals("tool")) {
+            message.addProperty("tool_call_id", value.toolCallId()); message.addProperty("content", value.content()); return message;
+        }
+        if (!value.content().isBlank()) message.addProperty("content", value.content());
+        else message.add("content", com.google.gson.JsonNull.INSTANCE);
+        if (!value.toolCalls().isEmpty()) {
+            JsonArray calls = new JsonArray();
+            for (AiToolCall valueCall : value.toolCalls()) {
+                JsonObject function = new JsonObject(); function.addProperty("name", valueCall.name());
+                function.addProperty("arguments", valueCall.argumentsJson());
+                JsonObject call = new JsonObject(); call.addProperty("id", valueCall.id());
+                call.addProperty("type", "function"); call.add("function", function); calls.add(call);
+            }
+            message.add("tool_calls", calls);
+        }
+        return message;
+    }
+
     private CompletableFuture<AiResponse> completeWithFallback(AiRequest request, AiOutputMode mode) {
         AiRequest selected = request.withOutputMode(mode);
         return retryOnce(() -> sendChatOnce(selected), 0).handle((response, throwable) -> {

@@ -61,6 +61,16 @@ public final class ClientSetup {
                                                     return builder.buildFuture();
                                                 })
                                                 .executes(context -> researchMod(context.getSource(),
+                                                        StringArgumentType.getString(context, "modid")))))
+                                .then(Commands.literal("web")
+                                        .then(Commands.argument("modid", StringArgumentType.word())
+                                                .suggests(ClientSetup::suggestMods)
+                                                .executes(context -> researchWeb(context.getSource(),
+                                                        StringArgumentType.getString(context, "modid")))))
+                                .then(Commands.literal("identity")
+                                        .then(Commands.argument("modid", StringArgumentType.word())
+                                                .suggests(ClientSetup::suggestMods)
+                                                .executes(context -> identity(context.getSource(),
                                                         StringArgumentType.getString(context, "modid"))))))
                         .then(Commands.literal("knowledge")
                                 .then(Commands.argument("modid", StringArgumentType.word())
@@ -117,5 +127,39 @@ public final class ClientSetup {
                 + " state=" + entry.state() + " level=" + entry.knowledgeLevel()
                 + " capabilities=[" + capabilities + "] summary=" + summary), false);
         return 1;
+    }
+
+    private static int researchWeb(net.minecraft.commands.CommandSourceStack source, String modId) {
+        boolean queued = ModResearchManager.getInstance().researchWeb(modId);
+        if (queued) source.sendSuccess(() -> Component.literal("Web discovery queued for " + modId), false);
+        else source.sendFailure(Component.literal("Unknown installed mod: " + modId));
+        return queued ? 1 : 0;
+    }
+
+    private static int identity(net.minecraft.commands.CommandSourceStack source, String modId) {
+        KnowledgeEntry entry = ModResearchManager.getInstance().knowledgeBase().findMod(modId);
+        if (entry == null) { source.sendFailure(Component.literal("Unknown installed mod: " + modId)); return 0; }
+        var identity = entry.webResearch().identity();
+        source.sendSuccess(() -> Component.literal("Identity " + identity.level() + " confidence="
+                + Math.round(identity.confidence() * 100) + "% selected="
+                + (identity.selectedUrl().isBlank() ? "-" : identity.selectedUrl()) + " reason=" + identity.reason()), false);
+        identity.candidates().stream().limit(10).forEach(candidate -> {
+            String factors = candidate.factors().stream().map(factor -> String.format(java.util.Locale.ROOT,
+                    "%s%+.0f", factor.name().replace(' ', '_'), factor.contribution() * 100))
+                    .collect(java.util.stream.Collectors.joining(","));
+            source.sendSuccess(() -> Component.literal(Math.round(candidate.confidence() * 100) + "% "
+                    + candidate.result().title() + " " + candidate.result().url()
+                    + " factors=[" + factors + "]"
+                    + (candidate.rejected() ? " rejected=" + candidate.rejectionReason() : "")), false);
+        });
+        return 1;
+    }
+
+    private static CompletableFuture<com.mojang.brigadier.suggestion.Suggestions> suggestMods(
+            com.mojang.brigadier.context.CommandContext<net.minecraft.commands.CommandSourceStack> context,
+            com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        ModResearchManager.getInstance().knowledgeBase().snapshot().entries()
+                .forEach(entry -> builder.suggest(entry.installed().modId()));
+        return builder.buildFuture();
     }
 }

@@ -91,7 +91,7 @@
   "screen.wishing_willow.settings.research": "研究设置",
   "screen.wishing_willow.research.settings.title": "研究设置",
   "screen.wishing_willow.research.curseforge_key": "CurseForge API Key（可选）",
-  "screen.wishing_willow.research.key.optional": "留空将跳过 CurseForge。Key 只保存在本机。",
+  "screen.wishing_willow.research.key.optional": "可选。留空时仍使用 CurseForge 公共网页；Key 只保存在本机。",
   "screen.wishing_willow.research.save_failed": "无法保存本地研究配置。",
   "screen.wishing_willow.knowledge.title": "整合包知识库",
   "screen.wishing_willow.knowledge.summary": "扫描：%s  研究：%s  完成：%s  进行中：%s  忽略：%s  失败：%s",
@@ -154,4 +154,14 @@
   "screen.wishing_willow.knowledge.field.summary": "功能摘要",
   "screen.wishing_willow.knowledge.field.verified_resources": "已验证资源",
   "screen.wishing_willow.knowledge.field.registry": "Registry 统计"
+  ,"screen.wishing_willow.knowledge.field.identity": "Mod 身份"
+  ,"screen.wishing_willow.knowledge.field.identity_confidence": "身份置信度"
+  ,"screen.wishing_willow.knowledge.field.selected_url": "选中页面"
+  ,"screen.wishing_willow.knowledge.field.source_status": "研究来源状态"
+  ,"screen.wishing_willow.knowledge.field.identity_debug": "身份匹配调试因素"
+  ,"screen.wishing_willow.knowledge.manual_url": "手动指定页面"
+  ,"screen.wishing_willow.knowledge.manual_url.title": "手动指定研究页面"
+  ,"screen.wishing_willow.knowledge.manual_url.help": "粘贴 CurseForge、GitHub、Modrinth、Wiki 或官网 HTTPS 页面。"
+  ,"screen.wishing_willow.knowledge.manual_url.submit": "开始研究"
+  ,"screen.wishing_willow.knowledge.manual_url.invalid": "请输入有效 HTTPS 页面；程序仍会执行完整安全检查。"
 }

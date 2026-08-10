@@ -57,10 +57,10 @@ public final class CurseForgeResearchSource implements ResearchProvider {
                                 body += "\n\n" + root.get("data").getAsString();
                             }
                         }
-                        ResearchDocument document = new ResearchDocument(ResearchSource.CURSEFORGE,
+                        ResearchDocument document = new ResearchDocument(ResearchSource.CURSEFORGE_API,
                                 best.name, ResearchText.sanitize(body, "text/html"), best.publicUrl);
                         return new SourceResearchResult(true, best.score, best.categories, List.of(document),
-                                Set.of(ResearchSource.CURSEFORGE), Integer.toString(best.id));
+                                Set.of(ResearchSource.CURSEFORGE_API), Integer.toString(best.id));
                     });
         }).exceptionally(throwable -> SourceResearchResult.unresolved());
     }

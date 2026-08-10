@@ -29,6 +29,7 @@ public class ModFingerprintServiceTest {
 
     public static InstalledModInfo info(String id, String version, String file, String description) {
         return new InstalledModInfo(id, id, id, version, description, List.of("author"), "MIT",
-                "https://github.com/example/example", "", file, List.of());
+                "https://github.com/example/example", "", "", "", file,
+                "1.20.1", "forge", List.of());
     }
 }

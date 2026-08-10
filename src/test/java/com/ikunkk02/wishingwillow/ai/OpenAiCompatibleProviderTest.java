@@ -13,6 +13,7 @@ import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -221,6 +222,41 @@ class OpenAiCompatibleProviderTest {
                 OpenAiCompatibleProvider.mapTransportFailure(new UnknownHostException()).category());
         assertEquals(AiErrorCategory.CONNECTION_REFUSED,
                 OpenAiCompatibleProvider.mapTransportFailure(new ConnectException()).category());
+    }
+
+    @Test
+    void sendsToolSchemaAndParsesToolCallWithoutExposingUnrelatedSecrets() {
+        AtomicReference<String> requestBody = new AtomicReference<>();
+        server.createContext("/v1/chat/completions", exchange -> {
+            requestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            respond(exchange, 200, "{\"choices\":[{\"message\":{\"content\":null,\"tool_calls\":["
+                    + "{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"search_mod_web\","
+                    + "\"arguments\":\"{\\\"query\\\":\\\"Cave Dweller\\\",\\\"preferred_domain\\\":\\\"CURSEFORGE\\\"}\"}}]}}]}");
+        });
+        AiToolResponse response = provider("provider-secret").completeTools(new AiToolRequest(
+                List.of(AiConversationMessage.text("system", "no direct network"),
+                        AiConversationMessage.text("user", "identify mod")),
+                List.of(new AiToolDefinition("search_mod_web", "controlled search",
+                        com.google.gson.JsonParser.parseString("{\"type\":\"object\"}").getAsJsonObject())), 128)).join();
+
+        assertEquals(1, response.toolCalls().size());
+        assertEquals("search_mod_web", response.toolCalls().get(0).name());
+        assertTrue(requestBody.get().contains("\"tools\""));
+        assertTrue(requestBody.get().contains("search_mod_web"));
+        assertTrue(requestBody.get().contains("no direct network"));
+        assertTrue(!requestBody.get().contains("provider-secret"));
+    }
+
+    @Test
+    void classifiesExplicitToolRejectionForAutomaticFallback() {
+        server.createContext("/v1/chat/completions", exchange ->
+                respond(exchange, 422, "{\"error\":{\"message\":\"tools are not supported\"}}"));
+        CompletionException exception = assertThrows(CompletionException.class, () -> provider("")
+                .completeTools(new AiToolRequest(List.of(AiConversationMessage.text("user", "identify")),
+                        List.of(new AiToolDefinition("search_mod_web", "search",
+                                com.google.gson.JsonParser.parseString("{\"type\":\"object\"}").getAsJsonObject())), 32)).join());
+
+        assertEquals(AiErrorCategory.UNSUPPORTED_FEATURE, root(exception).category());
     }
 
     private OpenAiCompatibleProvider provider(String apiKey) {

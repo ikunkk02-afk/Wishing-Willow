@@ -91,7 +91,7 @@
   "screen.wishing_willow.settings.research": "Research Settings",
   "screen.wishing_willow.research.settings.title": "Research Settings",
   "screen.wishing_willow.research.curseforge_key": "CurseForge API Key (Optional)",
-  "screen.wishing_willow.research.key.optional": "Leave blank to skip CurseForge. The key stays on this client.",
+  "screen.wishing_willow.research.key.optional": "Optional. Leave blank to use CurseForge public pages; the key stays on this client.",
   "screen.wishing_willow.research.save_failed": "Could not save the local research configuration.",
   "screen.wishing_willow.knowledge.title": "Mod Knowledge Base",
   "screen.wishing_willow.knowledge.summary": "Scanned: %s  Research: %s  Ready: %s  Active: %s  Ignored: %s  Failed: %s",
@@ -153,5 +153,15 @@
   "screen.wishing_willow.knowledge.field.capabilities": "Capabilities",
   "screen.wishing_willow.knowledge.field.summary": "Summary",
   "screen.wishing_willow.knowledge.field.verified_resources": "Verified resources",
-  "screen.wishing_willow.knowledge.field.registry": "Registry counts"
+  "screen.wishing_willow.knowledge.field.registry": "Registry counts",
+  "screen.wishing_willow.knowledge.field.identity": "Identity",
+  "screen.wishing_willow.knowledge.field.identity_confidence": "Identity confidence",
+  "screen.wishing_willow.knowledge.field.selected_url": "Selected page",
+  "screen.wishing_willow.knowledge.field.source_status": "Source status",
+  "screen.wishing_willow.knowledge.field.identity_debug": "Identity debug factors",
+  "screen.wishing_willow.knowledge.manual_url": "Set Research Page",
+  "screen.wishing_willow.knowledge.manual_url.title": "Set a Research Page",
+  "screen.wishing_willow.knowledge.manual_url.help": "Paste a CurseForge, GitHub, Modrinth, wiki, or official HTTPS page.",
+  "screen.wishing_willow.knowledge.manual_url.submit": "Research",
+  "screen.wishing_willow.knowledge.manual_url.invalid": "Enter a valid HTTPS research page. It will still be safety checked."
 }

@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.ikunkk02.wishingwillow.research.web.IdentityConfidenceLevel;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 
 public final class ModKnowledgeDetailScreen extends Screen {
     private final Screen parent;
@@ -30,11 +32,21 @@ public final class ModKnowledgeDetailScreen extends Screen {
 
     @Override
     protected void init() {
+        KnowledgeEntry entry = ModResearchManager.getInstance().knowledgeBase().findMod(modId);
+        boolean unresolved = entry == null || entry.webResearch().identity().level() != IdentityConfidenceLevel.CONFIRMED;
+        int buttonCount = unresolved ? 3 : 2;
+        int totalWidth = buttonCount * 110 + (buttonCount - 1) * 6;
+        int x = width / 2 - totalWidth / 2;
         addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.knowledge.research_mod"),
                         button -> ModResearchManager.getInstance().researchMod(modId))
-                .bounds(width / 2 - 116, height - 28, 110, 20).build());
+                .bounds(x, height - 28, 110, 20).build());
+        if (unresolved) {
+            addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.knowledge.manual_url"),
+                            button -> minecraft.setScreen(new ManualResearchUrlScreen(this, modId)))
+                    .bounds(x + 116, height - 28, 110, 20).build());
+        }
         addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> onClose())
-                .bounds(width / 2 + 6, height - 28, 110, 20).build());
+                .bounds(x + (buttonCount - 1) * 116, height - 28, 110, 20).build());
     }
 
     @Override
@@ -97,6 +109,17 @@ public final class ModKnowledgeDetailScreen extends Screen {
         lines.add(label("version", Component.literal(entry.installed().version())));
         lines.add(label("sources", Component.literal(entry.sources().stream().map(Enum::name).sorted()
                 .collect(Collectors.joining(", ")))));
+        lines.add(label("identity", Component.literal(entry.webResearch().identity().level().name())));
+        lines.add(label("identity_confidence", Component.literal(
+                Math.round(entry.webResearch().identity().confidence() * 100) + "%")));
+        if (!entry.webResearch().identity().selectedUrl().isBlank()) {
+            lines.add(label("selected_url", Component.literal(entry.webResearch().identity().selectedUrl())));
+        }
+        String sourceStatus = entry.webResearch().sourceTraces().stream()
+                .map(trace -> (trace.outcome() == com.ikunkk02.wishingwillow.research.web.SourceTraceOutcome.SUCCEEDED
+                        ? "✓ " : "✗ ") + trace.source().name() + "=" + trace.outcome().name())
+                .collect(Collectors.joining(", "));
+        if (!sourceStatus.isBlank()) lines.add(label("source_status", Component.literal(sourceStatus)));
         if (!entry.errorCode().isBlank()) {
             lines.add(label("error", Component.literal(entry.errorCode()).withStyle(ChatFormatting.RED)));
         }
@@ -119,6 +142,20 @@ public final class ModKnowledgeDetailScreen extends Screen {
         String registry = counts.entrySet().stream().filter(value -> value.getValue() > 0)
                 .map(value -> value.getKey() + "=" + value.getValue()).collect(Collectors.joining(", "));
         lines.add(label("registry", Component.literal(registry.isBlank() ? "-" : registry)));
+        if (!FMLEnvironment.production) {
+            lines.add(Component.empty());
+            lines.add(Component.translatable("screen.wishing_willow.knowledge.field.identity_debug")
+                    .withStyle(ChatFormatting.AQUA));
+            entry.webResearch().identity().candidates().stream().limit(10).forEach(candidate -> {
+                lines.add(Component.literal(candidate.result().title() + " ["
+                        + Math.round(candidate.confidence() * 100) + "%] " + candidate.result().url()));
+                candidate.factors().forEach(factor -> lines.add(Component.literal(String.format(java.util.Locale.ROOT,
+                        "  %s %+.0f%% %s", factor.name(), factor.contribution() * 100, factor.detail()))
+                        .withStyle(factor.contribution() >= 0 ? ChatFormatting.GRAY : ChatFormatting.RED)));
+                if (candidate.rejected()) lines.add(Component.literal("  REJECTED: " + candidate.rejectionReason())
+                        .withStyle(ChatFormatting.RED));
+            });
+        }
         return lines;
     }
 

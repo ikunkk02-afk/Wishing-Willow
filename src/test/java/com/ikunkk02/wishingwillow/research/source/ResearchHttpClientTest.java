@@ -118,4 +118,43 @@ class ResearchHttpClientTest {
         URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/large");
         assertThrows(java.util.concurrent.CompletionException.class, () -> client.get(uri, Map.of()).join());
     }
+
+    @Test
+    void publicWebDoesNotRetry403Or429() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/blocked", exchange -> {
+            calls.incrementAndGet();
+            byte[] body = "Cloudflare Challenge".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(429, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+        server.start();
+        ResearchHttpClient.HttpResult result = new ResearchHttpClient(true).getWeb(
+                URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/blocked"), Map.of()).join();
+
+        assertEquals(429, result.status());
+        assertEquals(1, calls.get());
+    }
+
+    @Test
+    void revalidatesAndCapsEveryRedirectHop() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/redirect", exchange -> {
+            calls.incrementAndGet();
+            exchange.getResponseHeaders().add("Location", "/redirect");
+            exchange.sendResponseHeaders(302, -1);
+            exchange.close();
+        });
+        server.start();
+        ResearchHttpClient client = new ResearchHttpClient(true);
+        URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/redirect");
+
+        java.util.concurrent.CompletionException failure = assertThrows(java.util.concurrent.CompletionException.class,
+                () -> client.getWeb(uri, Map.of()).join());
+        assertTrue(failure.getCause().getMessage().contains("TOO_MANY_REDIRECTS"));
+        assertEquals(5, calls.get());
+    }
 }
