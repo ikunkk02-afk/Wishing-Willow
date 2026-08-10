@@ -177,5 +177,9 @@
   "screen.wishing_willow.execution.safe_mode": "Debug Safe Mode",
   "screen.wishing_willow.execution.max_severity": "Max Destructive Severity",
   "screen.wishing_willow.execution.save": "Save Server Settings",
-  "screen.wishing_willow.execution.read_only": "Only a server administrator can change these settings."
+  "screen.wishing_willow.execution.read_only": "Only a server administrator can change these settings.",
+  "screen.wishing_willow.execution.safe_mode_active": "Debug Safe Mode: ON",
+  "screen.wishing_willow.execution.safe_mode_warning_1": "Block modification and destructive explosions may not execute.",
+  "screen.wishing_willow.execution.safe_mode_warning_2": "High-power explosions are limited; normal wishes remain enabled.",
+  "message.wishing_willow.execution_failed": "The willow could not safely carry this wish into the world."
 }

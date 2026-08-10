@@ -1,4 +1,8 @@
 {
+  "screen.wishing_willow.execution.safe_mode_active": "调试安全模式：开启",
+  "screen.wishing_willow.execution.safe_mode_warning_1": "方块修改、破坏型爆炸可能不会执行",
+  "screen.wishing_willow.execution.safe_mode_warning_2": "高强度爆炸受到限制；普通愿望不受影响",
+  "message.wishing_willow.execution_failed": "许愿柳无法安全地将这个愿望带入世界",
   "item.wishing_willow.wishing_willow": "许愿柳",
   "tooltip.wishing_willow.wishing_willow": "这似乎只是一截普通的柳枝。",
   "screen.wishing_willow.wish.title": "许下你的愿望",

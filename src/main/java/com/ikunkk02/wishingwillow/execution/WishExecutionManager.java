@@ -1,6 +1,7 @@
 package com.ikunkk02.wishingwillow.execution;
 
 import com.google.gson.JsonParser;
+import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.execution.WishExecutionScheduler.StepKey;
 import com.ikunkk02.wishingwillow.execution.action.WishActionExecutor;
@@ -8,6 +9,7 @@ import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
 import com.ikunkk02.wishingwillow.planning.*;
 import com.ikunkk02.wishingwillow.wish.WishRecord;
 import com.ikunkk02.wishingwillow.wish.WishSavedData;
+import com.ikunkk02.wishingwillow.wish.WishPipelineAudit;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
@@ -45,16 +47,84 @@ public final class WishExecutionManager {
 
     public static void register(){if(registered)return;registered=true;MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onTick);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onStarted);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onStopped);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onDimension);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onDeath);MinecraftForge.EVENT_BUS.addListener(WishExecutionCommands::register);}
 
-    public static boolean accept(ServerPlayer sender,WishPlan plan){
-        WishSavedData wishes=WishSavedData.get(sender.server);WishRecord wish=wishes.getBySession(plan.wishSessionId());
-        if(wish==null||!wish.playerId().equals(sender.getUUID())||wish.plan()==null||!wish.plan().planId().equals(plan.planId())||wish.executionId()!=null)return false;
-        if(!WishExecutionConfig.ENABLED.get()){wishes.update(wish.withExecution(null,WishExecutionState.NOT_ACCEPTED));return false;}
-        WishExecutionSavedData data=WishExecutionSavedData.get(sender.server);if(data.byPlan(plan.planId())!=null||data.bySession(plan.wishSessionId())!=null)return false;
-        try{WishExecutionValidator.validate(sender.server,plan,ACTIONS);}catch(IllegalArgumentException rejected){wishes.update(wish.withExecution(null,WishExecutionState.FAILED));return false;}
-        long now=sender.server.overworld().getGameTime();WishExecutionRecord record=new WishExecutionRecord(UUID.randomUUID(),plan.planId(),plan.wishSessionId(),sender.getUUID(),plan.steps().size(),now);
+    public static WishExecutionAcceptResult accept(ServerPlayer sender,WishPlan plan){
+        if(sender==null)return WishExecutionAcceptResult.rejected(WishExecutionAcceptError.INVALID_OWNER,"missing player");
+        WishRecord wish=plan==null?null:WishSavedData.get(sender.server).getBySession(plan.wishSessionId());
+        return acceptInternal(sender.server,wish,plan,sender.getUUID());
+    }
+
+    public static WishExecutionAcceptResult acceptStored(MinecraftServer server,WishRecord wish){
+        if(server==null||wish==null)return WishExecutionAcceptResult.rejected(WishExecutionAcceptError.INVALID_SESSION,"missing stored wish");
+        return acceptInternal(server,wish,wish.plan(),null);
+    }
+
+    private static WishExecutionAcceptResult acceptInternal(MinecraftServer server,WishRecord wish,WishPlan plan,
+                                                             @Nullable UUID submittingPlayer){
+        if(plan==null)return rejected(wish,WishExecutionAcceptError.INVALID_PLAN,"missing plan",server);
+        if(wish==null||!wish.sessionId().equals(plan.wishSessionId()))
+            return rejected(wish,WishExecutionAcceptError.INVALID_SESSION,"plan session does not match stored wish",server);
+        if(submittingPlayer!=null&&!wish.playerId().equals(submittingPlayer))
+            return rejected(wish,WishExecutionAcceptError.INVALID_OWNER,"submitting player does not own wish",server);
+        if(wish.plan()==null||!wish.plan().planId().equals(plan.planId()))
+            return rejected(wish,WishExecutionAcceptError.INVALID_PLAN,"plan id does not match stored plan",server);
+        if(wish.planState()==WishPlanState.READY&&!plan.unfulfilledCapabilities().isEmpty())
+            return rejected(wish,WishExecutionAcceptError.INVALID_PLAN,"READY plan still has unfulfilled capabilities",server);
+        if(wish.planState()==WishPlanState.PARTIAL&&(wish.interpretation()==null
+                ||wish.interpretation().requiredCapabilities().isEmpty()
+                ||plan.unfulfilledCapabilities().contains(wish.interpretation().requiredCapabilities().get(0))))
+            return rejected(wish,WishExecutionAcceptError.INVALID_PLAN,"PARTIAL plan does not cover primary capability",server);
+
+        WishExecutionSavedData data=WishExecutionSavedData.get(server);
+        WishExecutionRecord byPlan=data.byPlan(plan.planId());
+        WishExecutionRecord bySession=data.bySession(plan.wishSessionId());
+        if(byPlan!=null||bySession!=null){
+            WishExecutionRecord existing=byPlan!=null?byPlan:bySession;
+            if(existing.planId().equals(plan.planId())&&existing.wishSessionId().equals(plan.wishSessionId())
+                    &&existing.ownerId().equals(wish.playerId())){
+                WishSavedData.get(server).update(wish.withExecution(existing.executionId(),existing.state(),
+                        WishExecutionAcceptError.NONE,""));
+                WishPipelineAudit.success(wish.sessionId(),"EXECUTION_ACCEPT",
+                        "error=ALREADY_ACCEPTED execution="+existing.executionId());
+                return WishExecutionAcceptResult.alreadyAccepted(existing.executionId());
+            }
+            return rejected(wish,WishExecutionAcceptError.DUPLICATE_EXECUTION,
+                    "session or plan is already indexed by a different execution",server);
+        }
+        if(wish.executionId()!=null||wish.executionState().terminal())
+            return rejected(wish,WishExecutionAcceptError.PLAN_ALREADY_EXECUTED,
+                    "stored wish already has terminal or accepted execution state",server);
+        if(!WishExecutionConfig.ENABLED.get())
+            return rejected(wish,WishExecutionAcceptError.EXECUTION_DISABLED,"server execution is disabled",server);
+
+        WishExecutionValidationResult validation=WishExecutionValidator.validateDetailed(server,plan,ACTIONS);
+        if(!validation.valid()){
+            String detail="step="+validation.stepIndex()+" action="+validation.action()+" "+validation.detail();
+            WishingWillow.LOGGER.warn(
+                    "WishingWillow execution validation rejected session={} plan={} step={} action={} reason={} detail={}",
+                    wish.sessionId(),plan.planId(),validation.stepIndex(),validation.action(),validation.error(),validation.detail());
+            return rejected(wish,validation.error(),detail,server);
+        }
+
+        long now=server.overworld().getGameTime();
+        WishExecutionRecord record=new WishExecutionRecord(UUID.randomUUID(),plan.planId(),plan.wishSessionId(),wish.playerId(),plan.steps().size(),now);
         plan.steps().forEach(step->{if(step.candidateReference().registryResource()!=null)record.selectResource(step.stepIndex(),step.candidateReference().registryResource().id());});
-        if(!data.add(record))return false;wishes.update(wish.withExecution(record.executionId(),record.state()));
-        schedule(sender.server,record,plan,now);return true;
+        if(!data.add(record))return rejected(wish,WishExecutionAcceptError.DUPLICATE_EXECUTION,"execution index rejected duplicate",server);
+        WishSavedData.get(server).update(wish.withExecution(record.executionId(),record.state(),WishExecutionAcceptError.NONE,""));
+        schedule(server,record,plan,now);
+        WishPipelineAudit.success(wish.sessionId(),"EXECUTION_ACCEPT","execution="+record.executionId());
+        return WishExecutionAcceptResult.accepted(record.executionId());
+    }
+
+    private static WishExecutionAcceptResult rejected(@Nullable WishRecord wish,WishExecutionAcceptError error,
+                                                       String detail,@Nullable MinecraftServer server){
+        WishingWillow.LOGGER.warn("WishingWillow execution accept rejected session={} plan={} reason={} detail={}",
+                wish==null?null:wish.sessionId(),wish==null||wish.plan()==null?null:wish.plan().planId(),error,detail);
+        if(wish!=null&&server!=null){
+            WishExecutionState state=error==WishExecutionAcceptError.STALE_RESOURCE?WishExecutionState.STALE:WishExecutionState.FAILED;
+            WishSavedData.get(server).update(wish.withExecution(null,state,error,detail));
+            WishPipelineAudit.failure(wish.sessionId(),"EXECUTION_ACCEPT",error.name(),detail);
+        }
+        return WishExecutionAcceptResult.rejected(error,detail);
     }
 
     public static List<String> dryRun(MinecraftServer server,WishPlan plan){List<String> result=new ArrayList<>();if(plan==null)return List.of("INVALID_PLAN");for(int index=0;index<plan.steps().size();index++)try{WishExecutionValidator.validateStep(server,plan,index,ACTIONS);result.add("Step "+index+": READY");}catch(IllegalArgumentException error){result.add("Step "+index+": "+error.getMessage());}if(result.stream().allMatch(line->line.endsWith("READY")))try{WishExecutionValidator.validate(server,plan,ACTIONS);}catch(IllegalArgumentException error){result.add("Plan: "+error.getMessage());}return result;}
@@ -67,7 +137,7 @@ public final class WishExecutionManager {
         }changed(server,record);
     }
 
-    private static void rebuild(MinecraftServer server){SCHEDULER.clear();WishExecutionSavedData data=WishExecutionSavedData.get(server);for(WishExecutionRecord record:data.all()){for(var lease:record.behaviorLeases().values())if(lease.expires()>server.overworld().getGameTime())try{WishEntityBehaviorManager.bind(record.executionId(),lease.entity(),record.ownerId(),WishEntityBehaviorManager.Mode.valueOf(lease.mode()),lease.speed(),lease.minDistance(),lease.expires());}catch(IllegalArgumentException ignored){}if(record.state().terminal())continue;WishRecord wish=WishSavedData.get(server).getBySession(record.wishSessionId());if(wish==null||wish.plan()==null){record.transition(WishExecutionState.STALE,server.overworld().getGameTime());data.changed();continue;}try{WishExecutionValidator.validate(server,wish.plan(),ACTIONS);}catch(IllegalArgumentException error){for(WishStepExecution step:record.steps())if(!step.state().terminal())step.transition(WishStepExecutionState.STALE,server.overworld().getGameTime());record.transition(WishExecutionState.STALE,server.overworld().getGameTime());data.changed();continue;}for(WishStepExecution step:record.steps()){if(step.state().terminal())continue;WishPlanStep planned=wish.plan().steps().get(step.stepIndex());StepKey key=new StepKey(record.executionId(),step.stepIndex());if(step.state()==WishStepExecutionState.WAITING_TRIGGER)SCHEDULER.trigger(key,planned.trigger());else SCHEDULER.delay(key,step.executeAtGameTime()<0?server.overworld().getGameTime():step.executeAtGameTime());}}}
+    private static void rebuild(MinecraftServer server){SCHEDULER.clear();WishExecutionSavedData data=WishExecutionSavedData.get(server);for(WishExecutionRecord record:data.all()){for(var lease:record.behaviorLeases().values())if(lease.expires()>server.overworld().getGameTime())try{WishEntityBehaviorManager.bind(record.executionId(),lease.entity(),record.ownerId(),WishEntityBehaviorManager.Mode.valueOf(lease.mode()),lease.speed(),lease.minDistance(),lease.expires());}catch(IllegalArgumentException ignored){}if(record.state().terminal())continue;WishRecord wish=WishSavedData.get(server).getBySession(record.wishSessionId());if(wish==null||wish.plan()==null){record.transition(WishExecutionState.STALE,server.overworld().getGameTime());data.changed();continue;}WishExecutionValidationResult validation=WishExecutionValidator.validateDetailed(server,wish.plan(),ACTIONS);if(!validation.valid()){for(WishStepExecution step:record.steps())if(!step.state().terminal())step.transition(WishStepExecutionState.STALE,server.overworld().getGameTime());record.transition(WishExecutionState.STALE,server.overworld().getGameTime());data.changed();String detail="recovery step="+validation.stepIndex()+" action="+validation.action()+" "+validation.detail();WishSavedData.get(server).update(wish.withExecution(record.executionId(),WishExecutionState.STALE,validation.error(),detail));WishingWillow.LOGGER.warn("WishingWillow execution recovery rejected session={} plan={} execution={} step={} action={} reason={} detail={}",wish.sessionId(),wish.plan().planId(),record.executionId(),validation.stepIndex(),validation.action(),validation.error(),validation.detail());continue;}for(WishStepExecution step:record.steps()){if(step.state().terminal())continue;WishPlanStep planned=wish.plan().steps().get(step.stepIndex());StepKey key=new StepKey(record.executionId(),step.stepIndex());if(step.state()==WishStepExecutionState.WAITING_TRIGGER)SCHEDULER.trigger(key,planned.trigger());else SCHEDULER.delay(key,step.executeAtGameTime()<0?server.overworld().getGameTime():step.executeAtGameTime());}}}
 
     private static void onTick(TickEvent.ServerTickEvent event){if(event.phase!=TickEvent.Phase.END)return;MinecraftServer server=event.getServer();long now=server.overworld().getGameTime();boolean blockUsed=false;for(StepKey key:SCHEDULER.due(now,8)){if(isBlockStep(server,key)){if(blockUsed){SCHEDULER.delay(key,now+1);continue;}blockUsed=true;}execute(server,key,now);}sample(server,now);WishEntityBehaviorManager.tick(server,now);if(now%20==0){expireAttributes(server,now);tickEvents(server,now);}}
     private static void onStarted(ServerStartedEvent event){rebuild(event.getServer());}
@@ -91,14 +161,17 @@ public final class WishExecutionManager {
 
     private static void execute(MinecraftServer server,StepKey key,long now){WishExecutionSavedData data=WishExecutionSavedData.get(server);WishExecutionRecord record=data.get(key.executionId());WishRecord wish=record==null?null:WishSavedData.get(server).getBySession(record.wishSessionId());if(record==null||wish==null||wish.plan()==null)return;WishStepExecution step=record.step(key.stepIndex());if(step==null||step.state().terminal())return;WishPlanStep planned=wish.plan().steps().get(key.stepIndex());ServerPlayer player=server.getPlayerList().getPlayer(record.ownerId());boolean needsPlayer=planned.action()!=WishActionType.CHANGE_TIME&&planned.action()!=WishActionType.CHANGE_WEATHER;if(player==null&&needsPlayer){if(step.targetDeadlineGameTime()>0&&now>=step.targetDeadlineGameTime()){step.transition(WishStepExecutionState.FAILED,now);step.result(WishActionResult.failed("TARGET_TIMEOUT"));finishState(server,record,now);return;}step.transition(WishStepExecutionState.WAITING_TARGET,now);step.schedule(now+20);SCHEDULER.delay(key,now+20);changed(server,record);return;}ServerLevel level=player!=null?player.serverLevel():level(server,wish.dimension());if(level==null){step.transition(WishStepExecutionState.STALE,now);step.result(WishActionResult.stale("LEVEL_NOT_FOUND"));finishState(server,record,now);return;}
         WishActionExecutor action=ACTIONS.get(planned.action());WishExecutionContext context=new WishExecutionContext(level,player,wish.plan(),planned,planned.candidateReference(),record);WishActionResult validation=action.validate(context);if(validation.status()==WishActionResult.Status.RETRY){step.transition(WishStepExecutionState.WAITING_TARGET,now);step.schedule(now+20);SCHEDULER.delay(key,now+20);changed(server,record);return;}
-        step.transition(WishStepExecutionState.RUNNING,now);record.transition(WishExecutionState.RUNNING,now);changed(server,record);server.overworld().getDataStorage().save();WishActionResult result=action.execute(context);step.result(result);if(result.successful())step.transition(WishStepExecutionState.SUCCEEDED,now);else if(result.status()==WishActionResult.Status.RETRY){step.retry(result.code());boolean blockBatch="BLOCK_BATCH_CONTINUE".equals(result.code());step.transition(blockBatch?WishStepExecutionState.WAITING_DELAY:WishStepExecutionState.WAITING_TARGET,now);long next=now+(blockBatch?1:20);step.schedule(next);SCHEDULER.delay(key,next);}else if(result.status()==WishActionResult.Status.STALE)step.transition(WishStepExecutionState.STALE,now);else step.transition(WishStepExecutionState.FAILED,now);WishExecutionAudit.transition(record,step.stepIndex(),planned.action(),step.state().name(),result.code());finishState(server,record,now);
+        step.transition(WishStepExecutionState.RUNNING,now);record.transition(WishExecutionState.RUNNING,now);changed(server,record);server.overworld().getDataStorage().save();
+        WishingWillow.LOGGER.debug("Wish action dispatch session={} execution={} step={} action={}",record.wishSessionId(),record.executionId(),step.stepIndex(),planned.action());
+        WishActionResult result=action.execute(context);step.result(result);if(result.successful())step.transition(WishStepExecutionState.SUCCEEDED,now);else if(result.status()==WishActionResult.Status.RETRY){step.retry(result.code());boolean blockBatch="BLOCK_BATCH_CONTINUE".equals(result.code());step.transition(blockBatch?WishStepExecutionState.WAITING_DELAY:WishStepExecutionState.WAITING_TARGET,now);long next=now+(blockBatch?1:20);step.schedule(next);SCHEDULER.delay(key,next);}else if(result.status()==WishActionResult.Status.STALE)step.transition(WishStepExecutionState.STALE,now);else step.transition(WishStepExecutionState.FAILED,now);WishExecutionAudit.transition(record,step.stepIndex(),planned.action(),step.state().name(),result.code(),result.affected());finishState(server,record,now);
     }
     @Nullable private static ServerLevel level(MinecraftServer server,ResourceLocation id){return server.getLevel(ResourceKey.create(Registries.DIMENSION,id));}
-    private static void finishState(MinecraftServer server,WishExecutionRecord record,long now){boolean all=record.steps().stream().allMatch(s->s.state().terminal()),anySuccess=record.steps().stream().anyMatch(s->s.state()==WishStepExecutionState.SUCCEEDED),anyFailure=record.steps().stream().anyMatch(s->s.state()==WishStepExecutionState.FAILED||s.state()==WishStepExecutionState.STALE||"PARTIAL_SUCCESS".equals(s.lastResult())),waiting=record.steps().stream().anyMatch(s->s.state()==WishStepExecutionState.WAITING_TRIGGER);if(all){record.transition(anyFailure?(anySuccess?WishExecutionState.PARTIAL:WishExecutionState.FAILED):WishExecutionState.COMPLETED,now);}else if(waiting)record.transition(WishExecutionState.WAITING_TRIGGER,now);else record.transition(WishExecutionState.SCHEDULED,now);changed(server,record);}
-    private static void changed(MinecraftServer server,WishExecutionRecord record){WishExecutionSavedData.get(server).changed();WishSavedData wishes=WishSavedData.get(server);WishRecord wish=wishes.getBySession(record.wishSessionId());if(wish!=null)wishes.update(wish.withExecution(record.executionId(),record.state()));}
+    private static void finishState(MinecraftServer server,WishExecutionRecord record,long now){boolean all=record.steps().stream().allMatch(s->s.state().terminal()),anySuccess=record.steps().stream().anyMatch(s->s.state()==WishStepExecutionState.SUCCEEDED),anyFailure=record.steps().stream().anyMatch(s->s.state()==WishStepExecutionState.FAILED||s.state()==WishStepExecutionState.STALE||"PARTIAL_SUCCESS".equals(s.lastResult())),waiting=record.steps().stream().anyMatch(s->s.state()==WishStepExecutionState.WAITING_TRIGGER);WishRecord wish=WishSavedData.get(server).getBySession(record.wishSessionId());boolean partialPlan=wish!=null&&wish.planState()==WishPlanState.PARTIAL;if(all){record.transition(anyFailure?(anySuccess?WishExecutionState.PARTIAL:WishExecutionState.FAILED):(partialPlan?WishExecutionState.PARTIAL:WishExecutionState.COMPLETED),now);}else if(waiting)record.transition(WishExecutionState.WAITING_TRIGGER,now);else record.transition(WishExecutionState.SCHEDULED,now);changed(server,record);}
+    private static void changed(MinecraftServer server,WishExecutionRecord record){WishExecutionSavedData.get(server).changed();WishSavedData wishes=WishSavedData.get(server);WishRecord wish=wishes.getBySession(record.wishSessionId());if(wish!=null){WishExecutionAcceptError error=record.state()==WishExecutionState.STALE?WishExecutionAcceptError.STALE_RESOURCE:record.state()==WishExecutionState.FAILED?WishExecutionAcceptError.UNKNOWN:WishExecutionAcceptError.NONE;String detail=error==WishExecutionAcceptError.NONE?"":runtimeDetail(record);wishes.update(wish.withExecution(record.executionId(),record.state(),error,detail));if(record.state().terminal())WishPipelineAudit.execution(record.wishSessionId(),record.planId(),record.executionId(),record.state().name(),error.name(),detail);}}
+    private static String runtimeDetail(WishExecutionRecord record){return record.steps().stream().filter(step->step.state()==WishStepExecutionState.FAILED||step.state()==WishStepExecutionState.STALE).map(step->"step="+step.stepIndex()+" result="+step.lastResult()).findFirst().orElse(record.lastError());}
     private static boolean isBlockStep(MinecraftServer server,StepKey key){WishExecutionRecord record=WishExecutionSavedData.get(server).get(key.executionId());WishRecord wish=record==null?null:WishSavedData.get(server).getBySession(record.wishSessionId());if(wish==null||wish.plan()==null)return false;WishActionType action=wish.plan().steps().get(key.stepIndex()).action();return action==WishActionType.CHANGE_BLOCK||action==WishActionType.REPLACE_BLOCK_AREA;}
     private static void expireAttributes(MinecraftServer server,long now){for(WishExecutionRecord record:WishExecutionSavedData.get(server).all()){if(record.attributeLeases().isEmpty())continue;ServerPlayer player=server.getPlayerList().getPlayer(record.ownerId());if(player==null)continue;for(var entry:record.attributeLeases().entrySet()){var lease=entry.getValue();if(now<lease.expires())continue;Attribute attribute=switch(lease.attribute()){case "MAX_HEALTH"->Attributes.MAX_HEALTH;case "MOVEMENT_SPEED"->Attributes.MOVEMENT_SPEED;case "ATTACK_DAMAGE"->Attributes.ATTACK_DAMAGE;case "ARMOR"->Attributes.ARMOR;case "KNOCKBACK_RESISTANCE"->Attributes.KNOCKBACK_RESISTANCE;default->Attributes.LUCK;};AttributeInstance instance=player.getAttribute(attribute);if(instance!=null)instance.removeModifier(lease.modifier());record.removeLease(entry.getKey());WishExecutionSavedData.get(server).changed();}}}
     private static void tickEvents(MinecraftServer server,long now){for(WishExecutionRecord record:WishExecutionSavedData.get(server).all()){for(var entry:record.eventLeases().entrySet()){if(now>=entry.getValue()){if(PredefinedWishEventRegistry.isStalkerLease(entry.getKey())&&server.getPlayerList().getPlayer(record.ownerId())==null)continue;record.removeEventLease(entry.getKey());WishExecutionSavedData.get(server).changed();server.overworld().getDataStorage().save();if(PredefinedWishEventRegistry.isStalkerLease(entry.getKey()))runStalkerPhase(server,record,PredefinedWishEventRegistry.stalkerStep(entry.getKey()),now);continue;}if(entry.getKey().equals(PredefinedWishEventRegistry.ENDLESS_NIGHT)){ServerPlayer player=server.getPlayerList().getPlayer(record.ownerId());ServerLevel level=player==null?server.overworld():player.serverLevel();long day=level.getDayTime()/24000L*24000L;level.setDayTime(day+18000);}}}}
-    private static void runStalkerPhase(MinecraftServer server,WishExecutionRecord record,int stepIndex,long now){ServerPlayer player=server.getPlayerList().getPlayer(record.ownerId());WishRecord wish=WishSavedData.get(server).getBySession(record.wishSessionId());if(player==null||wish==null||wish.plan()==null||stepIndex<0||stepIndex>=wish.plan().steps().size())return;WishPlanStep event=wish.plan().steps().get(stepIndex);int intensity=Math.max(1,Math.min(5,event.parameters().get("intensity").getAsInt()));VerifiedRegistryResource resource=new VerifiedRegistryResource(RegistryEntryType.ENTITY,"minecraft:zombie");CandidateReference candidate=new CandidateReference("internal-stalker",WishCapability.STALKING_ENTITY,WishCapability.STALKING_ENTITY,MatchType.EXACT,CandidateSourceKind.VANILLA_REGISTRY,"minecraft","1.20.1","minecraft:zombie",FeatureType.ENTITY,resource,100,60);WishPlanStep spawn=new WishPlanStep(stepIndex,WishStepTiming.IMMEDIATE,0,WishTriggerType.NONE,WishActionType.SPAWN_ENTITY,WishCapability.STALKING_ENTITY,"internal-stalker",WishTargetType.PLAYER,JsonParser.parseString("{\"count\":1,\"distance_min\":12,\"distance_max\":24}").getAsJsonObject(),"predefined event phase",candidate);Set<UUID> before=new HashSet<>(record.allEntities());WishActionResult result=ACTIONS.get(WishActionType.SPAWN_ENTITY).execute(new WishExecutionContext(player.serverLevel(),player,wish.plan(),spawn,candidate,record));if(result.successful()){for(UUID entity:record.entitiesForStep(stepIndex))if(!before.contains(entity)){long expires=now+intensity*1200L;record.leaseBehavior(entity,WishEntityBehaviorManager.Mode.FOLLOW.name(),1.05,8,expires);WishEntityBehaviorManager.bind(record.executionId(),entity,player.getUUID(),WishEntityBehaviorManager.Mode.FOLLOW,1.05,8,expires);}}WishExecutionSavedData.get(server).changed();WishExecutionAudit.transition(record,stepIndex,WishActionType.START_PREDEFINED_EVENT,result.status().name(),result.code());}
+    private static void runStalkerPhase(MinecraftServer server,WishExecutionRecord record,int stepIndex,long now){ServerPlayer player=server.getPlayerList().getPlayer(record.ownerId());WishRecord wish=WishSavedData.get(server).getBySession(record.wishSessionId());if(player==null||wish==null||wish.plan()==null||stepIndex<0||stepIndex>=wish.plan().steps().size())return;WishPlanStep event=wish.plan().steps().get(stepIndex);int intensity=Math.max(1,Math.min(5,event.parameters().get("intensity").getAsInt()));VerifiedRegistryResource resource=new VerifiedRegistryResource(RegistryEntryType.ENTITY,"minecraft:zombie");CandidateReference candidate=new CandidateReference("internal-stalker",WishCapability.STALKING_ENTITY,WishCapability.STALKING_ENTITY,MatchType.EXACT,CandidateSourceKind.VANILLA_REGISTRY,"minecraft","1.20.1","minecraft:zombie",FeatureType.ENTITY,resource,100,60);WishPlanStep spawn=new WishPlanStep(stepIndex,WishStepTiming.IMMEDIATE,0,WishTriggerType.NONE,WishActionType.SPAWN_ENTITY,WishCapability.STALKING_ENTITY,"internal-stalker",WishTargetType.PLAYER,JsonParser.parseString("{\"count\":1,\"distance_min\":12,\"distance_max\":24}").getAsJsonObject(),"predefined event phase",candidate);Set<UUID> before=new HashSet<>(record.allEntities());WishActionResult result=ACTIONS.get(WishActionType.SPAWN_ENTITY).execute(new WishExecutionContext(player.serverLevel(),player,wish.plan(),spawn,candidate,record));if(result.successful()){for(UUID entity:record.entitiesForStep(stepIndex))if(!before.contains(entity)){long expires=now+intensity*1200L;record.leaseBehavior(entity,WishEntityBehaviorManager.Mode.FOLLOW.name(),1.05,8,expires);WishEntityBehaviorManager.bind(record.executionId(),entity,player.getUUID(),WishEntityBehaviorManager.Mode.FOLLOW,1.05,8,expires);}}WishExecutionSavedData.get(server).changed();WishExecutionAudit.transition(record,stepIndex,WishActionType.START_PREDEFINED_EVENT,result.status().name(),result.code(),result.affected());}
     private record YawSample(float yaw,long started,long cooldownUntil){}
 }

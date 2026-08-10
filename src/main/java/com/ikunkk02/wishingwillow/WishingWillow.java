@@ -36,6 +36,7 @@ public final class WishingWillow {
         VillagerTradeEvents.register();
         WishManager.register();
         WishExecutionManager.register();
+        com.ikunkk02.wishingwillow.wish.WishPipelineConsistencyChecker.register();
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, WishExecutionConfig.SPEC,
                 "wishing_willow-server.toml");
         DistExecutor.unsafeRunWhenOn(
