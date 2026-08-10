@@ -67,7 +67,8 @@ public final class VillagerTradeEvents {
             if (completed || existingOffer.getUses() > 0) {
                 villager.getPersistentData().putBoolean(TRADE_COMPLETED_TAG, true);
                 existingOffer.setToOutOfStock();
-            } else if (!(existingOffer instanceof OneTimeMerchantOffer)) {
+            } else if (existingOffer.getResult().is(ModItems.PACKAGED_WISHING_WILLOW.get())
+                    && !(existingOffer instanceof OneTimeMerchantOffer)) {
                 offers.set(existingOfferIndex, createWishingWillowOffer());
             }
             return;
@@ -88,14 +89,15 @@ public final class VillagerTradeEvents {
     }
 
     private static boolean isWishingWillowOffer(MerchantOffer offer) {
-        return offer.getResult().is(ModItems.WISHING_WILLOW.get());
+        return offer.getResult().is(ModItems.WISHING_WILLOW.get())
+                || offer.getResult().is(ModItems.PACKAGED_WISHING_WILLOW.get());
     }
 
     private static MerchantOffer createWishingWillowOffer() {
         return new OneTimeMerchantOffer(
                 new ItemStack(Items.EMERALD, EMERALD_COST),
                 new ItemStack(Items.GOLD_INGOT),
-                new ItemStack(ModItems.WISHING_WILLOW.get()),
+                new ItemStack(ModItems.PACKAGED_WISHING_WILLOW.get()),
                 VILLAGER_XP,
                 PRICE_MULTIPLIER
         );

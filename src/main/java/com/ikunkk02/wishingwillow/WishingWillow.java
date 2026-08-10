@@ -5,6 +5,9 @@ import com.ikunkk02.wishingwillow.event.CommonModEvents;
 import com.ikunkk02.wishingwillow.event.VillagerTradeEvents;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.registry.ModItems;
+import com.ikunkk02.wishingwillow.registry.ModSounds;
+import com.ikunkk02.wishingwillow.unboxing.UnboxingManager;
+import com.ikunkk02.wishingwillow.unboxing.UnboxingGameTests;
 import com.ikunkk02.wishingwillow.wish.WishManager;
 import com.ikunkk02.wishingwillow.execution.WishExecutionConfig;
 import com.ikunkk02.wishingwillow.execution.WishExecutionManager;
@@ -30,11 +33,14 @@ public final class WishingWillow {
         IEventBus modEventBus = context.getModEventBus();
 
         ModItems.register(modEventBus);
+        ModSounds.register(modEventBus);
         modEventBus.addListener(CommonModEvents::addCreativeTabItems);
         modEventBus.addListener(this::commonSetup);
         modEventBus.addListener(WishExecutionGameTests::register);
+        modEventBus.addListener(UnboxingGameTests::register);
         VillagerTradeEvents.register();
         WishManager.register();
+        UnboxingManager.register();
         WishExecutionManager.register();
         com.ikunkk02.wishingwillow.wish.WishPipelineConsistencyChecker.register();
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, WishExecutionConfig.SPEC,

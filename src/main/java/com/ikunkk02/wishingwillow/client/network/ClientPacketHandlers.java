@@ -10,6 +10,9 @@ import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
+import com.ikunkk02.wishingwillow.network.packet.UnboxingStartedPacket;
+import com.ikunkk02.wishingwillow.network.packet.UnboxingStatePacket;
+import com.ikunkk02.wishingwillow.client.animation.ClientUnboxingSequence;
 import net.minecraft.client.Minecraft;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import com.ikunkk02.wishingwillow.client.gui.ExecutionSettingsScreen;
@@ -48,5 +51,13 @@ public final class ClientPacketHandlers {
     public static void executionSettings(ExecutionSettingsSnapshot settings) {
         Minecraft minecraft=Minecraft.getInstance();
         if(minecraft.screen instanceof ExecutionSettingsScreen screen)screen.apply(settings);
+    }
+
+    public static void startUnboxing(UnboxingStartedPacket packet) {
+        ClientUnboxingSequence.start(packet);
+    }
+
+    public static void updateUnboxing(UnboxingStatePacket packet) {
+        ClientUnboxingSequence.updateState(packet);
     }
 }

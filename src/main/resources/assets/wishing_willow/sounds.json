@@ -1,0 +1,26 @@
+{
+  "unboxing_music": {
+    "subtitle": "subtitles.wishing_willow.unboxing_music",
+    "sounds": [
+      { "name": "wishing_willow:item/unboxing_music", "stream": false }
+    ]
+  },
+  "package_rustle": {
+    "subtitle": "subtitles.wishing_willow.package_rustle",
+    "sounds": [
+      "wishing_willow:item/package_rustle"
+    ]
+  },
+  "package_flap": {
+    "subtitle": "subtitles.wishing_willow.package_flap",
+    "sounds": [
+      "wishing_willow:item/package_flap"
+    ]
+  },
+  "willow_slide": {
+    "subtitle": "subtitles.wishing_willow.willow_slide",
+    "sounds": [
+      "wishing_willow:item/willow_slide"
+    ]
+  }
+}

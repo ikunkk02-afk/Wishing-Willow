@@ -1,0 +1,75 @@
+{
+  "format_version": "1.12.0",
+  "minecraft:geometry": [
+    {
+      "description": {
+        "identifier": "geometry.packaged_wishing_willow",
+        "texture_width": 128,
+        "texture_height": 128,
+        "visible_bounds_width": 2.5,
+        "visible_bounds_height": 1.5,
+        "visible_bounds_offset": [0, 0.55, 0]
+      },
+      "bones": [
+        { "name": "root", "pivot": [0, 8, 0] },
+        { "name": "box", "parent": "root", "pivot": [0, 8, 0] },
+        {
+          "name": "body",
+          "parent": "box",
+          "pivot": [0, 7.4, 0],
+          "cubes": [
+            { "origin": [-13, 8.8, -2.15], "size": [26, 0.45, 4.3], "uv": [0, 0] },
+            { "origin": [-13, 6.0, -0.25], "size": [26, 0.45, 4.2], "pivot": [0, 7.5, 0], "rotation": [60, 0, 0], "uv": [0, 48] },
+            { "origin": [-13, 6.0, -3.95], "size": [26, 0.45, 4.2], "pivot": [0, 7.5, 0], "rotation": [-60, 0, 0], "uv": [0, 72] }
+          ]
+        },
+        {
+          "name": "left_flap",
+          "parent": "box",
+          "pivot": [-13, 7.5, 0],
+          "cubes": [
+            { "origin": [-13.2, 5.95, -2.15], "size": [0.45, 3.3, 4.3], "uv": [82, 96] }
+          ]
+        },
+        {
+          "name": "right_flap",
+          "parent": "box",
+          "pivot": [13, 7.5, 0],
+          "cubes": [
+            { "origin": [12.75, 5.95, -2.15], "size": [0.45, 3.3, 4.3], "uv": [94, 96] }
+          ]
+        },
+        {
+          "name": "inner_tray",
+          "parent": "box",
+          "pivot": [0, 7.4, 0],
+          "cubes": [
+            { "origin": [-12.5, 6.65, -1.6], "size": [25, 0.35, 3.2], "uv": [0, 102] }
+          ]
+        },
+        { "name": "willow", "parent": "root", "pivot": [0, 7.55, 0] },
+        { "name": "willow_root", "parent": "willow", "pivot": [0, 7.55, 0] },
+        {
+          "name": "left_half",
+          "parent": "willow_root",
+          "pivot": [0, 7.55, 0],
+          "cubes": [
+            { "origin": [-11.8, 7.35, -0.35], "size": [11.9, 0.55, 0.7], "pivot": [0, 7.55, 0], "rotation": [0, 0, -1.5], "uv": [0, 112] },
+            { "origin": [-9.5, 7.34, -0.32], "size": [3.2, 0.42, 0.64], "pivot": [-7.8, 7.55, 0], "rotation": [0, 0, 21], "uv": [28, 112] },
+            { "origin": [-5.9, 7.36, -0.32], "size": [2.8, 0.40, 0.64], "pivot": [-4.5, 7.55, 0], "rotation": [0, 0, -20], "uv": [38, 112] }
+          ]
+        },
+        {
+          "name": "right_half",
+          "parent": "willow_root",
+          "pivot": [0, 7.55, 0],
+          "cubes": [
+            { "origin": [-0.1, 7.35, -0.35], "size": [11.9, 0.55, 0.7], "pivot": [0, 7.55, 0], "rotation": [0, 0, 1.5], "uv": [52, 112] },
+            { "origin": [3.1, 7.36, -0.32], "size": [3.0, 0.42, 0.64], "pivot": [4.5, 7.55, 0], "rotation": [0, 0, 20], "uv": [80, 112] },
+            { "origin": [6.7, 7.34, -0.32], "size": [3.1, 0.40, 0.64], "pivot": [8.2, 7.55, 0], "rotation": [0, 0, -21], "uv": [90, 112] }
+          ]
+        }
+      ]
+    }
+  ]
+}

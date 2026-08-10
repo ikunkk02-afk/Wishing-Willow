@@ -1,0 +1,42 @@
+{
+  "parent": "builtin/entity",
+  "gui_light": "front",
+  "textures": {
+    "particle": "wishing_willow:item/packaged_wishing_willow"
+  },
+  "display": {
+    "thirdperson_righthand": {
+      "rotation": [70, 15, 8],
+      "translation": [0, 2.1, 0.5],
+      "scale": [0.54, 0.54, 0.54]
+    },
+    "thirdperson_lefthand": {
+      "rotation": [70, 195, -8],
+      "translation": [0, 2.1, 0.5],
+      "scale": [0.54, 0.54, 0.54]
+    },
+    "firstperson_righthand": {
+      "rotation": [5, 100, -12],
+      "translation": [0.7, -1.1, 0],
+      "scale": [0.58, 0.58, 0.58]
+    },
+    "firstperson_lefthand": {
+      "rotation": [5, 260, 12],
+      "translation": [-0.7, -1.1, 0],
+      "scale": [0.58, 0.58, 0.58]
+    },
+    "ground": {
+      "translation": [0, 3, 0],
+      "scale": [0.38, 0.38, 0.38]
+    },
+    "gui": {
+      "rotation": [25, 145, -22],
+      "translation": [0, -0.3, 0],
+      "scale": [0.70, 0.70, 0.70]
+    },
+    "fixed": {
+      "rotation": [0, 0, -28],
+      "scale": [0.62, 0.62, 0.62]
+    }
+  }
+}

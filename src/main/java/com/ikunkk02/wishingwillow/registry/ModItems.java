@@ -1,6 +1,7 @@
 package com.ikunkk02.wishingwillow.registry;
 
 import com.ikunkk02.wishingwillow.WishingWillow;
+import com.ikunkk02.wishingwillow.item.PackagedWishingWillowItem;
 import com.ikunkk02.wishingwillow.item.WishingWillowItem;
 import net.minecraft.world.item.Item;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -15,6 +16,11 @@ public final class ModItems {
     public static final RegistryObject<Item> WISHING_WILLOW = ITEMS.register(
             "wishing_willow",
             () -> new WishingWillowItem(new Item.Properties())
+    );
+
+    public static final RegistryObject<Item> PACKAGED_WISHING_WILLOW = ITEMS.register(
+            "packaged_wishing_willow",
+            () -> new PackagedWishingWillowItem(new Item.Properties().stacksTo(1))
     );
 
     private ModItems() {

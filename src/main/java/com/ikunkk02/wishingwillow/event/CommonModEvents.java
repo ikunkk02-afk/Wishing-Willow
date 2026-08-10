@@ -10,6 +10,7 @@ public final class CommonModEvents {
 
     public static void addCreativeTabItems(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey().equals(CreativeModeTabs.INGREDIENTS)) {
+            event.accept(ModItems.PACKAGED_WISHING_WILLOW);
             event.accept(ModItems.WISHING_WILLOW);
         }
     }

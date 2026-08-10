@@ -74,7 +74,7 @@ public final class FirstPersonWishRenderer {
 
         PlayerRenderer playerRenderer = (PlayerRenderer) minecraft.getEntityRenderDispatcher().getRenderer(player);
         if (!player.isInvisible()) {
-            renderArm(
+            FirstPersonArmRenderer.renderArm(
                     event.getPoseStack(), event, playerRenderer, player, activeArm,
                     side * Mth.lerp(prepare, 0.64F, 0.31F)
                             + side * bend * 0.035F
@@ -90,7 +90,7 @@ public final class FirstPersonWishRenderer {
             if (player.getItemInHand(oppositeHand).isEmpty()) {
                 float assistEntrance = smoothProgress(elapsed, 4.0F, ClientWishSequence.PREPARE_END_TICK);
                 float assistSide = assistingArm == HumanoidArm.RIGHT ? 1.0F : -1.0F;
-                renderArm(
+                FirstPersonArmRenderer.renderArm(
                         event.getPoseStack(), event, playerRenderer, player, assistingArm,
                         assistSide * Mth.lerp(assistEntrance, 1.05F, 0.31F)
                                 + assistSide * bend * 0.035F
@@ -139,40 +139,6 @@ public final class FirstPersonWishRenderer {
                 net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY,
                 player.getId() + displayContext.ordinal()
         );
-        poseStack.popPose();
-    }
-
-    private static void renderArm(
-            PoseStack rootPose,
-            RenderHandEvent event,
-            PlayerRenderer renderer,
-            LocalPlayer player,
-            HumanoidArm arm,
-            float x,
-            float y,
-            float z,
-            float zRotation
-    ) {
-        PoseStack poseStack = rootPose;
-        poseStack.pushPose();
-        float side = arm == HumanoidArm.RIGHT ? 1.0F : -1.0F;
-        poseStack.translate(x, y, z);
-        poseStack.mulPose(Axis.YP.rotationDegrees(side * 45.0F));
-        poseStack.mulPose(Axis.ZP.rotationDegrees(zRotation));
-
-        // PlayerRenderer renders an arm in model space. Reproduce vanilla's
-        // first-person arm basis before applying our small wish-pose offsets;
-        // omitting this basis makes the full arm cross the camera at giant scale.
-        poseStack.translate(-side, 3.6F, 3.5F);
-        poseStack.mulPose(Axis.ZP.rotationDegrees(side * 120.0F));
-        poseStack.mulPose(Axis.XP.rotationDegrees(200.0F));
-        poseStack.mulPose(Axis.YP.rotationDegrees(side * -135.0F));
-        poseStack.translate(side * 5.6F, 0.0F, 0.0F);
-        if (arm == HumanoidArm.RIGHT) {
-            renderer.renderRightHand(poseStack, event.getMultiBufferSource(), event.getPackedLight(), player);
-        } else {
-            renderer.renderLeftHand(poseStack, event.getMultiBufferSource(), event.getPackedLight(), player);
-        }
         poseStack.popPose();
     }
 
