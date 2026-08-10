@@ -10,6 +10,9 @@ import com.ikunkk02.wishingwillow.planning.CapabilityCatalog;
 import com.ikunkk02.wishingwillow.planning.WishActionType;
 import com.ikunkk02.wishingwillow.planning.WishContextSnapshot;
 import com.ikunkk02.wishingwillow.planning.WishEstimatedDuration;
+import com.ikunkk02.wishingwillow.planning.WishPlanBudget;
+import com.ikunkk02.wishingwillow.planning.WishPlanError;
+import com.ikunkk02.wishingwillow.planning.WishPlanValidator;
 import com.ikunkk02.wishingwillow.planning.WishStepTiming;
 import com.ikunkk02.wishingwillow.planning.WishTargetType;
 import com.ikunkk02.wishingwillow.planning.WishTriggerType;
@@ -110,6 +113,24 @@ public final class WishPlannerPrompt {
         catalog.candidates().forEach(candidate -> ids.add(candidate.candidateId()));
         step.getAsJsonObject("candidate_id").add("enum", ids);
         return schema;
+    }
+
+    public static String repairMessage(String originalWish, WishInterpretation interpretation,
+                                       WishContextSnapshot context, CapabilityCatalog catalog,
+                                       WishPlanError error, String invalidCandidate) {
+        String candidate = invalidCandidate == null ? "" : invalidCandidate;
+        if (candidate.length() > WishPlanValidator.MAX_AI_JSON) {
+            candidate = candidate.substring(0, WishPlanValidator.MAX_AI_JSON);
+        }
+        JsonObject repair = new JsonObject();
+        repair.addProperty("validation_error", error.name());
+        repair.addProperty("maximum_steps", WishPlanBudget.maxSteps(interpretation.severity()));
+        repair.addProperty("maximum_destructive_cost",
+                WishPlanBudget.maxDestructiveCost(interpretation.severity()));
+        repair.addProperty("invalid_plan_candidate", candidate);
+        return userMessage(originalWish, interpretation, context, catalog)
+                + "\n<UNTRUSTED_INVALID_PLAN_JSON>\n" + GSON.toJson(repair)
+                + "\n</UNTRUSTED_INVALID_PLAN_JSON>";
     }
 
     private static void enumValues(JsonObject property, Enum<?>[] values) {

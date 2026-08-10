@@ -18,11 +18,13 @@ import com.ikunkk02.wishingwillow.planning.WishPlanner;
 import com.ikunkk02.wishingwillow.research.KnowledgeBaseSnapshot;
 import com.ikunkk02.wishingwillow.research.ModResearchManager;
 import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
+import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import org.slf4j.Logger;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -30,6 +32,7 @@ import java.util.concurrent.Executors;
 
 @Mod.EventBusSubscriber(modid = WishingWillow.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientWishPlanningCoordinator {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final CapabilityMatcher MATCHER = new CapabilityMatcher();
     private static final WishPlanner PLANNER = new WishPlanner();
     private static final ExecutorService MATCH_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
@@ -42,6 +45,7 @@ public final class ClientWishPlanningCoordinator {
     private ClientWishPlanningCoordinator() { }
 
     public static void start(WishPlanningRequestPacket packet) {
+        LOGGER.info("Wish planning started session={} attempt={}", packet.sessionId(), packet.attemptId());
         long requestGeneration = generation;
         AiConfig config = AiConfigManager.getInstance().get();
         if (!config.isConfigured() || config.providerType() != packet.providerType()
@@ -70,6 +74,9 @@ public final class ClientWishPlanningCoordinator {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.execute(() -> {
             if (requestGeneration != generation || minecraft.getConnection() == null) return;
+            LOGGER.info("Wish planning completed session={} attempt={} state={} error={} steps={}",
+                    packet.sessionId(), packet.attemptId(), result.state(), result.error(),
+                    result.draft() == null ? 0 : result.draft().steps().size());
             if (result.draft() == null || catalog == null) {
                 ModNetworking.sendToServer(new SubmitWishPlanPacket(packet.sessionId(), packet.attemptId(),
                         result.error(), null, null));

@@ -61,4 +61,18 @@ public final class WishingWillowPrompt {
                 + GSON.toJson(Map.of("wish", wish))
                 + "\n</UNTRUSTED_PLAYER_WISH_JSON>";
     }
+
+    public static String repairMessage(String wish, String invalidCandidate) {
+        String candidate = invalidCandidate == null ? "" : invalidCandidate;
+        if (candidate.length() > 32 * 1024) {
+            candidate = candidate.substring(0, 32 * 1024);
+        }
+        return untrustedWishMessage(wish)
+                + "\n<UNTRUSTED_INVALID_INTERPRETATION_JSON>\n"
+                + GSON.toJson(Map.of(
+                "validation_error", "MALFORMED_RESPONSE",
+                "candidate", candidate
+        ))
+                + "\n</UNTRUSTED_INVALID_INTERPRETATION_JSON>";
+    }
 }
