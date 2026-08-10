@@ -44,7 +44,7 @@ public final class WishInterpreter {
             }
             try {
                 return CompletableFuture.completedFuture(WishInterpretationResult.success(
-                        WishInterpretationValidator.parseAndValidate(response.assistantContent())));
+                        WishInterpretationValidator.parseProviderResponse(response.assistantContent())));
             } catch (IllegalArgumentException exception) {
                 LOGGER.info("AI interpretation repair started cause=SCHEMA_VALIDATION");
                 return repair(provider, wish, response.assistantContent());
@@ -74,7 +74,7 @@ public final class WishInterpreter {
             }
             try {
                 return WishInterpretationResult.success(
-                        WishInterpretationValidator.parseAndValidate(response.assistantContent()));
+                        WishInterpretationValidator.parseProviderResponse(response.assistantContent()));
             } catch (IllegalArgumentException exception) {
                 LOGGER.info("AI interpretation repair failed cause=SCHEMA_VALIDATION");
                 return WishInterpretationResult.invalidResponse();

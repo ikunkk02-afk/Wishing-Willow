@@ -13,6 +13,7 @@ import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -93,6 +94,40 @@ public final class WishInterpretationValidator {
         );
     }
 
+    /**
+     * Accepts one narrowly repairable provider deviation while keeping the persisted and server-facing
+     * interpretation contract strict. Some JSON-object-only providers emit an English intent label as
+     * prose (for example, "obtain diamonds") even when the schema requires snake_case.
+     */
+    public static WishInterpretation parseProviderResponse(String rawContent) {
+        try {
+            return parseAndValidate(rawContent);
+        } catch (IllegalArgumentException original) {
+            final JsonElement parsed;
+            try {
+                parsed = parseStrict(stripSingleCodeFence(rawContent));
+            } catch (IllegalArgumentException ignored) {
+                throw original;
+            }
+            if (!parsed.isJsonObject() || !parsed.getAsJsonObject().keySet().equals(FIELDS)) {
+                throw original;
+            }
+            JsonObject object = parsed.getAsJsonObject();
+            JsonElement intentElement = object.get("intent");
+            if (intentElement == null || !intentElement.isJsonPrimitive()
+                    || !intentElement.getAsJsonPrimitive().isString()) {
+                throw original;
+            }
+            String intent = intentElement.getAsString().strip();
+            String normalized = normalizeIntent(intent);
+            if (normalized.equals(intent) || !INTENT_PATTERN.matcher(normalized).matches()) {
+                throw original;
+            }
+            object.addProperty("intent", normalized);
+            return parseAndValidate(GSON.toJson(object));
+        }
+    }
+
     public static void validate(WishInterpretation interpretation) {
         parseAndValidate(toJson(interpretation));
     }
@@ -122,7 +157,7 @@ public final class WishInterpretationValidator {
                   "required":["schema_version","intent","literal_goal","loophole","twisted_outcome","reasoning_summary","tone","severity","delivery","required_capabilities"],
                   "properties":{
                     "schema_version":{"type":"integer","const":1},
-                    "intent":{"type":"string","minLength":1,"maxLength":64},
+                    "intent":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[a-z][a-z0-9_-]{0,63}$"},
                     "literal_goal":{"type":"string","minLength":1,"maxLength":512},
                     "loophole":{"type":"string","minLength":1,"maxLength":1024},
                     "twisted_outcome":{"type":"string","minLength":1,"maxLength":1024},
@@ -220,6 +255,17 @@ public final class WishInterpretationValidator {
         } catch (IllegalArgumentException exception) {
             throw invalid();
         }
+    }
+
+    private static String normalizeIntent(String intent) {
+        String normalized = intent.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9_-]+", "_")
+                .replaceAll("^[^a-z]+", "")
+                .replaceAll("[_-]+$", "");
+        if (normalized.length() > MAX_INTENT_LENGTH) {
+            normalized = normalized.substring(0, MAX_INTENT_LENGTH).replaceAll("[_-]+$", "");
+        }
+        return normalized;
     }
 
     private static IllegalArgumentException invalid() {

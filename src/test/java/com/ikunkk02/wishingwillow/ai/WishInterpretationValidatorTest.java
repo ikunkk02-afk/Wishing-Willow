@@ -27,6 +27,12 @@ class WishInterpretationValidatorTest {
         WishInterpretation fenced = WishInterpretationValidator.parseAndValidate("```json\n" + VALID + "\n```");
         assertEquals(72, direct.severity());
         assertEquals(direct, fenced);
+        assertEquals("^[a-z][a-z0-9_-]{0,63}$",
+                WishInterpretationValidator.jsonSchema()
+                        .getAsJsonObject("properties")
+                        .getAsJsonObject("intent")
+                        .get("pattern")
+                        .getAsString());
     }
 
     @Test
@@ -50,6 +56,21 @@ class WishInterpretationValidatorTest {
         ));
         assertThrows(IllegalArgumentException.class, () -> WishInterpretationValidator.parseAndValidate(
                 VALID.replace("\"severity\":72", "\"severity\":72.5")
+        ));
+    }
+
+    @Test
+    void providerBoundaryNormalizesOnlyTheIntentMachineLabel() {
+        WishInterpretation normalized = WishInterpretationValidator.parseProviderResponse(
+                VALID.replace("\"intent\":\"companionship\"", "\"intent\":\"Obtain Diamonds\"")
+        );
+        assertEquals("obtain_diamonds", normalized.intent());
+
+        assertThrows(IllegalArgumentException.class, () -> WishInterpretationValidator.parseProviderResponse(
+                VALID.replace("\"tone\":\"HORROR\"", "\"tone\":\"MYSTERY\"")
+        ));
+        assertThrows(IllegalArgumentException.class, () -> WishInterpretationValidator.parseProviderResponse(
+                VALID.replace("\"intent\":\"companionship\"", "\"intent\":\"陪伴\"")
         ));
     }
 }

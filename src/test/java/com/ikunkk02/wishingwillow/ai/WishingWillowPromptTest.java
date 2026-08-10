@@ -28,5 +28,6 @@ class WishingWillowPromptTest {
         assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("required_capabilities must include"));
         assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("GIVE_ITEM"));
         assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("Every capability must have a"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("lowercase snake_case"));
     }
 }
