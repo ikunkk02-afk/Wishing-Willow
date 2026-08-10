@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
+import com.ikunkk02.wishingwillow.WishingWillow;
 
 public final class VanillaCapabilityProvider {
     private static final Map<WishCapability, List<ResourceDescriptor>> RESOURCES = resources();
@@ -55,6 +57,19 @@ public final class VanillaCapabilityProvider {
                     KnowledgeLevel.VERIFIED, 1.0, 1.0, 0, 70, risk,
                     CapabilityMatcher.score(relation, KnowledgeLevel.VERIFIED, true, 1.0, 70,
                             0, severity, risk)));
+        }
+        if (graph.relation(requested, WishCapability.WORLD_EVENT) != MatchType.UNSATISFIED) {
+            for (String eventId : PredefinedWishEventRegistry.ids()) {
+                MatchType relation = graph.relation(requested, WishCapability.WORLD_EVENT);
+                int risk = CapabilityMatcher.risk(WishCapability.WORLD_EVENT);
+                result.add(new CapabilityCandidate("", requested, WishCapability.WORLD_EVENT, relation,
+                        CandidateSourceKind.MOD_FEATURE, WishingWillow.MOD_ID, "Wishing Willow", "1.0.0",
+                        eventId, FeatureType.WORLD_SYSTEM, null,
+                        "A server-whitelisted Wishing Willow predefined event.", KnowledgeLevel.VERIFIED,
+                        1.0, 1.0, eventId.contains("stalker") ? 70 : 45, 70, risk,
+                        CapabilityMatcher.score(relation, KnowledgeLevel.VERIFIED, true, 1.0, 70, 2,
+                                severity, risk)));
+            }
         }
         return result;
     }

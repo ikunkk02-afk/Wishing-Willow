@@ -33,6 +33,11 @@ public record ServerPlanningEnvironment(MinecraftServer server) implements Plann
                 .orElse(false);
     }
 
+    @Override
+    public boolean modPresent(String modId, String storedVersion) {
+        return modId.equals("minecraft") || ModList.get().isLoaded(modId);
+    }
+
     private <T> boolean dynamic(net.minecraft.resources.ResourceKey<net.minecraft.core.Registry<T>> key,
                                 ResourceLocation location) {
         return server.registryAccess().registry(key).map(registry -> registry.containsKey(location)).orElse(false);

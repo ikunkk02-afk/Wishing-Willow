@@ -109,12 +109,13 @@ public final class WishPlanValidator {
     public static void validateStored(WishPlan plan, PlanningEnvironment environment) {
         for (WishPlanStep step : plan.steps()) {
             CandidateReference reference = step.candidateReference();
-            if (!environment.modLoaded(reference.sourceModId(), reference.sourceModVersion())) {
+            if (!environment.modPresent(reference.sourceModId(), reference.sourceModVersion())) {
                 throw invalid(WishPlanError.MISSING_MOD);
             }
-            if (reference.registryResource() != null
-                    && !environment.contains(reference.registryResource().type(), reference.registryResource().id())) {
-                throw invalid(WishPlanError.STALE_RESOURCE);
+            if (reference.registryResource() != null) {
+                if (!environment.contains(reference.registryResource().type(), reference.registryResource().id())) {
+                    throw invalid(WishPlanError.STALE_RESOURCE);
+                }
             }
         }
     }

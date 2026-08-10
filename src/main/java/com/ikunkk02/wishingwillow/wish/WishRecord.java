@@ -12,6 +12,7 @@ import com.ikunkk02.wishingwillow.planning.WishPlan;
 import com.ikunkk02.wishingwillow.planning.WishPlanError;
 import com.ikunkk02.wishingwillow.planning.WishPlanNbt;
 import com.ikunkk02.wishingwillow.planning.WishPlanState;
+import com.ikunkk02.wishingwillow.execution.WishExecutionState;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -40,7 +41,9 @@ public record WishRecord(
         @Nullable WishInterpretation interpretation,
         WishPlanState planState,
         WishPlanError planError,
-        @Nullable WishPlan plan
+        @Nullable WishPlan plan,
+        @Nullable UUID executionId,
+        WishExecutionState executionState
 ) {
     public WishRecord(UUID sessionId, UUID playerId, String rawWish, ResourceLocation dimension,
                       long submittedGameTime, long submittedAtEpochMillis, WishState state,
@@ -50,7 +53,7 @@ public record WishRecord(
         this(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis, state,
                 interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
                 interpretationUpdatedAtEpochMillis, interpretation,
-                WishPlanState.NOT_PLANNED, WishPlanError.NONE, null);
+                WishPlanState.NOT_PLANNED, WishPlanError.NONE, null, null, WishExecutionState.NOT_ACCEPTED);
     }
     public static WishRecord fromSession(WishSession session) {
         return new WishRecord(
@@ -70,7 +73,9 @@ public record WishRecord(
                 session.interpretation(),
                 WishPlanState.NOT_PLANNED,
                 WishPlanError.NONE,
-                null
+                null,
+                null,
+                WishExecutionState.NOT_ACCEPTED
         );
     }
 
@@ -83,14 +88,20 @@ public record WishRecord(
         return new WishRecord(
                 sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
                 state, newState, errorCategory, aiExecutionMode, providerType, model, updatedAt, newInterpretation,
-                planState, planError, plan
+                planState, planError, plan, executionId, executionState
         );
     }
 
     public WishRecord withPlanning(WishPlanState newState, WishPlanError error, @Nullable WishPlan newPlan) {
         return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
                 state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
-                interpretationUpdatedAtEpochMillis, interpretation, newState, error, newPlan);
+                interpretationUpdatedAtEpochMillis, interpretation, newState, error, newPlan, executionId, executionState);
+    }
+
+    public WishRecord withExecution(@Nullable UUID id, WishExecutionState newState) {
+        return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
+                state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
+                interpretationUpdatedAtEpochMillis, interpretation, planState, planError, plan, id, newState);
     }
 
     public CompoundTag save() {
@@ -114,6 +125,8 @@ public record WishRecord(
         tag.putString("PlanState", planState.name());
         tag.putString("PlanError", planError.name());
         if (plan != null) tag.put("WishPlan", WishPlanNbt.save(plan));
+        if (executionId != null) tag.putUUID("ExecutionId", executionId);
+        tag.putString("ExecutionState", executionState.name());
         return tag;
     }
 
@@ -170,6 +183,13 @@ public record WishRecord(
             planState = WishPlanState.STALE;
             planError = WishPlanError.STALE_RESOURCE;
         }
+        UUID executionId = tag.hasUUID("ExecutionId") ? tag.getUUID("ExecutionId") : null;
+        WishExecutionState executionState = safeEnum(WishExecutionState.class,
+                tag.getString("ExecutionState"), WishExecutionState.NOT_ACCEPTED);
+        if (executionId == null && executionState != WishExecutionState.NOT_ACCEPTED
+                && executionState != WishExecutionState.FAILED) {
+            executionState = WishExecutionState.STALE;
+        }
         return new WishRecord(
                 tag.getUUID("SessionId"),
                 tag.getUUID("PlayerId"),
@@ -189,7 +209,9 @@ public record WishRecord(
                 interpretation,
                 planState,
                 planError,
-                plan
+                plan,
+                executionId,
+                executionState
         );
     }
 
