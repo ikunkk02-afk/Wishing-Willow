@@ -119,7 +119,7 @@ public final class FirstPersonWishRenderer {
                 side * Mth.lerp(prepare, -10.0F, -2.0F)
                         + side * Mth.lerp(bend, 0.0F, -1.5F)
         ));
-        float scale = 0.62F * Mth.lerp(disappear, 1.0F, 0.08F);
+        float scale = 0.82F * Mth.lerp(disappear, 1.0F, 0.08F);
         poseStack.scale(scale, scale, scale);
 
         // The normal first-person item preset contains a strong Y rotation that
