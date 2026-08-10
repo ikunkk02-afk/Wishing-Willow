@@ -264,7 +264,7 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             body.add("thinking", thinking);
         }
         JsonArray messages = new JsonArray();
-        messages.add(message("system", request.systemMessage()));
+        messages.add(message("system", structuredSystemMessage(request)));
         messages.add(message("user", request.userMessage()));
         body.add("messages", messages);
         if (request.outputMode() == AiOutputMode.JSON_OBJECT) {
@@ -353,6 +353,17 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         message.addProperty("role", role);
         message.addProperty("content", content);
         return message;
+    }
+
+    private static String structuredSystemMessage(AiRequest request) {
+        if (request.outputMode() == AiOutputMode.JSON_SCHEMA || request.jsonSchema() == null) {
+            return request.systemMessage();
+        }
+        return request.systemMessage()
+                + "\n\nThe provider cannot enforce JSON Schema directly. The response must still match this "
+                + "JSON Schema contract exactly, including required fields, enum values, numeric limits, and "
+                + "additionalProperties=false. Return only the JSON value and no commentary.\n"
+                + GSON.toJson(request.jsonSchema());
     }
 
     private static boolean isOutputModeUnsupported(int status, String body, AiOutputMode mode) {
