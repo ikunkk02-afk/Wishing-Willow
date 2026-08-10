@@ -204,12 +204,12 @@ public final class ClientWishSequence {
         Vector3f look = camera.getLookVector();
         Vector3f left = camera.getLeftVector();
         Vec3 origin = cameraPosition.add(
-                look.x() * 0.62F + left.x() * 0.02F,
-                look.y() * 0.62F - 0.08F + left.y() * 0.02F,
-                look.z() * 0.62F + left.z() * 0.02F
+                look.x() * 1.18F + left.x() * 0.02F,
+                look.y() * 1.18F - 0.07F + left.y() * 0.02F,
+                look.z() * 1.18F + left.z() * 0.02F
         );
         RandomSource random = RandomSource.create(sessionId.getMostSignificantBits() ^ sessionId.getLeastSignificantBits());
-        for (int index = 0; index < 8; index++) {
+        for (int index = 0; index < 6; index++) {
             boolean pale = index < 2;
             BlockParticleOption particle = new BlockParticleOption(
                     ParticleTypes.BLOCK,
@@ -218,9 +218,9 @@ public final class ClientWishSequence {
             minecraft.level.addParticle(
                     particle,
                     origin.x, origin.y, origin.z,
-                    (random.nextDouble() - 0.5D) * 0.055D,
-                    (random.nextDouble() - 0.15D) * 0.045D,
-                    (random.nextDouble() - 0.5D) * 0.055D
+                    (random.nextDouble() - 0.5D) * 0.038D,
+                    (random.nextDouble() - 0.15D) * 0.032D,
+                    (random.nextDouble() - 0.5D) * 0.038D
             );
         }
     }

@@ -76,10 +76,12 @@ public final class FirstPersonWishRenderer {
         if (!player.isInvisible()) {
             renderArm(
                     event.getPoseStack(), event, playerRenderer, player, activeArm,
-                    side * Mth.lerp(prepare, 0.64F, 0.31F) + side * snap * 0.08F,
-                    Mth.lerp(prepare, -0.60F, -0.47F) - snap * 0.04F,
-                    -0.72F,
-                    side * bend * 8.0F + side * snap * 10.0F
+                    side * Mth.lerp(prepare, 0.64F, 0.31F)
+                            + side * bend * 0.035F
+                            + side * snap * 0.13F,
+                    Mth.lerp(prepare, -0.60F, -0.10F) - snap * 0.055F,
+                    Mth.lerp(prepare, -0.72F, -0.84F),
+                    side * bend * 9.0F + side * snap * 12.0F
             );
 
             InteractionHand oppositeHand = activeHand == InteractionHand.MAIN_HAND
@@ -90,10 +92,12 @@ public final class FirstPersonWishRenderer {
                 float assistSide = assistingArm == HumanoidArm.RIGHT ? 1.0F : -1.0F;
                 renderArm(
                         event.getPoseStack(), event, playerRenderer, player, assistingArm,
-                        assistSide * Mth.lerp(assistEntrance, 1.05F, 0.31F) - assistSide * snap * 0.10F,
-                        Mth.lerp(assistEntrance, -0.64F, -0.47F) - snap * 0.04F,
-                        -0.72F,
-                        -assistSide * bend * 8.0F - assistSide * snap * 10.0F
+                        assistSide * Mth.lerp(assistEntrance, 1.05F, 0.31F)
+                                + assistSide * bend * 0.035F
+                                + assistSide * snap * 0.13F,
+                        Mth.lerp(assistEntrance, -0.64F, -0.10F) - snap * 0.055F,
+                        Mth.lerp(assistEntrance, -0.72F, -0.84F),
+                        -assistSide * bend * 9.0F - assistSide * snap * 12.0F
                 );
             }
         }
