@@ -79,7 +79,7 @@ public final class FirstPersonWishRenderer {
                     side * Mth.lerp(prepare, 0.64F, 0.31F)
                             + side * bend * 0.035F
                             + side * snap * 0.13F,
-                    Mth.lerp(prepare, -0.60F, -0.10F) - snap * 0.055F,
+                    Mth.lerp(prepare, -0.60F, 0.0F) - snap * 0.055F,
                     Mth.lerp(prepare, -0.72F, -0.84F),
                     side * bend * 9.0F + side * snap * 12.0F
             );
@@ -95,7 +95,7 @@ public final class FirstPersonWishRenderer {
                         assistSide * Mth.lerp(assistEntrance, 1.05F, 0.31F)
                                 + assistSide * bend * 0.035F
                                 + assistSide * snap * 0.13F,
-                        Mth.lerp(assistEntrance, -0.64F, -0.10F) - snap * 0.055F,
+                        Mth.lerp(assistEntrance, -0.64F, 0.0F) - snap * 0.055F,
                         Mth.lerp(assistEntrance, -0.72F, -0.84F),
                         -assistSide * bend * 9.0F - assistSide * snap * 12.0F
                 );
