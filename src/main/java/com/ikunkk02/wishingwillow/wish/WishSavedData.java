@@ -5,6 +5,7 @@ import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.planning.WishPlanError;
 import com.ikunkk02.wishingwillow.planning.WishPlanState;
+import com.ikunkk02.wishingwillow.program.WishProgram;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -73,6 +74,15 @@ public final class WishSavedData extends SavedData {
         return true;
     }
 
+    public boolean updateUnderstanding(UUID sessionId, InterpretationState state, AiErrorCategory category,
+                                       @Nullable WishInterpretation interpretation,
+                                       @Nullable WishProgram program, long updatedAt) {
+        WishRecord record = wishesBySession.get(sessionId);
+        if (record == null) return false;
+        update(record.withUnderstanding(state, category, interpretation, program, updatedAt));
+        return true;
+    }
+
     @Nullable
     public WishRecord getBySession(UUID sessionId) {
         return wishesBySession.get(sessionId);
@@ -99,22 +109,13 @@ public final class WishSavedData extends SavedData {
 
     @Nullable
     public WishRecord getLatestResumablePlanning(UUID playerId) {
-        return getLatestResumablePlanning(playerId, System.currentTimeMillis());
+        return null;
     }
 
     @Nullable
     WishRecord getLatestResumablePlanning(UUID playerId, long nowEpochMillis) {
-        WishRecord latest = getLatest(playerId);
-        if (latest == null || latest.state() != WishState.FINISHED
-                || latest.interpretationState() != InterpretationState.SUCCESS
-                || latest.interpretation() == null
-                || latest.planState() != WishPlanState.FAILED
-                || latest.planError() != WishPlanError.DISCONNECTED
-                || latest.plan() != null || latest.executionId() != null) return null;
-        long lastActivity = Math.max(latest.submittedAtEpochMillis(),
-                latest.interpretationUpdatedAtEpochMillis());
-        long age = Math.max(0L, nowEpochMillis - lastActivity);
-        return age <= PLANNING_RESUME_EXPIRY_MILLIS ? latest : null;
+        // Planning and AI requests are never safe to resume: doing so issues a fresh model request for stale work.
+        return null;
     }
 
     public void failPendingForPlayer(UUID playerId) {

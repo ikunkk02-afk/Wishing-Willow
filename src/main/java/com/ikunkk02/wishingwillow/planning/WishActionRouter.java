@@ -6,6 +6,7 @@ import com.ikunkk02.wishingwillow.planning.semantic.WishSemanticRecipeRegistry;
 
 import java.util.Locale;
 import java.util.Set;
+import com.ikunkk02.wishingwillow.program.WishProgram;
 
 /** Gives the controlled Action DSL first refusal; the Agent is reserved for genuinely unknown capabilities. */
 public final class WishActionRouter {
@@ -42,6 +43,14 @@ public final class WishActionRouter {
         }
         return new WishRouteDecision(WishExecutionRoute.DIRECT_ACTION,
                 "direct_action_first_refusal");
+    }
+
+    public WishRouteDecision select(WishProgram program) {
+        if (program == null) return complex("missing_wish_program");
+        if (program.requiresAgent()) return complex("unknown_capability=" + program.unknownCapability());
+        if (program.usesSkill()) return new WishRouteDecision(WishExecutionRoute.DIRECT_ACTION,
+                "known_skill=" + program.skill());
+        return new WishRouteDecision(WishExecutionRoute.DIRECT_ACTION, "known_action_program");
     }
 
     private static WishRouteDecision complex(String reason) {

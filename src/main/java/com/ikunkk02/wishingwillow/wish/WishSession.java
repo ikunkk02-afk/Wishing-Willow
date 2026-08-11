@@ -5,6 +5,7 @@ import com.ikunkk02.wishingwillow.ai.AiExecutionMode;
 import com.ikunkk02.wishingwillow.ai.AiProviderType;
 import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
+import com.ikunkk02.wishingwillow.program.WishProgram;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 
@@ -29,6 +30,8 @@ public final class WishSession {
     private AiErrorCategory aiErrorCategory;
     @Nullable
     private WishInterpretation interpretation;
+    @Nullable
+    private WishProgram program;
     private long interpretationUpdatedAtEpochMillis;
 
     public WishSession(
@@ -127,6 +130,9 @@ public final class WishSession {
         return interpretation;
     }
 
+    @Nullable
+    public WishProgram program() { return program; }
+
     public long interpretationUpdatedAtEpochMillis() {
         return interpretationUpdatedAtEpochMillis;
     }
@@ -140,6 +146,7 @@ public final class WishSession {
         interpretationState = InterpretationState.REQUESTING;
         aiErrorCategory = AiErrorCategory.NONE;
         interpretation = null;
+        program = null;
         interpretationUpdatedAtEpochMillis = epochMillis;
     }
 
@@ -149,9 +156,20 @@ public final class WishSession {
             @Nullable WishInterpretation newInterpretation,
             long epochMillis
     ) {
+        completeInterpretation(newState, errorCategory, newInterpretation, null, epochMillis);
+    }
+
+    public void completeInterpretation(
+            InterpretationState newState,
+            AiErrorCategory errorCategory,
+            @Nullable WishInterpretation newInterpretation,
+            @Nullable WishProgram newProgram,
+            long epochMillis
+    ) {
         interpretationState = newState;
         aiErrorCategory = errorCategory;
         interpretation = newInterpretation;
+        program = newProgram;
         interpretationUpdatedAtEpochMillis = epochMillis;
     }
 }

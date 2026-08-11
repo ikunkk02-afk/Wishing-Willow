@@ -27,6 +27,7 @@ import com.ikunkk02.wishingwillow.WishingWillow;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
+@Deprecated(forRemoval = false)
 public final class AiWishPlanner {
     private final Function<AiConfig, AiProvider> providers;
 

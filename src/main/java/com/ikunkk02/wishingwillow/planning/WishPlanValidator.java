@@ -96,7 +96,9 @@ public final class WishPlanValidator {
             validateTiming(timing, delay, trigger);
             WishActionType action = enumValue(step, "action", WishActionType.class);
             WishCapability capability = enumValue(step, "capability", WishCapability.class);
-            if (!WishContractCapabilityDeriver.allows(interpretation, capability)) {
+            boolean optionalPresentation = step.has("selection_reason")
+                    && "Validated optional absurd presentation.".equals(step.get("selection_reason").getAsString());
+            if (!WishContractCapabilityDeriver.allows(interpretation, capability) && !optionalPresentation) {
                 throw invalid(WishPlanError.INVALID_CANDIDATE);
             }
             String candidateId = string(step, "candidate_id", 32);

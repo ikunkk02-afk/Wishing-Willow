@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Deprecated(forRemoval = false)
 public final class FallbackWishPlanner {
     private static final Pattern ARABIC_NUMBER = Pattern.compile("(?<![0-9])([0-9]{1,9})(?![0-9])");
     private static final Pattern CHINESE_NUMBER = Pattern.compile("[零〇一二两三四五六七八九十百千万亿]+");

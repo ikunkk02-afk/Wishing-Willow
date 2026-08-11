@@ -47,12 +47,11 @@ class WishPlannerPromptTest {
     }
 
     @Test void bundledSkillTeachesValidatedGameToolCalls(){
-        assertTrue(WishGameToolSkill.TEXT.contains("FULFILL FIRST. THEN DISTORT."));
-        assertTrue(WishGameToolSkill.TEXT.contains("try `DIRECT_ACTION` first"));
-        assertTrue(WishGameToolSkill.TEXT.contains("`plan_apply_effect_category` with `BENEFICIAL`"));
-        assertTrue(WishGameToolSkill.TEXT.contains("AFTER a planning tool changes the draft, call `verify_wish_contract` next"));
-        assertTrue(WishGameToolSkill.TEXT.contains("Call identical `query_registry` arguments at most once"));
-        assertTrue(WishGameToolSkill.TEXT.contains("server Action Registry"));
+        assertTrue(WishGameToolSkill.TEXT.contains("Prefer an existing Action"));
+        assertTrue(WishGameToolSkill.TEXT.contains("Only research when a required capability is genuinely unknown"));
+        assertTrue(WishGameToolSkill.TEXT.contains("Required core Actions determine wish success"));
+        assertTrue(WishGameToolSkill.TEXT.contains("authoritative Action catalog"));
+        assertFalse(WishGameToolSkill.TEXT.contains("Tool selection cheatsheet"));
         assertTrue(WishPlannerPrompt.SYSTEM_PROMPT.contains(WishGameToolSkill.TEXT));
     }
 }

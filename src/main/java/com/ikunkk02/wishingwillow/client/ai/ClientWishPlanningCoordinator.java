@@ -15,10 +15,10 @@ import com.ikunkk02.wishingwillow.network.packet.WishAgentDebugPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningProgressPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
 import com.ikunkk02.wishingwillow.planning.*;
-import com.ikunkk02.wishingwillow.planning.direct.DirectActionPlanningResult;
-import com.ikunkk02.wishingwillow.planning.direct.DirectWishActionPlanner;
 import com.ikunkk02.wishingwillow.planning.direct.WishAbsurdityStyle;
 import com.ikunkk02.wishingwillow.planning.semantic.WishSemanticRecipeRegistry;
+import com.ikunkk02.wishingwillow.program.CompiledWishProgram;
+import com.ikunkk02.wishingwillow.program.WishProgramCompiler;
 import com.ikunkk02.wishingwillow.research.KnowledgeBaseSnapshot;
 import com.ikunkk02.wishingwillow.research.ModResearchManager;
 import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
@@ -40,10 +40,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class ClientWishPlanningCoordinator {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final CapabilityMatcher MATCHER = new CapabilityMatcher();
-    private static final WishPlanner PLANNER = new WishPlanner();
-    private static final WishPlanningOrchestrator ORCHESTRATOR = new WishPlanningOrchestrator();
     private static final WishActionRouter ROUTER = new WishActionRouter();
-    private static final DirectWishActionPlanner DIRECT_PLANNER = new DirectWishActionPlanner();
+    private static final WishProgramCompiler PROGRAM_COMPILER = new WishProgramCompiler();
     private static final WishPlanningGeneration GENERATION = new WishPlanningGeneration();
     private static final AtomicReference<WishPlanningRequestPacket> ACTIVE_REQUEST = new AtomicReference<>();
     private static final ExecutorService MATCH_EXECUTOR = Executors.newFixedThreadPool(2,
@@ -59,7 +57,7 @@ public final class ClientWishPlanningCoordinator {
         WishPlanningGeneration.Token token = GENERATION.begin(packet.sessionId());
         cancelPrevious(previous, packet);
         AiConfig config = AiConfigManager.getInstance().get();
-        WishRouteDecision route = ROUTER.select(packet.originalWish(), packet.interpretation());
+        WishRouteDecision route = ROUTER.select(packet.program());
         LOGGER.info("Wish semantic analysis core={} deliverySemantic={}",
                 packet.interpretation().contract().requiredOutcome(),
                 WishSemanticRecipeRegistry.deliverySemantic(packet.interpretation()));
@@ -93,19 +91,18 @@ public final class ClientWishPlanningCoordinator {
 
         CompletableFuture<WishPlanningOutcome> planning;
         if (route.route() == WishExecutionRoute.DIRECT_ACTION) {
-            planning = DIRECT_PLANNER.plan(packet.sessionId(), provider, packet.originalWish(),
-                            packet.interpretation(), emptyCatalog, registry, packet.executionSettings())
-                    .thenCompose(result -> {
-                        if (token.cancelled()) return CompletableFuture.failedFuture(
-                                new CancellationException("SUPERSEDED_WISH"));
-                        if (result.state() == DirectActionPlanningResult.State.UNSUPPORTED_ACTION) {
-                            LOGGER.info("Wish route escalated session={} from=DIRECT_ACTION to=COMPLEX_AGENT reason={}",
-                                    packet.sessionId(), result.detail());
-                            return complexPlanning(packet, token, knowledge, registry, frozenPlatform,
-                                    provider, config, service, "direct_unsupported=" + result.detail());
-                        }
-                        return CompletableFuture.completedFuture(directOutcome(packet, route, result));
-                    });
+            try {
+                CompiledWishProgram compiled = PROGRAM_COMPILER.compile(packet.program(), packet.interpretation(),
+                        emptyCatalog, registry, packet.executionSettings());
+                LOGGER.info("Wish program compiled session={} coreActions={} presentationActions={} skill={}",
+                        packet.sessionId(), compiled.coreActions(), compiled.presentationActions(), packet.program().skill());
+                if (packet.program().usesSkill()) LOGGER.info("Skill selected session={} id={}",
+                        packet.sessionId(), packet.program().skill());
+                planning = CompletableFuture.completedFuture(programOutcome(packet, route, compiled));
+            } catch (RuntimeException error) {
+                LOGGER.warn("Wish program validation failed session={} detail={}", packet.sessionId(), error.getMessage());
+                planning = CompletableFuture.completedFuture(failedOutcome(packet, WishPlanError.INVALID_PARAMETER));
+            }
         } else {
             planning = complexPlanning(packet, token, knowledge, registry, frozenPlatform, provider,
                     config, service, route.reason());
@@ -125,8 +122,8 @@ public final class ClientWishPlanningCoordinator {
             AiService service, String routeReason
     ) {
         ToolCallingSupport support = service.toolCallingSupport(config);
-        LOGGER.info("Complex Agent route started session={} reason={} toolSupport={}",
-                packet.sessionId(), routeReason, support);
+        LOGGER.info("Unknown capability session={} reason={}", packet.sessionId(), routeReason);
+        LOGGER.info("Complex agent started session={} toolSupport={}", packet.sessionId(), support);
         return CompletableFuture.supplyAsync(() -> {
                     if (token.cancelled()) throw new CancellationException("SUPERSEDED_WISH");
                     return MATCHER.match(packet.originalWish(), packet.interpretation(), knowledge, registry,
@@ -136,42 +133,28 @@ public final class ClientWishPlanningCoordinator {
                     if (token.cancelled()) return CompletableFuture.failedFuture(
                             new CancellationException("SUPERSEDED_WISH"));
                     ForgeMinecraftToolPlatform platform = frozenPlatform.withCatalog(catalog);
-                    return ORCHESTRATOR.plan(packet.sessionId(), support, catalog,
-                                    () -> service.probeToolCallingSupport(config),
-                                    () -> CompletableFuture.supplyAsync(() -> runAgent(packet, token, knowledge,
-                                            registry, catalog, platform, provider), AI_EXECUTOR),
-                                    () -> PLANNER.plan(config, packet.originalWish(), packet.interpretation(),
-                                            packet.context(), catalog, new RegistrySnapshotEnvironment(registry),
-                                            packet.executionSettings()), token::cancelled,
-                                    snapshot -> clientSend(new WishAgentDebugPacket(snapshot), token))
-                            .thenApply(outcome -> {
-                                if (outcome.debug().fallbackReason()
-                                        == WishAgentFallbackReason.TOOL_CALLING_UNSUPPORTED) {
-                                    service.recordToolCallingSupport(config, ToolCallingSupport.UNSUPPORTED);
-                                }
-                                return outcome;
-                            });
+                    if (support != ToolCallingSupport.SUPPORTED) {
+                        return CompletableFuture.completedFuture(failedOutcome(packet, WishPlanError.UNSUPPORTED_ACTION));
+                    }
+                    return CompletableFuture.supplyAsync(() -> runAgent(packet, token, knowledge,
+                                    registry, catalog, platform, provider), AI_EXECUTOR)
+                            .thenApply(result -> new WishPlanningOutcome(result.result(), result.catalog(), result.debug()));
                 });
     }
 
-    private static WishPlanningOutcome directOutcome(WishPlanningRequestPacket packet,
-                                                     WishRouteDecision route,
-                                                     DirectActionPlanningResult result) {
-        boolean success = result.state() == DirectActionPlanningResult.State.SUCCESS
-                && result.compiled() != null;
-        var compiled = result.compiled();
+    private static WishPlanningOutcome programOutcome(WishPlanningRequestPacket packet,
+                                                      WishRouteDecision route,
+                                                      CompiledWishProgram compiled) {
         WishAgentDebugSnapshot debug = new WishAgentDebugSnapshot(packet.sessionId(),
-                WishPlanningMode.DIRECT_ACTION_MODE,
-                success ? WishAgentDebugState.COMPLETED : WishAgentDebugState.FAILED,
-                0, 0, List.of(), "", success ? "SUCCESS" : result.result().error().name(),
-                success ? WishVerificationState.CONTRACT_FULFILLED : WishVerificationState.NOT_FULFILLED,
-                success ? WishFinalizationState.SUCCESS : WishFinalizationState.REJECTED,
-                WishAgentFallbackReason.NONE, 0L, WishExecutionRoute.DIRECT_ACTION, route.reason(),
-                packet.interpretation().contract().requiredOutcome(),
-                success ? compiled.absurdity().style() : WishAbsurdityStyle.NONE,
-                success ? compiled.absurdity().intensity() : 0,
-                success ? compiled.directActions() : List.of());
-        return new WishPlanningOutcome(result.result(), result.catalog(), debug);
+                WishPlanningMode.DIRECT_ACTION_MODE, WishAgentDebugState.COMPLETED,
+                0, 0, List.of(), "", "SUCCESS", WishVerificationState.CONTRACT_FULFILLED,
+                WishFinalizationState.SUCCESS, WishAgentFallbackReason.NONE, 0L,
+                WishExecutionRoute.DIRECT_ACTION, route.reason(), compiled.program().goal(),
+                WishAbsurdityStyle.NONE, packet.interpretation().fulfillment().absurdity(),
+                java.util.stream.Stream.concat(
+                        compiled.coreActions().stream().map(value -> "CORE:" + value),
+                        compiled.presentationActions().stream().map(value -> "PRESENTATION:" + value)).toList());
+        return new WishPlanningOutcome(WishPlanResult.success(compiled.draft()), compiled.catalog(), debug);
     }
 
     private static WishAgentDebugSnapshot routeSnapshot(WishPlanningRequestPacket packet,

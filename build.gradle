@@ -43,6 +43,7 @@ minecraft {
         }
 
         gameTestServer {
+            // These tests intentionally reuse Minecraft's built-in empty template namespace.
             property 'forge.enabledGameTestNamespaces', 'minecraft'
         }
 

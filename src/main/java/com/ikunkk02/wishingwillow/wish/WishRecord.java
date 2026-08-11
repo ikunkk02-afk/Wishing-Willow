@@ -14,6 +14,8 @@ import com.ikunkk02.wishingwillow.planning.WishPlanNbt;
 import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import com.ikunkk02.wishingwillow.execution.WishExecutionState;
 import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptError;
+import com.ikunkk02.wishingwillow.program.WishProgram;
+import com.ikunkk02.wishingwillow.program.WishProgramJson;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -40,6 +42,7 @@ public record WishRecord(
         String model,
         long interpretationUpdatedAtEpochMillis,
         @Nullable WishInterpretation interpretation,
+        @Nullable WishProgram program,
         WishPlanState planState,
         WishPlanError planError,
         @Nullable WishPlan plan,
@@ -48,6 +51,21 @@ public record WishRecord(
         WishExecutionAcceptError executionError,
         String executionErrorDetail
 ) {
+    /** Source-compatible constructor for pre-program tests and migration helpers. */
+    public WishRecord(UUID sessionId, UUID playerId, String rawWish, ResourceLocation dimension,
+                      long submittedGameTime, long submittedAtEpochMillis, WishState state,
+                      InterpretationState interpretationState, AiErrorCategory aiErrorCategory,
+                      AiExecutionMode aiExecutionMode, AiProviderType providerType, String model,
+                      long interpretationUpdatedAtEpochMillis, @Nullable WishInterpretation interpretation,
+                      WishPlanState planState, WishPlanError planError, @Nullable WishPlan plan,
+                      @Nullable UUID executionId, WishExecutionState executionState,
+                      WishExecutionAcceptError executionError, String executionErrorDetail) {
+        this(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis, state,
+                interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
+                interpretationUpdatedAtEpochMillis, interpretation, null, planState, planError, plan,
+                executionId, executionState, executionError, executionErrorDetail);
+    }
+
     public WishRecord(UUID sessionId, UUID playerId, String rawWish, ResourceLocation dimension,
                       long submittedGameTime, long submittedAtEpochMillis, WishState state,
                       InterpretationState interpretationState, AiErrorCategory aiErrorCategory,
@@ -55,7 +73,7 @@ public record WishRecord(
                       long interpretationUpdatedAtEpochMillis, @Nullable WishInterpretation interpretation) {
         this(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis, state,
                 interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
-                interpretationUpdatedAtEpochMillis, interpretation,
+                interpretationUpdatedAtEpochMillis, interpretation, null,
                 WishPlanState.NOT_PLANNED, WishPlanError.NONE, null, null, WishExecutionState.NOT_ACCEPTED,
                 WishExecutionAcceptError.NONE, "");
     }
@@ -75,6 +93,7 @@ public record WishRecord(
                 session.model(),
                 session.interpretationUpdatedAtEpochMillis(),
                 session.interpretation(),
+                session.program(),
                 WishPlanState.NOT_PLANNED,
                 WishPlanError.NONE,
                 null,
@@ -93,15 +112,24 @@ public record WishRecord(
     ) {
         return new WishRecord(
                 sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
-                state, newState, errorCategory, aiExecutionMode, providerType, model, updatedAt, newInterpretation,
+                state, newState, errorCategory, aiExecutionMode, providerType, model, updatedAt, newInterpretation, program,
                 planState, planError, plan, executionId, executionState, executionError, executionErrorDetail
         );
+    }
+
+    public WishRecord withUnderstanding(InterpretationState newState, AiErrorCategory errorCategory,
+                                        @Nullable WishInterpretation newInterpretation,
+                                        @Nullable WishProgram newProgram, long updatedAt) {
+        return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
+                state, newState, errorCategory, aiExecutionMode, providerType, model, updatedAt,
+                newInterpretation, newProgram, planState, planError, plan, executionId, executionState,
+                executionError, executionErrorDetail);
     }
 
     public WishRecord withPlanning(WishPlanState newState, WishPlanError error, @Nullable WishPlan newPlan) {
         return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
                 state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
-                interpretationUpdatedAtEpochMillis, interpretation, newState, error, newPlan, executionId, executionState,
+                interpretationUpdatedAtEpochMillis, interpretation, program, newState, error, newPlan, executionId, executionState,
                 executionError, executionErrorDetail);
     }
 
@@ -113,7 +141,7 @@ public record WishRecord(
                                     WishExecutionAcceptError error, String detail) {
         return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
                 state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
-                interpretationUpdatedAtEpochMillis, interpretation, planState, planError, plan, id, newState,
+                interpretationUpdatedAtEpochMillis, interpretation, program, planState, planError, plan, id, newState,
                 error == null ? WishExecutionAcceptError.UNKNOWN : error, sanitizeDetail(detail));
     }
 
@@ -135,6 +163,8 @@ public record WishRecord(
         if (interpretation != null) {
             tag.put("Interpretation", saveInterpretation(interpretation));
         }
+        tag.putInt("WishRecordSchema", 2);
+        if (program != null) tag.putString("WishProgramJson", WishProgramJson.toJson(program));
         tag.putString("PlanState", planState.name());
         tag.putString("PlanError", planError.name());
         if (plan != null) tag.put("WishPlan", WishPlanNbt.save(plan));
@@ -183,6 +213,14 @@ public record WishRecord(
         }
         WishPlanState planState = safeEnum(WishPlanState.class, tag.getString("PlanState"), WishPlanState.NOT_PLANNED);
         WishPlanError planError = safeEnum(WishPlanError.class, tag.getString("PlanError"), WishPlanError.NONE);
+        WishProgram program = null;
+        if (tag.contains("WishProgramJson", Tag.TAG_STRING)) {
+            try { program = WishProgramJson.parseAndValidate(tag.getString("WishProgramJson")); }
+            catch (RuntimeException ignored) {
+                planState = WishPlanState.FAILED;
+                planError = WishPlanError.INVALID_JSON;
+            }
+        }
         WishPlan plan = null;
         if (tag.contains("WishPlan", Tag.TAG_COMPOUND)) {
             try { plan = WishPlanNbt.load(tag.getCompound("WishPlan")); }
@@ -235,6 +273,7 @@ public record WishRecord(
                         ? tag.getLong("InterpretationUpdatedAt")
                         : tag.getLong("SubmittedAt"),
                 interpretation,
+                program,
                 planState,
                 planError,
                 plan,

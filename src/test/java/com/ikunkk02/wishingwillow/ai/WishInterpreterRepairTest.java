@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WishInterpreterRepairTest {
-    private static final String VALID = """
+    private static final String VALID_INTERPRETATION = """
             {"schema_version":2,"intent":"wealth","literal_goal":"The player wants diamonds",
              "contract":{"type":"OBTAIN_RESOURCE","required_outcome":"The player must obtain ten real diamonds","hard_constraints":[
                {"kind":"RESOURCE_KIND","operator":"EQUALS","semantic":"item","quantity":0,"amount":0,"required":true},
@@ -23,6 +23,11 @@ class WishInterpreterRepairTest {
              "reasoning_summary":"The request is granted with an ironic delivery","tone":"IRONIC",
              "severity":35,"delivery":"IMMEDIATE","required_capabilities":["GIVE_ITEM"]}
             """;
+    private static final String VALID = """
+            {"interpretation":%s,"program":{"schema_version":1,"goal":"Give ten diamonds",
+             "core_actions":[{"action":"give_item","parameters":{"item":"minecraft:diamond","count":10}}],
+             "presentation_actions":[],"skill":"","unknown_capability":""}}
+            """.formatted(VALID_INTERPRETATION);
 
     @Test
     void repairsOneSchemaInvalidInterpretationWithoutRelaxingValidation() {

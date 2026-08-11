@@ -76,7 +76,7 @@ public final class DirectActionPlanCompiler {
         Set<String> seen = new LinkedHashSet<>();
         WishAbsurdityProfile requestedAbsurdity = normalizeAbsurdity(direct.absurdity(), interpretation);
         for (DirectWishAction modifier : absurdityPlanner.candidates(requestedAbsurdity, registry)) {
-            if (acceptedModifiers.size() >= 3) break;
+            if (acceptedModifiers.size() >= 8) break;
             String signature = modifier.type() + "|" + modifier.target() + "|" + modifier.resource()
                     + "|" + modifier.parameters();
             if (!seen.add(signature)) continue;
@@ -91,6 +91,8 @@ public final class DirectActionPlanCompiler {
                 acceptedModifiers.add(modifier);
             } catch (IllegalArgumentException rejectedModifier) {
                 dropped++;
+                WishingWillow.LOGGER.debug("Optional presentation action dropped action={} reason={}",
+                        modifier.type(), rejectedModifier.getMessage());
             }
         }
 
@@ -124,7 +126,7 @@ public final class DirectActionPlanCompiler {
         } else if (!resource.isBlank()) {
             throw invalid(WishPlanError.INVALID_PARAMETER);
         }
-        WishCapability capability = inferCapability(interpretation, direct.type());
+        WishCapability capability = inferCapability(interpretation, direct.type(), core);
         CapabilityCandidate candidate = candidates.candidate(capability, direct.type(), resourceType, resource);
         JsonObject parameters = direct.parameters().deepCopy();
         WishTargetType target = target(direct.target());
@@ -210,7 +212,7 @@ public final class DirectActionPlanCompiler {
             case GIVE_ITEM, REMOVE_ITEM -> RegistryEntryType.ITEM;
             case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
             case SPAWN_ENTITY, DESPAWN_ENTITY -> RegistryEntryType.ENTITY;
-            case PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER, REPLACE_BLOCK_AREA -> RegistryEntryType.BLOCK;
+            case CHANGE_BLOCK, PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER, REPLACE_BLOCK_AREA -> RegistryEntryType.BLOCK;
             case PLAY_SOUND -> RegistryEntryType.SOUND;
             case SPAWN_PARTICLE -> RegistryEntryType.PARTICLE;
             case TELEPORT -> "CANDIDATE_DIMENSION".equals(string(action.parameters(), "mode"))
@@ -219,10 +221,21 @@ public final class DirectActionPlanCompiler {
         };
     }
 
-    private static WishCapability inferCapability(WishInterpretation interpretation, WishActionType action) {
+    private static WishCapability inferCapability(WishInterpretation interpretation, WishActionType action,
+                                                  boolean core) {
         for (WishCapability capability : WishContractCapabilityDeriver.planningCapabilities(interpretation)) {
             if (WishActionPolicy.supports(capability, capability, action)) return capability;
         }
+        if (!core) return switch (action) {
+            case PLAY_SOUND -> WishCapability.SOUND_EVENT;
+            case SPAWN_PARTICLE -> WishCapability.VISUAL_EVENT;
+            case LIGHTNING -> WishCapability.LIGHTNING;
+            case EXPLOSION -> WishCapability.EXPLOSION;
+            case CHANGE_WEATHER -> WishCapability.CHANGE_WEATHER;
+            case CHANGE_TIME -> WishCapability.CHANGE_TIME;
+            case SPAWN_ENTITY -> WishCapability.SPAWN_ENTITY;
+            default -> throw invalid(WishPlanError.UNSUPPORTED_ACTION);
+        };
         throw invalid(WishPlanError.UNSUPPORTED_ACTION);
     }
 
@@ -237,6 +250,7 @@ public final class DirectActionPlanCompiler {
 
     private static WishAbsurdityProfile normalizeAbsurdity(WishAbsurdityProfile requested,
                                                             WishInterpretation interpretation) {
+        if (requested.style() == WishAbsurdityStyle.NONE && requested.intensity() == 0) return requested;
         if (interpretation.fulfillment().mode() == WishFulfillmentMode.CLASSIC
                 && requested.style() == WishAbsurdityStyle.NONE) return requested;
         int intensity = Math.min(100, Math.max(requested.intensity(),

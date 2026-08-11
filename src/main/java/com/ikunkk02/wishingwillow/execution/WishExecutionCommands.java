@@ -46,6 +46,53 @@ public final class WishExecutionCommands {
                                     + " elapsedMs=" + debug.elapsedMs()), false);
                             return 1;
                         })))
+                .then(Commands.literal("program")
+                        .then(Commands.literal("latest").executes(context -> {
+                            var player = context.getSource().getPlayerOrException();
+                            WishRecord wish = WishSavedData.get(context.getSource().getServer()).getLatest(player.getUUID());
+                            if (wish == null || wish.program() == null) {
+                                context.getSource().sendFailure(Component.literal("No Wish Program record found.")); return 0;
+                            }
+                            WishExecutionRecord execution = wish.executionId() == null ? null
+                                    : WishExecutionSavedData.get(context.getSource().getServer()).get(wish.executionId());
+                            long elapsed = execution == null ? 0L
+                                    : Math.max(0L, execution.updatedGameTime() - execution.createdGameTime()) * 50L;
+                            int completed = execution == null ? 0 : (int) execution.steps().stream()
+                                    .filter(step -> step.state() == WishStepExecutionState.SUCCEEDED).count();
+                            int failed = execution == null ? 0 : (int) execution.steps().stream()
+                                    .filter(step -> step.state() == WishStepExecutionState.FAILED
+                                            || step.state() == WishStepExecutionState.STALE).count();
+                            context.getSource().sendSuccess(() -> Component.literal("session=" + wish.sessionId()
+                                    + " goal=" + wish.program().goal() + " state=" + wish.executionState()
+                                    + " coreActions=" + wish.program().coreActions().stream().map(a -> a.action()).toList()
+                                    + " presentationActions=" + wish.program().presentationActions().stream().map(a -> a.action()).toList()
+                                    + " completedActions=" + completed + " failedActions=" + failed
+                                    + " selectedSkill=" + wish.program().skill()
+                                    + " agentUsed=" + wish.program().requiresAgent() + " elapsedMs=" + elapsed), false);
+                            return 1;
+                        })))
+                .then(Commands.literal("action")
+                        .then(Commands.literal("latest").executes(context -> {
+                            var player = context.getSource().getPlayerOrException();
+                            WishRecord wish = WishSavedData.get(context.getSource().getServer()).getLatest(player.getUUID());
+                            WishExecutionRecord execution = wish == null || wish.executionId() == null ? null
+                                    : WishExecutionSavedData.get(context.getSource().getServer()).get(wish.executionId());
+                            if (wish == null || wish.plan() == null || execution == null) {
+                                context.getSource().sendFailure(Component.literal("No action execution record found.")); return 0;
+                            }
+                            WishStepExecution step = execution.steps().stream().filter(value -> !value.state().terminal())
+                                    .findFirst().orElseGet(() -> execution.steps().isEmpty() ? null
+                                            : execution.steps().get(execution.steps().size() - 1));
+                            if (step == null) return 0;
+                            var planned = wish.plan().steps().get(step.stepIndex());
+                            var definition = WishExecutionManager.actions().definition(planned.action());
+                            context.getSource().sendSuccess(() -> Component.literal("session=" + wish.sessionId()
+                                    + " action=" + (definition == null ? planned.action().name() : definition.id())
+                                    + " parameters=" + planned.parameters() + " state=" + step.state()
+                                    + " result=" + step.lastResult() + " error=" + step.lastError()
+                                    + " affected=" + step.affected()), false);
+                            return 1;
+                        })))
                 .then(Commands.literal("wish")
                         .then(Commands.literal("latest").executes(context -> {
                             var player=context.getSource().getPlayerOrException();

@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /** Explicit three-state routing and fail-open-to-JSON reliability boundary for wish planning. */
+@Deprecated(forRemoval = false)
 public final class WishPlanningOrchestrator {
     public static final Duration DEFAULT_PROBE_TIMEOUT = Duration.ofSeconds(8);
     public static final Duration DEFAULT_AGENT_TIMEOUT = WishAgentSession.MAX_DURATION.plusSeconds(1);

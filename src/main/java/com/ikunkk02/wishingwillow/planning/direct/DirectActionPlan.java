@@ -16,7 +16,7 @@ public record DirectActionPlan(
         summary = Objects.requireNonNullElse(summary, "").strip();
         actions = List.copyOf(actions == null ? List.of() : actions);
         absurdity = absurdity == null ? WishAbsurdityProfile.none() : absurdity;
-        if (summary.isEmpty() || summary.length() > 512 || actions.size() > 10) {
+        if (summary.isEmpty() || summary.length() > 512 || actions.size() > 32) {
             throw new IllegalArgumentException("INVALID_DIRECT_ACTION_PLAN");
         }
         if (route == WishExecutionRoute.DIRECT_ACTION && actions.isEmpty()) {

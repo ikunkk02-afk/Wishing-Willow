@@ -14,10 +14,8 @@ import com.ikunkk02.wishingwillow.planning.WishContextCollector;
 import com.ikunkk02.wishingwillow.planning.WishPlanError;
 import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import com.ikunkk02.wishingwillow.planning.WishPlanStore;
-import com.ikunkk02.wishingwillow.planning.FallbackWishPlanner;
 import com.ikunkk02.wishingwillow.planning.WishPlanResult;
-import com.ikunkk02.wishingwillow.planning.ServerPlanningEnvironment;
-import com.ikunkk02.wishingwillow.execution.WishExecutionManager;
+import com.ikunkk02.wishingwillow.execution.WishActionManager;
 import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptResult;
 import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptError;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
@@ -29,6 +27,8 @@ import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
 import com.ikunkk02.wishingwillow.network.packet.WishOmenPacket;
 import com.ikunkk02.wishingwillow.agent.core.WishAgentDebugStore;
 import com.ikunkk02.wishingwillow.omen.WishOmenGenerator;
+import com.ikunkk02.wishingwillow.program.WishProgram;
+import com.ikunkk02.wishingwillow.program.WishProgramJson;
 import com.ikunkk02.wishingwillow.registry.ModItems;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -153,6 +153,7 @@ public final class WishManager {
 
         ACTIVE_SESSIONS.put(playerId, session);
         persist(player.server, session);
+        WishingWillow.LOGGER.info("Wish received session={} player={}", session.sessionId(), playerId);
 
         session.transitionTo(WishState.ANIMATING, gameTime);
         persist(player.server, session);
@@ -185,7 +186,8 @@ public final class WishManager {
             UUID sessionId,
             InterpretationState state,
             AiErrorCategory errorCategory,
-            @Nullable WishInterpretation interpretation
+            @Nullable WishInterpretation interpretation,
+            @Nullable WishProgram program
     ) {
         if (state != InterpretationState.SUCCESS
                 && state != InterpretationState.AI_REQUEST_FAILED
@@ -208,6 +210,9 @@ public final class WishManager {
             }
             try {
                 WishInterpretationValidator.validate(interpretation);
+                if (program == null) throw new IllegalArgumentException("MISSING_WISH_PROGRAM");
+                WishProgramJson.validate(program,
+                        com.ikunkk02.wishingwillow.execution.action.WishActionRegistry.defaults());
             } catch (IllegalArgumentException exception) {
                 state = InterpretationState.INVALID_RESPONSE;
                 acceptedError = AiErrorCategory.MALFORMED_RESPONSE;
@@ -225,12 +230,15 @@ public final class WishManager {
         long now = System.currentTimeMillis();
         WishSession active = ACTIVE_SESSIONS.get(player.getUUID());
         if (active != null && active.sessionId().equals(sessionId)) {
-            active.completeInterpretation(state, acceptedError, acceptedInterpretation, now);
+            active.completeInterpretation(state, acceptedError, acceptedInterpretation,
+                    state == InterpretationState.SUCCESS ? program : null, now);
             persist(player.server, active);
         } else {
-            data.updateInterpretation(sessionId, state, acceptedError, acceptedInterpretation, now);
+            data.updateUnderstanding(sessionId, state, acceptedError, acceptedInterpretation,
+                    state == InterpretationState.SUCCESS ? program : null, now);
         }
         if (state == InterpretationState.SUCCESS && acceptedInterpretation != null) {
+            WishingWillow.LOGGER.info("Wish interpreted session={} goal={}", sessionId, program.goal());
             WishPipelineAudit.success(sessionId,"INTERPRETATION",
                     "severity="+acceptedInterpretation.severity()+" capabilities="+acceptedInterpretation.requiredCapabilities().size());
             beginPlanning(player, sessionId, acceptedInterpretation);
@@ -238,6 +246,12 @@ public final class WishManager {
             WishPipelineAudit.failure(sessionId,"INTERPRETATION",acceptedError.name(),state.name());
             WishPlanStore.fail(player.server, sessionId, WishPlanError.AI_REQUEST_FAILED);
         }
+    }
+
+    public static void handleInterpretationResult(ServerPlayer player, UUID sessionId,
+                                                  InterpretationState state, AiErrorCategory errorCategory,
+                                                  @Nullable WishInterpretation interpretation) {
+        handleInterpretationResult(player, sessionId, state, errorCategory, interpretation, null);
     }
 
     public static void handlePlanningProgress(ServerPlayer player, UUID sessionId, UUID attemptId,
@@ -299,8 +313,7 @@ public final class WishManager {
                 WishPipelineAudit.success(sessionId,"PLANNING","state="+accepted.planState()+" steps="+accepted.plan().steps().size());
                 WishPipelineAudit.success(sessionId,"SERVER_PLAN_VALIDATION",
                         "plan="+accepted.plan().planId()+" state="+accepted.planState()+" steps="+accepted.plan().steps().size());
-                WishExecutionAcceptResult result=WishExecutionManager.accept(player, accepted.plan());
-                if(!result.accepted())result=tryFallbackAfterExecutionRejection(player,accepted,catalog,result,attemptsUsed);
+                WishExecutionAcceptResult result=WishActionManager.start(player, accepted.plan());
                 if(!result.accepted())player.sendSystemMessage(Component.translatable("message.wishing_willow.technical_failure"));
                 else sendOmenForAcceptedPlan(player,sessionId);
             }
@@ -433,11 +446,7 @@ public final class WishManager {
     }
 
     private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) return;
-        WishRecord resumable = WishSavedData.get(player.server).getLatestResumablePlanning(player.getUUID());
-        if (resumable == null || resumable.interpretation() == null) return;
-        WishingWillow.LOGGER.info("Wish planning resumed after reconnect session={}", resumable.sessionId());
-        beginPlanning(player, resumable.sessionId(), resumable.interpretation());
+        // AI/planning states are not replayable. Persisted low-level executions rebuild independently.
     }
 
     private static void onLivingDeath(LivingDeathEvent event) {
@@ -550,8 +559,13 @@ public final class WishManager {
         UUID attemptId = UUID.randomUUID();
         PLANNING_ATTEMPTS.put(sessionId, new PlanningAttempt(attemptId, player.getUUID()));
         WishPlanStore.updateState(player.server, sessionId, WishPlanState.MATCHING);
+        if (record.program() == null) {
+            WishPlanStore.fail(player.server, sessionId, WishPlanError.INVALID_JSON);
+            PLANNING_ATTEMPTS.remove(sessionId);
+            return;
+        }
         ModNetworking.sendToPlayer(player, new WishPlanningRequestPacket(sessionId, attemptId, record.rawWish(),
-                record.providerType(), record.model(), interpretation, WishContextCollector.collect(player),
+                record.providerType(), record.model(), interpretation, record.program(), WishContextCollector.collect(player),
                 ExecutionSettingsSnapshot.planning()));
     }
 
@@ -567,40 +581,6 @@ public final class WishManager {
     private static WishPlanError planError(IllegalArgumentException exception) {
         try { return WishPlanError.valueOf(exception.getMessage()); }
         catch (RuntimeException ignored) { return WishPlanError.UNKNOWN; }
-    }
-
-    private static WishExecutionAcceptResult tryFallbackAfterExecutionRejection(ServerPlayer player,
-                                                                                 WishRecord record,
-                                                                                 CapabilityCatalog catalog,
-                                                                                 WishExecutionAcceptResult rejected,
-                                                                                 int attemptsUsed) {
-        if(attemptsUsed>=com.ikunkk02.wishingwillow.planning.WishPlanRepairCoordinator.MAX_ATTEMPTS
-                ||!fallbackEligible(rejected.error())||record.interpretation()==null)return rejected;
-        int fallbackAttempt=attemptsUsed+1;
-        WishingWillow.LOGGER.info("Wish fulfillment replan reason={} attempt={}",rejected.error(),fallbackAttempt);
-        WishPlanResult fallback=new FallbackWishPlanner().plan(record.rawWish(),record.interpretation(),
-                WishContextCollector.collect(player),catalog,new ServerPlanningEnvironment(player.server),
-                ExecutionSettingsSnapshot.planning());
-        if(fallback.draft()==null){
-            WishPipelineAudit.failure(record.sessionId(),"FALLBACK",fallback.error().name(),"no contract-preserving fallback");
-            return rejected;
-        }
-        try{
-            WishPlanStore.replaceAfterExecutionRejection(player.server,record.sessionId(),record.interpretation(),
-                    fallback.draft(),catalog);
-            WishRecord replacement=WishSavedData.get(player.server).getBySession(record.sessionId());
-            if(replacement==null||replacement.plan()==null)return rejected;
-            WishPipelineAudit.success(record.sessionId(),"FALLBACK",
-                    "plan="+replacement.plan().planId()+" steps="+replacement.plan().steps().size());
-            String source=replacement.plan().steps().get(0).candidateReference().sourceKind()
-                    ==com.ikunkk02.wishingwillow.planning.CandidateSourceKind.VANILLA_REGISTRY
-                    ?"VANILLA":"WISHING_WILLOW_BUILTIN";
-            WishingWillow.LOGGER.info("Wish fulfillment fallback source={}",source);
-            return WishExecutionManager.accept(player,replacement.plan());
-        }catch(IllegalArgumentException error){
-            WishPipelineAudit.failure(record.sessionId(),"FALLBACK",planError(error).name(),error.getMessage());
-            return rejected;
-        }
     }
 
     private static void sendOmenForAcceptedPlan(ServerPlayer player, UUID sessionId) {
@@ -624,18 +604,6 @@ public final class WishManager {
                         + " finalization=" + debug.finalizationState()));
             }
         }
-    }
-
-    private static boolean fallbackEligible(WishExecutionAcceptError error){
-        return switch(error){
-            case VALIDATION_FAILED,INVALID_CANDIDATE,INVALID_RESOURCE,STALE_RESOURCE,
-                    INVALID_ACTION_CAPABILITY,INVALID_PARAMETER,INVALID_EVENT,
-                    UNTRUSTED_REGISTRY_CANDIDATE,UNSUPPORTED_ACTION,BUDGET_EXCEEDED,RISK_TOO_HIGH,
-                    THIRD_PARTY_ENTITY_DISABLED,THIRD_PARTY_ENTITY_SEVERITY,
-                    BLOCK_MODIFICATION_DISABLED,EXPLOSIONS_DISABLED,DESTRUCTIVE_EXPLOSIONS_DISABLED,
-                    CROSS_DIMENSION_TELEPORT_DISABLED,DESTRUCTIVE_SEVERITY_DISABLED,DEBUG_SAFE_MODE -> true;
-            default -> false;
-        };
     }
 
     private record PlanningAttempt(UUID attemptId, UUID playerId) { }

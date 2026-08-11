@@ -8,6 +8,7 @@ import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 
 import java.util.concurrent.CompletableFuture;
 
+@Deprecated(forRemoval = false)
 public final class WishPlanner {
     private final AiWishPlanner aiPlanner;
     private final FallbackWishPlanner fallbackPlanner;

@@ -23,7 +23,7 @@ import java.util.Set;
 
 final class DirectActionJson {
     static final int MAX_JSON = 64 * 1024;
-    static final Set<WishActionType> DIRECT_ACTIONS = Set.copyOf(EnumSet.of(
+    public static final Set<WishActionType> DIRECT_ACTIONS = Set.copyOf(EnumSet.of(
             WishActionType.GIVE_ITEM, WishActionType.REMOVE_ITEM,
             WishActionType.APPLY_EFFECT, WishActionType.REMOVE_EFFECT,
             WishActionType.CLEAR_EFFECTS, WishActionType.APPLY_EFFECT_CATEGORY,
@@ -33,7 +33,10 @@ final class DirectActionJson {
             WishActionType.PLACE_BLOCK_PATTERN, WishActionType.FALLING_BLOCK_SHOWER,
             WishActionType.REPLACE_BLOCK_AREA,
             WishActionType.PLAY_SOUND, WishActionType.SPAWN_PARTICLE,
+            WishActionType.MODIFY_HEALTH, WishActionType.MODIFY_HUNGER,
             WishActionType.MODIFY_ATTRIBUTE, WishActionType.CHANGE_REPUTATION,
+            WishActionType.CHANGE_BLOCK, WishActionType.CHANGE_MOB_TARGET,
+            WishActionType.FOLLOW_PLAYER, WishActionType.AVOID_PLAYER,
             WishActionType.START_PREDEFINED_EVENT
     ));
     private static final Set<String> ROOT_FIELDS = Set.of("route", "summary", "actions", "absurdity");
@@ -59,7 +62,7 @@ final class DirectActionJson {
         JsonObject root = parsed.getAsJsonObject();
         WishExecutionRoute route = enumValue(root, "route", WishExecutionRoute.class);
         String summary = string(root, "summary", 512, false);
-        List<DirectWishAction> actions = actionArray(root, "actions", 10);
+        List<DirectWishAction> actions = actionArray(root, "actions", 32);
         JsonObject absurdity = object(root, "absurdity", ABSURDITY_FIELDS);
         WishAbsurdityStyle style = enumValue(absurdity, "style", WishAbsurdityStyle.class);
         int intensity = integer(absurdity, "intensity");

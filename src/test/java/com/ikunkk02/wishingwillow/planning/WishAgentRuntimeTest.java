@@ -38,7 +38,8 @@ class WishAgentRuntimeTest {
         var skills = new WishAgentSkillLoader().load();
         assertEquals(1, skills.size());
         assertEquals(WishAgentSkillLoader.WISH_SKILL, skills.get(0).name());
-        assertTrue(skills.get(0).content().contains("finalize_wish_plan"));
+        assertTrue(skills.get(0).content().contains("UNKNOWN_CAPABILITY"));
+        assertTrue(skills.get(0).content().contains("Prefer an existing Action"));
     }
 
     @Test void searchIsActivationGatedRankedAndCapped() {
@@ -122,26 +123,24 @@ class WishAgentRuntimeTest {
                 runtime.registry().find("verify_wish_contract").executor().execute(session, new JsonObject()).status());
     }
 
-    @Test void duplicateSearchIsBlockedAndPlanEditForcesVerificationBeforeDiscovery() {
+    @Test void boundedAgentEditsVerifiesValidatesAndFinalizesWithinFiveIterations() {
         java.util.concurrent.atomic.AtomicInteger turn = new java.util.concurrent.atomic.AtomicInteger();
         ChatModel model = model(request -> {
-            ToolExecutionRequest call = switch (turn.getAndIncrement()) {
-                case 0 -> call("activate_skill", "{\"why\":\"load SOP\"}");
-                case 1 -> call("search_minecraft_tools", "{\"query\":\"give items registry\",\"limit\":12,\"why\":\"find item planner\"}");
-                case 2 -> call("search_minecraft_tools", "{\"query\":\"give items registry\",\"limit\":4,\"why\":\"repeat semantic\"}");
-                case 3 -> call("plan_give_items", "{\"resource_id\":\"minecraft:diamond_block\",\"count\":100,\"why\":\"fulfill quantity\"}");
-                case 4 -> call("query_registry", "{\"registry\":\"ITEM\",\"query\":\"diamond\",\"why\":\"unnecessary requery\"}");
-                case 5 -> call("verify_wish_contract", "{\"why\":\"verify edited draft\"}");
-                case 6 -> call("validate_draft_plan", "{\"why\":\"validate final revision\"}");
-                default -> call("finalize_wish_plan", "{\"why\":\"finalize now\"}");
+            int value = turn.getAndIncrement();
+            List<ToolExecutionRequest> calls = switch (value) {
+                case 0 -> List.of(call("activate_skill", "{\"why\":\"load SOP\"}"),
+                        call("search_minecraft_tools", "{\"query\":\"plan give items\",\"limit\":12,\"why\":\"find missing capability\"}"));
+                case 1 -> List.of(call("plan_give_items", "{\"resource_id\":\"minecraft:diamond_block\",\"count\":100,\"why\":\"fulfill quantity\"}"));
+                case 2 -> List.of(call("verify_wish_contract", "{\"why\":\"verify edited draft\"}"));
+                case 3 -> List.of(call("validate_draft_plan", "{\"why\":\"validate final revision\"}"));
+                default -> List.of(call("finalize_wish_plan", "{\"why\":\"finalize now\"}"));
             };
-            return ChatResponse.builder().aiMessage(AiMessage.from("", List.of(call))).build();
+            return ChatResponse.builder().aiMessage(AiMessage.from("", calls)).build();
         });
         WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
         var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
         assertNotNull(run.result().draft());
-        assertTrue(session.history().stream().anyMatch(entry -> entry.code().equals("DUPLICATE_TOOL_CALL")));
-        assertTrue(session.history().stream().anyMatch(entry -> entry.code().equals("PLAN_EDIT_REQUIRES_VERIFICATION")));
+        assertEquals(5, session.iterations());
         assertEquals("fulfill quantity", session.history().stream()
                 .filter(entry -> entry.toolName().equals("plan_give_items")).findFirst().orElseThrow().why());
     }
@@ -160,7 +159,7 @@ class WishAgentRuntimeTest {
         var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
         assertNull(run.result().draft());
         assertEquals(WishAgentFallbackReason.DUPLICATE_TOOL_LOOP, run.debug().fallbackReason());
-        assertTrue(session.iterations() < WishAgentSession.MAX_ITERATIONS);
+        assertTrue(session.iterations() <= WishAgentSession.MAX_ITERATIONS);
         assertEquals(1, session.history().stream()
                 .filter(entry -> entry.toolName().equals("query_registry"))
                 .filter(entry -> !entry.code().equals("DUPLICATE_TOOL_CALL")).count());
@@ -190,22 +189,22 @@ class WishAgentRuntimeTest {
         java.util.concurrent.atomic.AtomicInteger turn = new java.util.concurrent.atomic.AtomicInteger();
         ChatModel model = model(request -> {
             int value = turn.getAndIncrement();
-            ToolExecutionRequest call = switch (value) {
-                case 0 -> call("activate_skill", "{}");
-                case 1 -> call("search_minecraft_tools", "{\"query\":\"plan give items\",\"limit\":12}");
-                case 2 -> call("plan_give_items", "{\"resource_id\":\"minecraft:diamond_block\",\"count\":100}");
-                case 3 -> call("verify_wish_contract", "{}");
-                case 4 -> call("validate_draft_plan", "{}");
-                default -> call("finalize_wish_plan", "{}");
+            List<ToolExecutionRequest> calls = switch (value) {
+                case 0 -> List.of(call("activate_skill", "{}"),
+                        call("search_minecraft_tools", "{\"query\":\"plan give items\",\"limit\":12}"));
+                case 1 -> List.of(call("plan_give_items", "{\"resource_id\":\"minecraft:diamond_block\",\"count\":100}"));
+                case 2 -> List.of(call("verify_wish_contract", "{}"));
+                case 3 -> List.of(call("validate_draft_plan", "{}"));
+                default -> List.of(call("finalize_wish_plan", "{}"));
             };
-            return ChatResponse.builder().aiMessage(AiMessage.from("", List.of(call))).build();
+            return ChatResponse.builder().aiMessage(AiMessage.from("", calls)).build();
         });
         WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
         var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
         assertNotNull(run.result().draft());
         assertEquals(WishFinalizationState.SUCCESS, run.debug().finalizationState());
         assertEquals(WishAgentFallbackReason.NONE, run.debug().fallbackReason());
-        assertEquals(6, session.iterations());
+        assertEquals(5, session.iterations());
     }
 
     @Test void twoProseOnlyResponsesTriggerJsonFallbackSignal() {

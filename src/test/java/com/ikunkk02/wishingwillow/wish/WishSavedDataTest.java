@@ -71,7 +71,7 @@ class WishSavedDataTest {
         data.update(record(latest, player, 200L, InterpretationState.SUCCESS)
                 .withPlanning(WishPlanState.FAILED, WishPlanError.DISCONNECTED, null));
 
-        assertEquals(latest, data.getLatestResumablePlanning(player, 300L).sessionId());
+        assertEquals(null, data.getLatestResumablePlanning(player, 300L));
 
         data.update(record(UUID.randomUUID(), player, 400L, InterpretationState.SUCCESS)
                 .withPlanning(WishPlanState.FAILED, WishPlanError.INVALID_PARAMETER, null));

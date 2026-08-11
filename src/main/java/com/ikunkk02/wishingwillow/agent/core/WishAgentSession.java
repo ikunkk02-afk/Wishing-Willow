@@ -32,8 +32,8 @@ import java.util.function.Consumer;
 
 /** Mutable state of one agent invocation; all frozen inputs are immutable snapshots. */
 public final class WishAgentSession {
-    public static final int MAX_ITERATIONS = 8;
-    public static final int MAX_TOTAL_TOOL_CALLS = 20;
+    public static final int MAX_ITERATIONS = 5;
+    public static final int MAX_TOTAL_TOOL_CALLS = 10;
     public static final int MAX_RAW_STEPS = 512;
     public static final Duration MAX_DURATION = Duration.ofSeconds(60);
 

@@ -21,6 +21,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.UUID;
 
 /** Exactly one normal Action request and, when validation fails, at most one repair request. */
+@Deprecated(forRemoval = false)
 public final class DirectWishActionPlanner {
     public static final int MAX_ATTEMPTS = 2;
     public static final int REQUEST_TIMEOUT_SECONDS = 8;

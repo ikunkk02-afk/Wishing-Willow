@@ -11,7 +11,7 @@ public record WishAbsurdityProfile(
     public WishAbsurdityProfile {
         style = Objects.requireNonNull(style);
         modifiers = List.copyOf(modifiers == null ? List.of() : modifiers);
-        if (intensity < 0 || intensity > 100 || modifiers.size() > 3) {
+        if (intensity < 0 || intensity > 100 || modifiers.size() > 8) {
             throw new IllegalArgumentException("INVALID_ABSURDITY_PROFILE");
         }
     }

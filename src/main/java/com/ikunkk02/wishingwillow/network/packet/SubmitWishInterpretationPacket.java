@@ -5,6 +5,8 @@ import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishInterpretationValidator;
 import com.ikunkk02.wishingwillow.wish.WishManager;
+import com.ikunkk02.wishingwillow.program.WishProgram;
+import com.ikunkk02.wishingwillow.program.WishProgramJson;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -17,8 +19,14 @@ public record SubmitWishInterpretationPacket(
         UUID sessionId,
         InterpretationState state,
         AiErrorCategory errorCategory,
-        @Nullable WishInterpretation interpretation
+        @Nullable WishInterpretation interpretation,
+        @Nullable WishProgram program
 ) {
+    public SubmitWishInterpretationPacket(UUID sessionId, InterpretationState state,
+                                          AiErrorCategory errorCategory,
+                                          @Nullable WishInterpretation interpretation) {
+        this(sessionId, state, errorCategory, interpretation, null);
+    }
     public static void encode(SubmitWishInterpretationPacket packet, FriendlyByteBuf buffer) {
         buffer.writeUUID(packet.sessionId);
         buffer.writeEnum(packet.state);
@@ -27,6 +35,8 @@ public record SubmitWishInterpretationPacket(
         if (packet.interpretation != null) {
             buffer.writeUtf(WishInterpretationValidator.toJson(packet.interpretation), 32 * 1024);
         }
+        buffer.writeBoolean(packet.program != null);
+        if (packet.program != null) buffer.writeUtf(WishProgramJson.toJson(packet.program), WishProgramJson.MAX_JSON);
     }
 
     public static SubmitWishInterpretationPacket decode(FriendlyByteBuf buffer) {
@@ -37,7 +47,9 @@ public record SubmitWishInterpretationPacket(
         if (buffer.readBoolean()) {
             interpretation = WishInterpretationValidator.parseAndValidate(buffer.readUtf(32 * 1024));
         }
-        return new SubmitWishInterpretationPacket(sessionId, state, errorCategory, interpretation);
+        WishProgram program = buffer.readBoolean()
+                ? WishProgramJson.parseAndValidate(buffer.readUtf(WishProgramJson.MAX_JSON)) : null;
+        return new SubmitWishInterpretationPacket(sessionId, state, errorCategory, interpretation, program);
     }
 
     public static void handle(
@@ -51,7 +63,8 @@ public record SubmitWishInterpretationPacket(
                     packet.sessionId,
                     packet.state,
                     packet.errorCategory,
-                    packet.interpretation
+                    packet.interpretation,
+                    packet.program
             );
         }
     }

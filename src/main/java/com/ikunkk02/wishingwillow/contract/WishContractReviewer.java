@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.time.Duration;
 
 /** A second, isolated semantic pass. Hash echoing prevents a review from being reused for another contract or plan. */
+@Deprecated(forRemoval = false)
 public final class WishContractReviewer {
     public static final Duration REVIEW_TIMEOUT = Duration.ofSeconds(20);
     private static final Set<String> FIELDS = Set.of("contract_hash", "plan_hash", "verdict", "reason");

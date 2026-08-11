@@ -8,6 +8,7 @@ import com.ikunkk02.wishingwillow.planning.ai.AiWishPlanner;
 
 import java.util.concurrent.CompletableFuture;
 
+@Deprecated(forRemoval = false)
 public final class WishPlanRepairCoordinator {
     public static final int MAX_ATTEMPTS = 3;
     private final AiWishPlanner aiPlanner;

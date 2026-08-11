@@ -153,15 +153,15 @@ class DirectWishActionPlannerTest {
         assertEquals(WishPlanError.INVALID_JSON, injection.result().error());
     }
 
-    @Test void missingOrIllegalAbsurdityNeverRemovesCoreFulfillment() {
+    @Test void explicitNoPresentationNeverSynthesizesUnrelatedActionsAndIllegalPresentationIsDropped() {
         DirectActionPlanningResult missing = plan(new QueueProvider(json("""
                 {"type":"GIVE_ITEM","target":"SELF","resource":"minecraft:diamond","parameters":{"count":1}}
                 """, "NONE", 0, "")), resourceWish("diamond", 1));
         assertTrue(missing.compiled().draft().steps().stream()
                 .anyMatch(step -> step.action() == WishActionType.GIVE_ITEM));
-        assertEquals(WishAbsurdityStyle.CINEMATIC, missing.compiled().absurdity().style());
-        assertTrue(missing.compiled().absurdity().intensity() >= 75);
-        assertFalse(missing.compiled().absurdity().modifiers().isEmpty());
+        assertEquals(WishAbsurdityStyle.NONE, missing.compiled().absurdity().style());
+        assertEquals(0, missing.compiled().absurdity().intensity());
+        assertTrue(missing.compiled().absurdity().modifiers().isEmpty());
 
         String illegalExplosion = """
                 {"type":"EXPLOSION","target":"AREA","resource":"","parameters":{"power":8,"destroy_blocks":true,"distance_min":2,"distance_max":4}}

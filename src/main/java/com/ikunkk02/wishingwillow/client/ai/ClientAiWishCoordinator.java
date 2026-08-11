@@ -108,7 +108,8 @@ public final class ClientAiWishCoordinator {
                     completed.sessionId,
                     completed.result.state(),
                     completed.result.errorCategory(),
-                    completed.result.interpretation()
+                    completed.result.interpretation(),
+                    completed.result.program()
             ));
             PENDING.remove(completed.sessionId);
         }
