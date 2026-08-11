@@ -12,6 +12,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 
 import java.util.UUID;
+import com.ikunkk02.wishingwillow.client.music.WishingWillowMusicController;
 
 public final class WishScreen extends Screen {
     private final InteractionHand hand;
@@ -41,6 +42,7 @@ public final class WishScreen extends Screen {
 
     @Override
     protected void init() {
+        WishingWillowMusicController.startWishSequence();
         panelWidth = Math.min(420, Math.max(190, width - 12));
         panelHeight = Math.min(270, Math.max(106, height - 12));
         panelLeft = (width - panelWidth) / 2;
@@ -182,6 +184,12 @@ public final class WishScreen extends Screen {
                         panelTop + panelHeight - 41, RetroUiTheme.MUTED_INK);
             }
         }
+    }
+
+    @Override
+    public void onClose() {
+        if (!submitted) WishingWillowMusicController.cancelWishSequence();
+        super.onClose();
     }
 
     @Override

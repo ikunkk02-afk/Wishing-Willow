@@ -22,5 +22,15 @@
     "sounds": [
       "wishing_willow:item/willow_slide"
     ]
+  },
+  "music.trade_reveal": {
+    "sounds": [
+      { "name": "wishing_willow:music/wishing_willow_theme", "stream": true }
+    ]
+  },
+  "music.wish_sequence": {
+    "sounds": [
+      { "name": "wishing_willow:music/wishing_willow_theme", "stream": true }
+    ]
   }
 }

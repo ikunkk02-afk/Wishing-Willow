@@ -20,6 +20,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.config.ModConfig;
+import com.ikunkk02.wishingwillow.config.WishingWillowClientConfig;
 import software.bernie.geckolib.GeckoLib;
 import org.slf4j.Logger;
 
@@ -45,6 +46,8 @@ public final class WishingWillow {
         com.ikunkk02.wishingwillow.wish.WishPipelineConsistencyChecker.register();
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, WishExecutionConfig.SPEC,
                 "wishing_willow-server.toml");
+        ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, WishingWillowClientConfig.SPEC,
+                "wishing_willow-client.toml");
         DistExecutor.unsafeRunWhenOn(
                 Dist.CLIENT,
                 () -> () -> com.ikunkk02.wishingwillow.client.ClientSetup.register(context)

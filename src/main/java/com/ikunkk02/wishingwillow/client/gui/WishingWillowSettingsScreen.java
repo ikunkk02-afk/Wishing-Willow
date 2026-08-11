@@ -28,13 +28,15 @@ public final class WishingWillowSettingsScreen extends Screen {
                 Component.translatable("screen.wishing_willow.settings.ai"),
                 Component.translatable("screen.wishing_willow.settings.knowledge"),
                 Component.translatable("screen.wishing_willow.settings.research"),
-                Component.translatable("screen.wishing_willow.settings.execution")
+                Component.translatable("screen.wishing_willow.settings.execution"),
+                Component.literal("Wish & Cinematic Music")
         };
         net.minecraft.client.gui.components.Button.OnPress[] actions = new net.minecraft.client.gui.components.Button.OnPress[]{
                 button -> minecraft.setScreen(new AiSettingsScreen(this)),
                 button -> minecraft.setScreen(new ModKnowledgeBaseScreen(this)),
                 button -> minecraft.setScreen(new ResearchSettingsScreen(this)),
-                button -> minecraft.setScreen(new ExecutionSettingsScreen(this))
+                button -> minecraft.setScreen(new ExecutionSettingsScreen(this)),
+                button -> minecraft.setScreen(new MusicSettingsScreen(this))
         };
         for (int index = 0; index < labels.length; index++) {
             addRenderableWidget(RetroButton.create(labels[index], actions[index],

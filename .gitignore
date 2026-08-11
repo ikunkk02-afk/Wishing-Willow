@@ -35,3 +35,7 @@ local.properties
 **/wishing_willow/ai-client.json
 **/wishing_willow/research-client.json
 **/wishing_willow/knowledge/
+
+# User-supplied copyrighted soundtrack (local development only)
+/The Little Dippers - Forever.flac
+/src/main/resources/assets/wishing_willow/sounds/music/wishing_willow_theme.ogg

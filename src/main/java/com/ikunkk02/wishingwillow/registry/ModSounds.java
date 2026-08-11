@@ -16,6 +16,8 @@ public final class ModSounds {
     public static final RegistryObject<SoundEvent> PACKAGE_RUSTLE = register("package_rustle");
     public static final RegistryObject<SoundEvent> PACKAGE_FLAP = register("package_flap");
     public static final RegistryObject<SoundEvent> WILLOW_SLIDE = register("willow_slide");
+    public static final RegistryObject<SoundEvent> TRADE_REVEAL_MUSIC = register("music.trade_reveal");
+    public static final RegistryObject<SoundEvent> WISH_SEQUENCE_MUSIC = register("music.wish_sequence");
 
     private ModSounds() {
     }

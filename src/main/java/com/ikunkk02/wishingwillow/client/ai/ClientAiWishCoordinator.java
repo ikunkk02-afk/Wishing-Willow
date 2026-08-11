@@ -13,6 +13,7 @@ import com.ikunkk02.wishingwillow.network.packet.SubmitWishInterpretationPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
 import com.ikunkk02.wishingwillow.wish.WishState;
+import com.ikunkk02.wishingwillow.config.WishingWillowClientConfig;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.api.distmarker.Dist;
@@ -74,7 +75,7 @@ public final class ClientAiWishCoordinator {
                 "AI request started provider={} model={} wishSession={} wishLength={}",
                 pending.config.providerType(), safeModel(pending.config.model()), sessionId, pending.wish.length()
         );
-        INTERPRETER.interpret(pending.config, pending.wish).whenComplete((result, throwable) -> {
+        INTERPRETER.interpret(pending.config, pending.wish, WishingWillowClientConfig.FULFILLMENT_MODE.get()).whenComplete((result, throwable) -> {
             WishInterpretationResult completed = result;
             if (throwable != null || completed == null) {
                 completed = WishInterpretationResult.requestFailure(AiErrorCategory.UNKNOWN, 0);

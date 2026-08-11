@@ -36,6 +36,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.joml.Vector3f;
 import software.bernie.geckolib.animatable.GeoItem;
+import com.ikunkk02.wishingwillow.client.music.WishingWillowMusicController;
 
 import javax.annotation.Nullable;
 import java.util.Locale;
@@ -80,6 +81,7 @@ public final class ClientWishSequence {
     }
 
     public static void start(WishStartedPacket packet) {
+        WishingWillowMusicController.startWishSequence();
         activeSession = new ClientSession(
                 packet.sessionId(),
                 packet.hand(),
@@ -94,6 +96,7 @@ public final class ClientWishSequence {
     public static void updateState(WishStatePacket packet) {
         ClientSession session = activeSession;
         if (packet.state() == WishState.CANCELLED) {
+            WishingWillowMusicController.cancelWishSequence();
             if (session != null && session.sessionId.equals(packet.correlationId())) {
                 clearActive();
             }
@@ -191,6 +194,7 @@ public final class ClientWishSequence {
         if (activeOmen != null && clientTicks - omenStart > OMEN_DURATION_TICKS) {
             activeOmen = null;
             omenStart = Long.MIN_VALUE;
+            WishingWillowMusicController.omenFinished();
         }
     }
 
@@ -347,6 +351,7 @@ public final class ClientWishSequence {
     }
 
     private static void clearAll() {
+        WishingWillowMusicController.clear();
         clearActive();
         snapEffectStart = Long.MIN_VALUE;
         completionStart = Long.MIN_VALUE;
