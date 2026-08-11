@@ -1,0 +1,119 @@
+package com.ikunkk02.wishingwillow.planning;
+
+import com.ikunkk02.wishingwillow.ai.FulfillmentStyle;
+import com.ikunkk02.wishingwillow.ai.WishCapability;
+import com.ikunkk02.wishingwillow.ai.WishDelivery;
+import com.ikunkk02.wishingwillow.ai.WishFulfillment;
+import com.ikunkk02.wishingwillow.ai.WishFulfillmentMode;
+import com.ikunkk02.wishingwillow.ai.WishInterpretation;
+import com.ikunkk02.wishingwillow.ai.WishTone;
+import com.ikunkk02.wishingwillow.contract.WishConstraintKind;
+import com.ikunkk02.wishingwillow.contract.WishConstraintOperator;
+import com.ikunkk02.wishingwillow.contract.WishContract;
+import com.ikunkk02.wishingwillow.contract.WishContractType;
+import com.ikunkk02.wishingwillow.contract.WishHardConstraint;
+import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
+import com.ikunkk02.wishingwillow.research.FeatureType;
+import com.ikunkk02.wishingwillow.research.KnowledgeLevel;
+import com.ikunkk02.wishingwillow.research.RegistryEntryType;
+import com.ikunkk02.wishingwillow.research.VerifiedRegistryResource;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+class NonRefusingFulfillmentTest {
+    @Test void refusalProseIsRejectedBeforeItCanBecomePlayerOutput(){
+        WishInterpretation interpretation=PlanningFixtures.interpretation(30,WishDelivery.IMMEDIATE,
+                WishCapability.GIVE_ITEM);
+        CapabilityCandidate diamond=vanilla("candidate-001",WishCapability.GIVE_ITEM,
+                RegistryEntryType.ITEM,"minecraft:diamond");
+        String plan=PlanningFixtures.planJson(interpretation,"candidate-001","{\"count\":1}",
+                WishActionType.GIVE_ITEM,WishCapability.GIVE_ITEM)
+                .replace("A verified plan","I cannot safely fulfill this wish");
+        IllegalArgumentException error=assertThrows(IllegalArgumentException.class,()->
+                WishPlanValidator.parseAndValidate(plan,interpretation,PlanningFixtures.catalog(diamond),
+                        PlanningFixtures.environment(true,true)));
+        assertEquals(WishPlanError.REFUSAL_RESPONSE.name(),error.getMessage());
+    }
+
+    @Test void oneHundredDiamondBlocksBecomeSixtyFourPlusThirtySixWithoutBlockChanges(){
+        WishInterpretation interpretation=diamondBlockContract();
+        CapabilityCandidate block=vanilla("candidate-001",WishCapability.BLOCK_CHANGE,
+                RegistryEntryType.BLOCK,"minecraft:diamond_block");
+        CapabilityCandidate item=vanilla("candidate-002",WishCapability.GIVE_ITEM,
+                RegistryEntryType.ITEM,"minecraft:diamond_block");
+        ExecutionSettingsSnapshot safeMode=new ExecutionSettingsSnapshot(true,true,false,
+                false,false,false,true,100,false);
+
+        WishPlanResult result=new FallbackWishPlanner().plan("我想要100块钻石块",interpretation,
+                emptyContext(),PlanningFixtures.catalog(block,item),PlanningFixtures.environment(true,true),safeMode);
+
+        assertNotNull(result.draft());
+        assertEquals(WishPlanState.VALIDATING,result.state());
+        assertEquals(List.of(WishActionType.GIVE_ITEM,WishActionType.GIVE_ITEM),
+                result.draft().steps().stream().map(WishPlanStep::action).toList());
+        assertEquals(List.of(64,36),result.draft().steps().stream()
+                .map(step->step.parameters().get("count").getAsInt()).toList());
+        assertEquals(100,result.draft().steps().stream()
+                .mapToInt(step->step.parameters().get("count").getAsInt()).sum());
+    }
+
+    @Test void schemaTwoReadinessDependsOnContractInsteadOfDiscardedMethodCapabilities(){
+        WishInterpretation interpretation=diamondBlockContract();
+        CapabilityCandidate item=vanilla("candidate-001",WishCapability.GIVE_ITEM,
+                RegistryEntryType.ITEM,"minecraft:diamond_block");
+        String plan="""
+                {"schema_version":1,"summary":"The exact resource is granted","delivery":"IMMEDIATE",
+                 "severity":30,"estimated_duration":"INSTANT","steps":[
+                  {"step_index":0,"timing":"IMMEDIATE","delay_seconds":0,"trigger":"NONE",
+                   "action":"GIVE_ITEM","capability":"GIVE_ITEM","candidate_id":"candidate-001",
+                   "target":"PLAYER","parameters":{"count":64},"selection_reason":"First stack"},
+                  {"step_index":1,"timing":"IMMEDIATE","delay_seconds":0,"trigger":"NONE",
+                   "action":"GIVE_ITEM","capability":"GIVE_ITEM","candidate_id":"candidate-001",
+                   "target":"PLAYER","parameters":{"count":36},"selection_reason":"Remaining blocks"}]}
+                """;
+        WishPlanValidation validation=WishPlanValidator.parseAndValidate(plan,interpretation,
+                PlanningFixtures.catalog(item),PlanningFixtures.environment(true,true));
+        assertEquals(WishPlanState.READY,validation.state());
+        assertEquals(List.of(WishCapability.BLOCK_CHANGE),validation.unfulfilledCapabilities().stream().toList());
+    }
+
+    private static WishInterpretation diamondBlockContract(){
+        WishContract contract=new WishContract(WishContractType.OBTAIN_RESOURCE,
+                "The player owns 100 real, accessible diamond blocks",List.of(
+                constraint(WishConstraintKind.RESOURCE_SEMANTIC,WishConstraintOperator.EQUALS,
+                        "diamond_block",0,true),
+                constraint(WishConstraintKind.MINIMUM_QUANTITY,WishConstraintOperator.AT_LEAST,
+                        "",100,true),
+                constraint(WishConstraintKind.REAL_RESOURCE,WishConstraintOperator.REQUIRED,"",0,true),
+                constraint(WishConstraintKind.PLAYER_ACCESSIBLE,WishConstraintOperator.REQUIRED,"",0,true)));
+        return new WishInterpretation(2,"obtain diamond blocks","Own 100 diamond blocks",contract,
+                new WishFulfillment(WishFulfillmentMode.ABSURD,"Grant the real blocks in two stacks",
+                        List.of(FulfillmentStyle.IRONIC),30),"Exact quantity must remain frozen",
+                WishTone.ABSURD,30,WishDelivery.IMMEDIATE,
+                List.of(WishCapability.BLOCK_CHANGE,WishCapability.GIVE_ITEM));
+    }
+
+    private static WishHardConstraint constraint(WishConstraintKind kind,WishConstraintOperator operator,
+                                                 String semantic,int quantity,boolean required){
+        return new WishHardConstraint(kind,operator,semantic,quantity,0,required);
+    }
+
+    private static CapabilityCandidate vanilla(String id,WishCapability capability,
+                                                RegistryEntryType type,String resource){
+        return new CapabilityCandidate(id,capability,capability,MatchType.EXACT,
+                CandidateSourceKind.VANILLA_REGISTRY,"minecraft","Minecraft","1.20.1",resource,
+                type==RegistryEntryType.ITEM?FeatureType.ITEM:FeatureType.BLOCK,
+                new VerifiedRegistryResource(type,resource),"vanilla registry",KnowledgeLevel.VERIFIED,
+                1,1,0,100,CapabilityMatcher.risk(capability),100);
+    }
+
+    private static WishContextSnapshot emptyContext(){
+        return new WishContextSnapshot("minecraft:overworld",0,"DAY","CLEAR",20,20,20,0,
+                "SURVIVAL","minecraft:plains",64,"SURFACE","minecraft:air",List.of(),List.of(),0,0);
+    }
+}

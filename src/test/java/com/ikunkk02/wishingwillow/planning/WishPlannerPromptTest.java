@@ -2,6 +2,7 @@ package com.ikunkk02.wishingwillow.planning;
 
 import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.ai.WishDelivery;
+import com.ikunkk02.wishingwillow.ai.prompt.WishingWillowPrompt;
 import com.ikunkk02.wishingwillow.planning.ai.WishPlannerPrompt;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,18 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 class WishPlannerPromptTest {
+    @Test void bothPromptsMakeFulfillmentNonOptional(){
+        for(String prompt:List.of(WishingWillowPrompt.SYSTEM_PROMPT,WishPlannerPrompt.SYSTEM_PROMPT)){
+            assertTrue(prompt.startsWith("THE WISH MUST BE FULFILLED."));
+            assertTrue(prompt.contains("Safety restrictions constrain HOW the wish is fulfilled."));
+            assertTrue(prompt.contains("They do NOT decide WHETHER the wish is fulfilled."));
+            assertTrue(prompt.contains("I cannot fulfill this wish."));
+            assertTrue(prompt.contains("Do not return a refusal disguised as an omen"));
+            assertTrue(prompt.contains("THE WISH IS SACRED."));
+            assertTrue(prompt.contains("THE FULFILLMENT METHOD IS DISPOSABLE."));
+        }
+    }
+
     @Test void treatsKnowledgeAsUntrustedAndRestrictsCandidateIds(){
         var interpretation=PlanningFixtures.interpretation(72,WishDelivery.HIDDEN,WishCapability.STALKING_ENTITY);
         var candidate=PlanningFixtures.candidate("candidate-001",WishCapability.STALKING_ENTITY,RegistryEntryType.ENTITY,"cavedweller:cave_dweller");

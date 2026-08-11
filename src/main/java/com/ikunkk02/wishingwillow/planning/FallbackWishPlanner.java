@@ -37,16 +37,15 @@ public final class FallbackWishPlanner {
         if (interpretation.requiredCapabilities().isEmpty()) {
             return WishPlanResult.failed(WishPlanError.UNSATISFIED_CAPABILITIES);
         }
-        WishCapability primary = interpretation.requiredCapabilities().get(0);
         String semanticText = (originalWish + " " + interpretation.literalGoal() + " "
                 + interpretation.twistedOutcome()).toLowerCase(Locale.ROOT);
         List<CapabilityCandidate> candidates = catalog.candidates().stream()
-                .filter(candidate -> candidate.requestedCapability() == primary)
                 .filter(candidate -> candidate.matchType() == MatchType.EXACT
                         || candidate.matchType() == MatchType.COMPATIBLE)
                 .filter(candidate -> WishSafetyPolicy.candidateAllowed(candidate.reference(),
                         interpretation.severity(), settings))
-                .sorted(Comparator.comparingInt(CapabilityCandidate::matchScore).reversed())
+                .sorted(Comparator.comparingInt(FallbackWishPlanner::fallbackTier)
+                        .thenComparing(Comparator.comparingInt(CapabilityCandidate::matchScore).reversed()))
                 .toList();
         for (CapabilityCandidate candidate : candidates) {
             WishPlanDraft draft = createDraft(originalWish, semanticText, interpretation, candidate);
@@ -55,7 +54,8 @@ public final class FallbackWishPlanner {
                 WishPlanValidation validated = WishPlanValidator.parseAndValidate(
                         WishPlanJson.toAiJson(draft), interpretation, catalog, environment, settings);
                 if (validated.state() == WishPlanState.READY) return WishPlanResult.success(validated.draft());
-                if (!validated.unfulfilledCapabilities().contains(primary)) {
+                if (interpretation.schemaVersion() < 2 && !validated.unfulfilledCapabilities().contains(
+                        interpretation.requiredCapabilities().get(0))) {
                     return WishPlanResult.partial(validated.draft());
                 }
             } catch (IllegalArgumentException ignored) {
@@ -119,7 +119,7 @@ public final class FallbackWishPlanner {
                 steps.add(step(1, timing, WishActionType.FOLLOW_PLAYER, candidate, WishTargetType.NEARBY_ENTITIES, follow));
             }
         }
-        return new WishPlanDraft(1, "Controlled vanilla fallback", interpretation.delivery(),
+        return new WishPlanDraft(1, "Controlled contract-preserving fallback", interpretation.delivery(),
                 interpretation.severity(), timing.delaySeconds == 0
                 ? WishEstimatedDuration.INSTANT : WishEstimatedDuration.SHORT, steps);
     }
@@ -140,9 +140,15 @@ public final class FallbackWishPlanner {
         if (type == RegistryEntryType.EFFECT) return WishActionType.APPLY_EFFECT;
         if (type == RegistryEntryType.ENTITY) return WishActionType.SPAWN_ENTITY;
         if (type == RegistryEntryType.SOUND) return WishActionType.PLAY_SOUND;
+        if (type == RegistryEntryType.PARTICLE) return WishActionType.SPAWN_PARTICLE;
         if (type == RegistryEntryType.DIMENSION) return WishActionType.TELEPORT;
         if (type == RegistryEntryType.BLOCK) return WishActionType.PLACE_BLOCK_PATTERN;
-        if (candidate.sourceKind() == CandidateSourceKind.VANILLA_BUILTIN) {
+        if (candidate.sourceKind() == CandidateSourceKind.MOD_FEATURE
+                && candidate.sourceModId().equals(com.ikunkk02.wishingwillow.WishingWillow.MOD_ID)
+                && com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry.contains(
+                candidate.featureName())) return WishActionType.START_PREDEFINED_EVENT;
+        if (candidate.sourceKind() == CandidateSourceKind.VANILLA_BUILTIN
+                || candidate.sourceKind() == CandidateSourceKind.WISHING_WILLOW_BUILTIN) {
             return switch (candidate.providedCapability()) {
                 case CHANGE_TIME -> WishActionType.CHANGE_TIME;
                 case CHANGE_WEATHER -> WishActionType.CHANGE_WEATHER;
@@ -150,6 +156,7 @@ public final class FallbackWishPlanner {
                 case STRUCTURE -> WishActionType.CREATE_STRUCTURE;
                 case PLAYER_ATTRIBUTE -> WishActionType.MODIFY_ATTRIBUTE;
                 case REPUTATION -> WishActionType.CHANGE_REPUTATION;
+                case HEALING, DAMAGE, IMMORTALITY -> WishActionType.MODIFY_HEALTH;
                 default -> null;
             };
         }
@@ -184,6 +191,12 @@ public final class FallbackWishPlanner {
             }
             case SPAWN_ENTITY -> { p.addProperty("count", quantity(text).orElse(1)); p.addProperty("distance_min", 12); p.addProperty("distance_max", 24); }
             case PLAY_SOUND -> { p.addProperty("volume", 1); p.addProperty("pitch", 1); p.addProperty("distance", 32); }
+            case SPAWN_PARTICLE -> { p.addProperty("count", 48); p.addProperty("radius", 2); }
+            case MODIFY_HEALTH -> {
+                boolean harmful = candidate.providedCapability() == WishCapability.DAMAGE;
+                p.addProperty("delta", harmful ? -4 : 20); p.addProperty("allow_lethal", false);
+            }
+            case START_PREDEFINED_EVENT -> p.addProperty("intensity", 1);
             default -> { return null; }
         }
         return p;
@@ -254,5 +267,12 @@ public final class FallbackWishPlanner {
         };
     }
     private static boolean contains(String text, String... values) { for(String value:values) if(text.contains(value)) return true; return false; }
+    private static int fallbackTier(CapabilityCandidate candidate) {
+        return switch (candidate.sourceKind()) {
+            case VANILLA_REGISTRY -> 0;
+            case WISHING_WILLOW_BUILTIN, VANILLA_BUILTIN -> 1;
+            case MOD_FEATURE -> candidate.sourceModId().equals(com.ikunkk02.wishingwillow.WishingWillow.MOD_ID) ? 1 : 2;
+        };
+    }
     private record Timing(WishStepTiming timing, int delaySeconds, WishTriggerType trigger) { }
 }

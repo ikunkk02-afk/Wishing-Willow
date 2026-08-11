@@ -69,6 +69,27 @@ class AiWishPlannerRepairTest {
         assertEquals(2, provider.requests.size());
     }
 
+    @Test
+    void thirdAndFinalAttemptUsesDeterministicVanillaFallbackWithoutAHiddenFourthCall() {
+        var interpretation = PlanningFixtures.interpretation(35, WishDelivery.IMMEDIATE,
+                WishCapability.GIVE_ITEM);
+        var diamond = PlanningFixtures.candidate("candidate-001", WishCapability.GIVE_ITEM,
+                RegistryEntryType.ITEM, "minecraft:diamond");
+        var catalog = PlanningFixtures.catalog(diamond);
+        SequenceProvider provider = new SequenceProvider(overBudgetSingleCandidate(), overBudgetSingleCandidate());
+        WishPlanRepairCoordinator coordinator = new WishPlanRepairCoordinator(
+                new AiWishPlanner(config -> provider), new FallbackWishPlanner());
+
+        WishPlanResult result = coordinator.plan(config(), "I want 10 diamonds", interpretation,
+                context(), catalog, PlanningFixtures.environment(true, true),
+                com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot.permissive()).join();
+
+        assertEquals(WishPlanError.NONE, result.error());
+        assertEquals(3, result.attemptsUsed());
+        assertEquals(10, result.draft().steps().get(0).parameters().get("count").getAsInt());
+        assertEquals(2, provider.requests.size());
+    }
+
     private static String overBudgetPlan() {
         return """
                 {"schema_version":1,"summary":"Too many falling diamonds","delivery":"IMMEDIATE",
@@ -86,6 +107,17 @@ class AiWishPlannerRepairTest {
                  "severity":35,"estimated_duration":"SHORT","steps":[
                   {"step_index":0,"timing":"IMMEDIATE","delay_seconds":0,"trigger":"NONE","action":"GIVE_ITEM","capability":"GIVE_ITEM","candidate_id":"candidate-001","target":"PLAYER","parameters":{"count":64},"selection_reason":"Grant a safe bounded stack"},
                   {"step_index":1,"timing":"IMMEDIATE","delay_seconds":0,"trigger":"NONE","action":"CHANGE_BLOCK","capability":"BLOCK_CHANGE","candidate_id":"candidate-002","target":"WORLD","parameters":{"distance_min":2,"distance_max":4},"selection_reason":"Preserve the block-form twist within budget"}]}
+                """;
+    }
+
+    private static String overBudgetSingleCandidate() {
+        return """
+                {"schema_version":1,"summary":"Too many steps","delivery":"IMMEDIATE",
+                 "severity":35,"estimated_duration":"SHORT","steps":[
+                  {"step_index":0,"timing":"IMMEDIATE","delay_seconds":0,"trigger":"NONE","action":"GIVE_ITEM","capability":"GIVE_ITEM","candidate_id":"candidate-001","target":"PLAYER","parameters":{"count":64},"selection_reason":"First"},
+                  {"step_index":1,"timing":"IMMEDIATE","delay_seconds":0,"trigger":"NONE","action":"GIVE_ITEM","capability":"GIVE_ITEM","candidate_id":"candidate-001","target":"PLAYER","parameters":{"count":64},"selection_reason":"Second"},
+                  {"step_index":2,"timing":"IMMEDIATE","delay_seconds":0,"trigger":"NONE","action":"GIVE_ITEM","capability":"GIVE_ITEM","candidate_id":"candidate-001","target":"PLAYER","parameters":{"count":64},"selection_reason":"Third"},
+                  {"step_index":3,"timing":"IMMEDIATE","delay_seconds":0,"trigger":"NONE","action":"GIVE_ITEM","capability":"GIVE_ITEM","candidate_id":"candidate-001","target":"PLAYER","parameters":{"count":64},"selection_reason":"Fourth"}]}
                 """;
     }
 

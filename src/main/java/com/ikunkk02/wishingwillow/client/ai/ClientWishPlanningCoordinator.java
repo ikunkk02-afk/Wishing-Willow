@@ -79,13 +79,13 @@ public final class ClientWishPlanningCoordinator {
                     result.draft() == null ? 0 : result.draft().steps().size());
             if (result.draft() == null || catalog == null) {
                 ModNetworking.sendToServer(new SubmitWishPlanPacket(packet.sessionId(), packet.attemptId(),
-                        result.error(), null, null));
+                        result.error(), result.attemptsUsed(), null, null));
                 return;
             }
             ModNetworking.sendToServer(new WishPlanningProgressPacket(packet.sessionId(), packet.attemptId(),
                     WishPlanState.VALIDATING));
             ModNetworking.sendToServer(new SubmitWishPlanPacket(packet.sessionId(), packet.attemptId(),
-                    WishPlanError.NONE, catalog, WishPlanJson.toAiJson(result.draft())));
+                    WishPlanError.NONE, result.attemptsUsed(), catalog, WishPlanJson.toAiJson(result.draft())));
         });
     }
 

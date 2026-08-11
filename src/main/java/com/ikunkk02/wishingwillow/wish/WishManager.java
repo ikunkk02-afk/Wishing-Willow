@@ -1,5 +1,6 @@
 package com.ikunkk02.wishingwillow.wish;
 
+import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.ai.AiConfig;
 import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
 import com.ikunkk02.wishingwillow.ai.AiExecutionMode;
@@ -246,7 +247,8 @@ public final class WishManager {
     }
 
     public static void handlePlanSubmission(ServerPlayer player, UUID sessionId, UUID attemptId,
-                                            WishPlanError error, @Nullable CapabilityCatalog catalog,
+                                            WishPlanError error, int attemptsUsed,
+                                            @Nullable CapabilityCatalog catalog,
                                             @Nullable String draftJson) {
         PlanningAttempt attempt = PLANNING_ATTEMPTS.get(sessionId);
         if (attempt == null || !attempt.attemptId.equals(attemptId)
@@ -262,13 +264,13 @@ public final class WishManager {
             if (error == WishPlanError.NO_CANDIDATES || error == WishPlanError.UNSATISFIED_CAPABILITIES) {
                 WishPlanStore.partial(player.server, sessionId, WishPlanError.UNSATISFIED_CAPABILITIES);
                 WishPipelineAudit.failure(sessionId, "PLANNING", WishPlanError.UNSATISFIED_CAPABILITIES.name(), "no executable primary capability");
-                player.sendSystemMessage(Component.translatable("message.wishing_willow.execution_failed"));
+                player.sendSystemMessage(Component.translatable("message.wishing_willow.technical_failure"));
                 return;
             }
             WishPlanError acceptedError=error == WishPlanError.NONE ? WishPlanError.UNKNOWN : error;
             WishPlanStore.fail(player.server, sessionId, acceptedError);
             WishPipelineAudit.failure(sessionId, "PLANNING", acceptedError.name(), "planner returned no plan");
-            player.sendSystemMessage(Component.translatable("message.wishing_willow.execution_failed"));
+            player.sendSystemMessage(Component.translatable("message.wishing_willow.technical_failure"));
             return;
         }
         try {
@@ -276,22 +278,22 @@ public final class WishManager {
             WishRecord accepted = WishSavedData.get(player.server).getBySession(sessionId);
             if (accepted != null && (accepted.planState() == WishPlanState.READY
                     || accepted.planState() == WishPlanState.PARTIAL) && accepted.plan() != null) {
-                if("Controlled vanilla fallback".equals(accepted.plan().summary()))
+                if("Controlled contract-preserving fallback".equals(accepted.plan().summary()))
                     WishPipelineAudit.success(sessionId,"FALLBACK",
                             "plan="+accepted.plan().planId()+" steps="+accepted.plan().steps().size());
                 WishPipelineAudit.success(sessionId,"PLANNING","state="+accepted.planState()+" steps="+accepted.plan().steps().size());
                 WishPipelineAudit.success(sessionId,"SERVER_PLAN_VALIDATION",
                         "plan="+accepted.plan().planId()+" state="+accepted.planState()+" steps="+accepted.plan().steps().size());
                 WishExecutionAcceptResult result=WishExecutionManager.accept(player, accepted.plan());
-                if(!result.accepted())result=tryFallbackAfterExecutionRejection(player,accepted,catalog,result);
-                if(!result.accepted())player.sendSystemMessage(Component.translatable("message.wishing_willow.execution_failed"));
+                if(!result.accepted())result=tryFallbackAfterExecutionRejection(player,accepted,catalog,result,attemptsUsed);
+                if(!result.accepted())player.sendSystemMessage(Component.translatable("message.wishing_willow.technical_failure"));
                 else sendOmenForAcceptedPlan(player,sessionId);
             }
         } catch (IllegalArgumentException exception) {
             WishPlanError acceptedError=planError(exception);
             WishPlanStore.fail(player.server, sessionId, acceptedError);
             WishPipelineAudit.failure(sessionId,"SERVER_PLAN_VALIDATION",acceptedError.name(),exception.getMessage());
-            player.sendSystemMessage(Component.translatable("message.wishing_willow.execution_failed"));
+            player.sendSystemMessage(Component.translatable("message.wishing_willow.technical_failure"));
         }
     }
 
@@ -544,13 +546,17 @@ public final class WishManager {
     private static WishExecutionAcceptResult tryFallbackAfterExecutionRejection(ServerPlayer player,
                                                                                  WishRecord record,
                                                                                  CapabilityCatalog catalog,
-                                                                                 WishExecutionAcceptResult rejected) {
-        if(!fallbackEligible(rejected.error())||record.interpretation()==null)return rejected;
+                                                                                 WishExecutionAcceptResult rejected,
+                                                                                 int attemptsUsed) {
+        if(attemptsUsed>=com.ikunkk02.wishingwillow.planning.WishPlanRepairCoordinator.MAX_ATTEMPTS
+                ||!fallbackEligible(rejected.error())||record.interpretation()==null)return rejected;
+        int fallbackAttempt=attemptsUsed+1;
+        WishingWillow.LOGGER.info("Wish fulfillment replan reason={} attempt={}",rejected.error(),fallbackAttempt);
         WishPlanResult fallback=new FallbackWishPlanner().plan(record.rawWish(),record.interpretation(),
                 WishContextCollector.collect(player),catalog,new ServerPlanningEnvironment(player.server),
                 ExecutionSettingsSnapshot.planning());
         if(fallback.draft()==null){
-            WishPipelineAudit.failure(record.sessionId(),"FALLBACK",fallback.error().name(),"no safe semantic fallback");
+            WishPipelineAudit.failure(record.sessionId(),"FALLBACK",fallback.error().name(),"no contract-preserving fallback");
             return rejected;
         }
         try{
@@ -560,6 +566,10 @@ public final class WishManager {
             if(replacement==null||replacement.plan()==null)return rejected;
             WishPipelineAudit.success(record.sessionId(),"FALLBACK",
                     "plan="+replacement.plan().planId()+" steps="+replacement.plan().steps().size());
+            String source=replacement.plan().steps().get(0).candidateReference().sourceKind()
+                    ==com.ikunkk02.wishingwillow.planning.CandidateSourceKind.VANILLA_REGISTRY
+                    ?"VANILLA":"WISHING_WILLOW_BUILTIN";
+            WishingWillow.LOGGER.info("Wish fulfillment fallback source={}",source);
             return WishExecutionManager.accept(player,replacement.plan());
         }catch(IllegalArgumentException error){
             WishPipelineAudit.failure(record.sessionId(),"FALLBACK",planError(error).name(),error.getMessage());

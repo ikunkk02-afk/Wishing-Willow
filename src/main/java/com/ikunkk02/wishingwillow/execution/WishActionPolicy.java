@@ -12,6 +12,7 @@ import com.ikunkk02.wishingwillow.planning.WishActionType;
 import com.ikunkk02.wishingwillow.planning.WishStepTiming;
 import com.ikunkk02.wishingwillow.planning.WishTargetType;
 import com.ikunkk02.wishingwillow.planning.WishTriggerType;
+import com.ikunkk02.wishingwillow.planning.WishingWillowBuiltinCapability;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 
 import javax.annotation.Nullable;
@@ -123,9 +124,15 @@ public final class WishActionPolicy {
             reject(WishExecutionAcceptError.INVALID_ACTION_CAPABILITY,
                     "Candidate capability cannot execute action " + action);
         }
+        if (candidate.sourceKind() == CandidateSourceKind.WISHING_WILLOW_BUILTIN
+                && !WishingWillowBuiltinCapability.supports(candidate, action)) {
+            reject(WishExecutionAcceptError.INVALID_ACTION_CAPABILITY,
+                    "Wishing Willow built-in cannot execute action " + action);
+        }
     }
 
     public static boolean isTrustedBuiltin(CandidateReference candidate) {
+        if (WishingWillowBuiltinCapability.isTrusted(candidate)) return true;
         return candidate != null && candidate.registryResource() == null
                 && candidate.sourceKind() == CandidateSourceKind.VANILLA_BUILTIN
                 && "minecraft".equals(candidate.sourceModId())

@@ -85,6 +85,7 @@ public final class WishInterpretationValidator {
         if (severity < 0 || severity > 100) throw invalid();
         WishDelivery delivery = enumValue(object, "delivery", WishDelivery.class);
         List<WishCapability> capabilities = enumList(exactArray(object, "required_capabilities", 1, MAX_CAPABILITIES), WishCapability.class);
+        WishRefusalGuard.requireAllowed(literal, requiredOutcome, method, reasoning);
         return new WishInterpretation(schema, intent, literal, contract, fulfillment, reasoning, tone, severity, delivery, capabilities);
     }
 

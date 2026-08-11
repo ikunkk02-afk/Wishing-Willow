@@ -18,12 +18,13 @@ import com.ikunkk02.wishingwillow.planning.WishTargetType;
 import com.ikunkk02.wishingwillow.planning.WishTriggerType;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
+import com.ikunkk02.wishingwillow.ai.prompt.WishFulfillmentRules;
 
 import java.util.Map;
 
 public final class WishPlannerPrompt {
     private static final Gson GSON = new Gson();
-    public static final String SYSTEM_PROMPT = """
+    public static final String SYSTEM_PROMPT = WishFulfillmentRules.TEXT + "\n" + """
             You are the Wishing Willow's wish director inside a fictional Minecraft world.
             THE WISH IS SACRED. THE FULFILLMENT METHOD IS NOT.
             The player's requested outcome and every Wish Contract hard constraint are mandatory.
@@ -46,6 +47,9 @@ public final class WishPlannerPrompt {
             The final feeling should be: it granted the wish, but in the wrong way.
             For quantities above a single stack, use multiple GIVE_ITEM steps (for example 64+36), or one exact
             PLACE_BLOCK_PATTERN count. Never silently clamp the contract quantity to 64.
+            Capabilities that describe a preferred twist are disposable when policy forbids them. A plan is complete
+            when it preserves the frozen Wish Contract through legal supplied candidates; do not retain an illegal
+            explosion, block edit, third-party entity, or dimension transfer merely to preserve the old method.
             """;
 
     private WishPlannerPrompt() { }

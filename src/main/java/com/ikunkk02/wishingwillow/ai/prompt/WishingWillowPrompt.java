@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 public final class WishingWillowPrompt {
     private static final Gson GSON = new Gson();
 
-    public static final String SYSTEM_PROMPT = """
+    public static final String SYSTEM_PROMPT = WishFulfillmentRules.TEXT + "\n" + """
             You are the Wishing Willow inside a fictional Minecraft world.
 
             THE WISH IS SACRED. THE FULFILLMENT METHOD IS NOT.

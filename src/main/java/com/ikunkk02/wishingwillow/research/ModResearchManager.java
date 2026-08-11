@@ -43,6 +43,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class ModResearchManager {
@@ -64,6 +65,8 @@ public final class ModResearchManager {
     private final ExecutorService workers = Executors.newFixedThreadPool(2, threadFactory("wishing-willow-research-"));
     private final Semaphore aiPermit = new Semaphore(1);
     private final AtomicLong generation = new AtomicLong();
+    private final AtomicReference<InitialResearchScanState> initialScan =
+            new AtomicReference<>(InitialResearchScanState.NOT_STARTED);
     private volatile RegistrySnapshot registrySnapshot = RegistrySnapshot.empty();
     private volatile List<InstalledModInfo> installedMods = List.of();
     private volatile Set<String> dependencyModIds = Set.of();
@@ -93,9 +96,22 @@ public final class ModResearchManager {
     }
 
     public void start() {
+        start(false);
+    }
+
+    private void start(boolean force) {
+        if (!force && !initialScan.compareAndSet(InitialResearchScanState.NOT_STARTED,
+                InitialResearchScanState.SCANNING)) {
+            return;
+        }
+        if (force) initialScan.set(InitialResearchScanState.SCANNING);
         long run = generation.incrementAndGet();
         knowledgeBase.setState(KnowledgeBaseState.RUNNING);
         workers.execute(() -> scanInstalled(run));
+    }
+
+    public InitialResearchScanState initialScanState() {
+        return initialScan.get();
     }
 
     public void onWorldJoin(LocalPlayer player) {
@@ -114,12 +130,13 @@ public final class ModResearchManager {
     }
 
     public void rescan() {
-        start();
+        start(true);
     }
 
     public void retryFailed() {
         long run = generation.get();
-        for (KnowledgeEntry entry : knowledgeBase.snapshot().entries()) {
+        for (KnowledgeEntry entry : knowledgeBase.snapshot().entries().stream()
+                .sorted(ModResearchPriority.order()).toList()) {
             if (entry.state() == ResearchState.FAILED || entry.state() == ResearchState.PARTIAL
                     || entry.state() == ResearchState.WAITING_FOR_AI) {
                 schedule(entry.withState(ResearchState.NOT_STARTED), run, false);
@@ -164,15 +181,23 @@ public final class ModResearchManager {
     }
 
     public void resumeWaitingForAi() {
-        if (AiConfigManager.getInstance().get().isConfigured()) {
-            resume();
+        if (!AiConfigManager.getInstance().get().isConfigured()) return;
+        paused = false;
+        knowledgeBase.setPaused(false);
+        if (initialScan.get() == InitialResearchScanState.NOT_STARTED) {
+            start();
+            return;
+        }
+        knowledgeBase.setState(KnowledgeBaseState.RUNNING);
+        if (initialScan.get() == InitialResearchScanState.COMPLETE) {
+            scheduleEligible(generation.get(), false);
         }
     }
 
     public boolean clearCache() {
         generation.incrementAndGet();
         boolean cleared = cache.clear();
-        start();
+        start(true);
         return cleared;
     }
 
@@ -223,6 +248,7 @@ public final class ModResearchManager {
             }
             installedMods = List.copyOf(publicMods);
             knowledgeBase.replaceAll(entries);
+            if (run == generation.get()) initialScan.set(InitialResearchScanState.COMPLETE);
             cache.saveIndex(knowledgeBase.snapshot());
             LocalPlayer player = currentPlayer;
             if (player != null) {
@@ -239,6 +265,7 @@ public final class ModResearchManager {
             }
         } catch (RuntimeException exception) {
             LOGGER.warn("Wishing Willow mod scan failed safely: {}", exception.getClass().getSimpleName());
+            if (run == generation.get()) initialScan.set(InitialResearchScanState.NOT_STARTED);
             knowledgeBase.setState(KnowledgeBaseState.PARTIAL_READY);
         }
     }
@@ -247,7 +274,8 @@ public final class ModResearchManager {
         if (paused || run != generation.get()) {
             return;
         }
-        for (KnowledgeEntry entry : knowledgeBase.snapshot().entries()) {
+        for (KnowledgeEntry entry : knowledgeBase.snapshot().entries().stream()
+                .sorted(ModResearchPriority.order()).toList()) {
             if (entry.state() == ResearchState.IGNORED && !force) {
                 continue;
             }

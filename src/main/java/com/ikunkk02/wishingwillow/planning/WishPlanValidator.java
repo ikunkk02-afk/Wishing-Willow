@@ -18,6 +18,7 @@ import com.ikunkk02.wishingwillow.execution.WishSafetyPolicy;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 import com.ikunkk02.wishingwillow.contract.WishContractValidator;
 import com.ikunkk02.wishingwillow.contract.WishContractValidationState;
+import com.ikunkk02.wishingwillow.ai.WishRefusalGuard;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -61,6 +62,7 @@ public final class WishPlanValidator {
             throw invalid(WishPlanError.INVALID_JSON);
         }
         String summary = string(root, "summary", MAX_SUMMARY);
+        if (WishRefusalGuard.containsRefusal(summary)) throw invalid(WishPlanError.REFUSAL_RESPONSE);
         WishDelivery delivery = enumValue(root, "delivery", WishDelivery.class);
         int severity = integer(root, "severity");
         if (severity != interpretation.severity() || delivery != interpretation.delivery()) {
@@ -103,6 +105,7 @@ public final class WishPlanValidator {
                     parameters, target, timing, delay, trigger, severity);
             if (!actionDecision.allowed()) throw policyInvalid(actionDecision.error());
             String reason = string(step, "selection_reason", MAX_REASON);
+            if (WishRefusalGuard.containsRefusal(reason)) throw invalid(WishPlanError.REFUSAL_RESPONSE);
             String signature = action + "|" + candidateId + "|" + timing + "|" + delay + "|" + trigger
                     + "|" + parameters;
             if (!unique.add(signature) && action != WishActionType.GIVE_ITEM
@@ -126,7 +129,8 @@ public final class WishPlanValidator {
         }
         Set<WishCapability> unfulfilled = EnumSet.copyOf(interpretation.requiredCapabilities());
         unfulfilled.removeAll(covered);
-        WishPlanState state = unfulfilled.isEmpty() ? WishPlanState.READY : WishPlanState.PARTIAL;
+        WishPlanState state = interpretation.schemaVersion() >= 2 || unfulfilled.isEmpty()
+                ? WishPlanState.READY : WishPlanState.PARTIAL;
         return new WishPlanValidation(draft, state, unfulfilled);
     }
 

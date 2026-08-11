@@ -11,12 +11,14 @@ import java.util.concurrent.CompletableFuture;
 public final class WishPlanner {
     private final AiWishPlanner aiPlanner;
     private final FallbackWishPlanner fallbackPlanner;
+    private final WishPlanRepairCoordinator repairs;
 
     public WishPlanner() { this(new AiWishPlanner(AiService.getInstance()), new FallbackWishPlanner()); }
     public WishPlanner(AiWishPlanner aiPlanner) { this(aiPlanner, new FallbackWishPlanner()); }
     public WishPlanner(AiWishPlanner aiPlanner, FallbackWishPlanner fallbackPlanner) {
         this.aiPlanner = aiPlanner;
         this.fallbackPlanner = fallbackPlanner;
+        this.repairs = new WishPlanRepairCoordinator(aiPlanner, fallbackPlanner);
     }
 
     public CompletableFuture<WishPlanResult> plan(AiConfig config, String originalWish,
@@ -34,9 +36,6 @@ public final class WishPlanner {
                                                   CapabilityCatalog catalog,
                                                   PlanningEnvironment environment,
                                                   ExecutionSettingsSnapshot settings) {
-        return aiPlanner.plan(config, originalWish, interpretation, context, catalog, environment, settings)
-                .thenApply(result -> result.draft() != null ? result
-                        : fallbackPlanner.plan(originalWish, interpretation, context, catalog,
-                        environment, settings));
+        return repairs.plan(config, originalWish, interpretation, context, catalog, environment, settings);
     }
 }

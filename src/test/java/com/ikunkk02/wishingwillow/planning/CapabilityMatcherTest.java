@@ -23,7 +23,7 @@ class CapabilityMatcherTest {
                 new KnowledgeBaseSnapshot(KnowledgeBaseState.READY,false,List.of(weak,verified)),registry);
         assertEquals("cavedweller",catalog.candidates().get(0).sourceModId());
         assertEquals(MatchType.EXACT,catalog.candidates().get(0).matchType());
-        assertTrue(catalog.candidates().get(0).matchScore()>catalog.candidates().get(1).matchScore());
+        assertTrue(catalog.candidates().stream().noneMatch(candidate->candidate.sourceModId().equals("weakmod")));
     }
 
     @Test void compatibleAndCrossModCandidatesAreKept(){
@@ -46,8 +46,10 @@ class CapabilityMatcherTest {
         assertEquals("minecraft:diamond",diamonds.candidates().get(0).registryResource().id());
         var spacecraft=new CapabilityMatcher().match("spaceship",PlanningFixtures.interpretation(50,WishDelivery.HIDDEN,WishCapability.SPACECRAFT),empty,registry);
         assertFalse(spacecraft.candidates().isEmpty());
-        assertTrue(spacecraft.candidates().stream().allMatch(candidate -> candidate.matchType()==MatchType.APPROXIMATE));
+        assertTrue(spacecraft.candidates().stream().allMatch(candidate -> candidate.matchType()==MatchType.COMPATIBLE
+                || candidate.matchType()==MatchType.APPROXIMATE));
         assertTrue(spacecraft.candidates().stream().allMatch(candidate -> candidate.registryResource()==null));
+        assertTrue(spacecraft.candidates().stream().allMatch(candidate -> candidate.sourceKind()==CandidateSourceKind.WISHING_WILLOW_BUILTIN));
     }
 
     @Test void limitsEachCapabilityAndWholeCatalog(){
@@ -65,7 +67,7 @@ class CapabilityMatcherTest {
                 WishCapability.DIMENSION_TRAVEL,FeatureType.DIMENSION,RegistryEntryType.DIMENSION,"otherhorror:lost_realm",10,95);
         var registry=PlanningFixtures.registry(Map.of(
                 RegistryEntryType.EFFECT,List.of("minecraft:darkness","minecraft:strength"),
-                RegistryEntryType.ENTITY,List.of("minecraft:wither","cavedweller:cave_dweller"),
+                RegistryEntryType.ENTITY,List.of("minecraft:wither","minecraft:wolf","cavedweller:cave_dweller"),
                 RegistryEntryType.ITEM,List.of("minecraft:diamond"),
                 RegistryEntryType.DIMENSION,List.of("otherhorror:lost_realm")));
         var knowledge=new KnowledgeBaseSnapshot(KnowledgeBaseState.PARTIAL_READY,false,List.of(dimensionMod));

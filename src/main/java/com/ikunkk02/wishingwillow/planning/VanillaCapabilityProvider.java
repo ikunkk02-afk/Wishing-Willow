@@ -14,18 +14,9 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
-import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
-import com.ikunkk02.wishingwillow.WishingWillow;
 
 public final class VanillaCapabilityProvider {
     private static final Map<WishCapability, List<ResourceDescriptor>> RESOURCES = resources();
-    private static final Set<WishCapability> BUILTINS = Set.of(
-            WishCapability.CHANGE_TIME, WishCapability.CHANGE_WEATHER, WishCapability.TELEPORT,
-            WishCapability.EXPLOSION, WishCapability.LIGHTNING, WishCapability.PLAYER_ATTRIBUTE,
-            WishCapability.REPUTATION, WishCapability.MOB_BEHAVIOR, WishCapability.HEALING,
-            WishCapability.DAMAGE, WishCapability.INVENTORY_CHANGE, WishCapability.BLOCK_CHANGE
-    );
 
     public List<CapabilityCandidate> candidates(WishCapability requested, String wishText,
                                                 RegistrySnapshot snapshot, CapabilityRelationGraph graph,
@@ -56,38 +47,6 @@ public final class VanillaCapabilityProvider {
                         descriptor.name, featureType(descriptor.type),
                         new VerifiedRegistryResource(descriptor.type, descriptor.id), descriptor.description,
                         KnowledgeLevel.VERIFIED, 1.0, 1.0, 0, relevance, risk, score));
-            }
-        }
-        for (WishCapability builtin : BUILTINS) {
-            MatchType relation = graph.relation(requested, builtin);
-            if (relation == MatchType.UNSATISFIED) continue;
-            int risk = CapabilityMatcher.risk(builtin);
-            result.add(new CapabilityCandidate("", requested, builtin, relation,
-                    CandidateSourceKind.VANILLA_BUILTIN, "minecraft", "Minecraft", "1.20.1",
-                    builtin.name(), builtinType(builtin), null,
-                    "Verified vanilla capability implemented by a future server action handler.",
-                    KnowledgeLevel.VERIFIED, 1.0, 1.0, 0, 70, risk,
-                    CapabilityMatcher.score(relation, KnowledgeLevel.VERIFIED, true, 1.0, 70,
-                            0, severity, risk)));
-        }
-        if (requested == WishCapability.STRUCTURE) {
-            result.add(new CapabilityCandidate("", requested, WishCapability.STRUCTURE, MatchType.EXACT,
-                    CandidateSourceKind.VANILLA_BUILTIN, "minecraft", "Minecraft", "1.20.1",
-                    WishCapability.STRUCTURE.name(), FeatureType.STRUCTURE, null,
-                    "Fixed server-whitelisted simple house template.", KnowledgeLevel.VERIFIED,
-                    1, 1, 0, 100, CapabilityMatcher.risk(WishCapability.STRUCTURE), 95));
-        }
-        if (graph.relation(requested, WishCapability.WORLD_EVENT) != MatchType.UNSATISFIED) {
-            for (String eventId : PredefinedWishEventRegistry.ids()) {
-                MatchType relation = graph.relation(requested, WishCapability.WORLD_EVENT);
-                int risk = CapabilityMatcher.risk(WishCapability.WORLD_EVENT);
-                result.add(new CapabilityCandidate("", requested, WishCapability.WORLD_EVENT, relation,
-                        CandidateSourceKind.MOD_FEATURE, WishingWillow.MOD_ID, "Wishing Willow", "1.0.0",
-                        eventId, FeatureType.WORLD_SYSTEM, null,
-                        "A server-whitelisted Wishing Willow predefined event.", KnowledgeLevel.VERIFIED,
-                        1.0, 1.0, eventId.contains("stalker") ? 70 : 45, 70, risk,
-                        CapabilityMatcher.score(relation, KnowledgeLevel.VERIFIED, true, 1.0, 70, 2,
-                                severity, risk)));
             }
         }
         return result;
@@ -190,15 +149,6 @@ public final class VanillaCapabilityProvider {
             case SOUND -> FeatureType.SOUND;
             case DIMENSION -> FeatureType.DIMENSION;
             case STRUCTURE -> FeatureType.STRUCTURE;
-            default -> FeatureType.WORLD_SYSTEM;
-        };
-    }
-
-    private static FeatureType builtinType(WishCapability capability) {
-        return switch (capability) {
-            case PLAYER_ATTRIBUTE, HEALING, DAMAGE, INVENTORY_CHANGE -> FeatureType.PLAYER_SYSTEM;
-            case STRUCTURE -> FeatureType.STRUCTURE;
-            case MOB_BEHAVIOR, REPUTATION -> FeatureType.ENTITY;
             default -> FeatureType.WORLD_SYSTEM;
         };
     }

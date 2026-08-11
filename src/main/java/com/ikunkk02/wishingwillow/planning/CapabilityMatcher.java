@@ -31,14 +31,22 @@ public final class CapabilityMatcher {
     public static final int MAX_PER_CAPABILITY = 5;
     private final CapabilityRelationGraph graph;
     private final VanillaCapabilityProvider vanilla;
+    private final WishingWillowBuiltinCapabilityProvider builtins;
 
     public CapabilityMatcher() {
-        this(new CapabilityRelationGraph(), new VanillaCapabilityProvider());
+        this(new CapabilityRelationGraph(), new VanillaCapabilityProvider(),
+                new WishingWillowBuiltinCapabilityProvider());
     }
 
     public CapabilityMatcher(CapabilityRelationGraph graph, VanillaCapabilityProvider vanilla) {
+        this(graph, vanilla, new WishingWillowBuiltinCapabilityProvider());
+    }
+
+    public CapabilityMatcher(CapabilityRelationGraph graph, VanillaCapabilityProvider vanilla,
+                             WishingWillowBuiltinCapabilityProvider builtins) {
         this.graph = graph;
         this.vanilla = vanilla;
+        this.builtins = builtins;
     }
 
     public CapabilityCatalog match(String originalWish, WishInterpretation interpretation,
@@ -55,8 +63,11 @@ public final class CapabilityMatcher {
         for (WishCapability requested : interpretation.requiredCapabilities()) {
             List<CapabilityCandidate> candidates = new ArrayList<>();
             candidates.addAll(vanilla.candidates(requested, relevanceText, interpretation, registry, graph, interpretation.severity()));
+            candidates.addAll(builtins.candidates(requested, interpretation, registry, graph,
+                    interpretation.severity()));
             for (KnowledgeEntry entry : knowledge.entries()) {
-                if (entry.knowledge() == null || entry.knowledgeLevel() == KnowledgeLevel.UNKNOWN) continue;
+                if (entry.knowledge() == null || (entry.knowledgeLevel() != KnowledgeLevel.VERIFIED
+                        && entry.knowledgeLevel() != KnowledgeLevel.UNDERSTOOD)) continue;
                 for (ModFeature feature : entry.knowledge().features()) {
                     for (WishCapability provided : feature.possibleCapabilities()) {
                         MatchType relation = graph.relation(requested, provided);
@@ -75,11 +86,12 @@ public final class CapabilityMatcher {
                     }
                 }
             }
-            List<CapabilityCandidate> top = candidates.stream().distinct()
+            List<CapabilityCandidate> eligible = candidates.stream().distinct()
                     .filter(candidate -> executableCandidate(candidate)
                             && WishSafetyPolicy.candidateAllowed(candidate.reference(),
                             interpretation.severity(), settings))
-                    .sorted(order()).limit(MAX_PER_CAPABILITY).toList();
+                    .sorted(order()).toList();
+            List<CapabilityCandidate> top = keepFallbackLayers(eligible);
             ranked.put(requested, top);
         }
 
@@ -176,11 +188,42 @@ public final class CapabilityMatcher {
     }
 
     private static Comparator<CapabilityCandidate> order() {
-        return Comparator.comparingInt(CapabilityCandidate::matchScore).reversed()
+        return Comparator.comparingInt(CapabilityMatcher::selectionTier)
+                .thenComparing(Comparator.comparingInt(CapabilityCandidate::matchScore).reversed())
                 .thenComparing(candidate -> candidate.knowledgeLevel() == KnowledgeLevel.VERIFIED ? 0 : 1)
                 .thenComparing(CapabilityCandidate::sourceModId)
                 .thenComparing(CapabilityCandidate::featureName)
                 .thenComparing(candidate -> candidate.registryResource() == null ? "" : candidate.registryResource().id());
+    }
+
+    private static int selectionTier(CapabilityCandidate candidate) {
+        int relation = switch (candidate.matchType()) {
+            case EXACT -> 0;
+            case COMPATIBLE -> 10;
+            case APPROXIMATE -> 20;
+            case UNSATISFIED -> 30;
+        };
+        int source = switch (candidate.sourceKind()) {
+            case MOD_FEATURE -> candidate.sourceModId().equals(WishingWillow.MOD_ID) ? 2 : 0;
+            case VANILLA_REGISTRY -> 1;
+            case WISHING_WILLOW_BUILTIN, VANILLA_BUILTIN -> 2;
+        };
+        return relation + source;
+    }
+
+    private static List<CapabilityCandidate> keepFallbackLayers(List<CapabilityCandidate> eligible) {
+        List<CapabilityCandidate> result = new ArrayList<>();
+        eligible.stream().limit(3).forEach(result::add);
+        eligible.stream().filter(candidate -> candidate.sourceKind() == CandidateSourceKind.VANILLA_REGISTRY)
+                .findFirst().filter(candidate -> !result.contains(candidate)).ifPresent(result::add);
+        eligible.stream().filter(candidate -> candidate.sourceKind() == CandidateSourceKind.WISHING_WILLOW_BUILTIN
+                        || candidate.sourceModId().equals(WishingWillow.MOD_ID))
+                .findFirst().filter(candidate -> !result.contains(candidate)).ifPresent(result::add);
+        for (CapabilityCandidate candidate : eligible) {
+            if (result.size() >= MAX_PER_CAPABILITY) break;
+            if (!result.contains(candidate)) result.add(candidate);
+        }
+        return List.copyOf(result.subList(0, Math.min(result.size(), MAX_PER_CAPABILITY)));
     }
 
     private static String knowledgeDigest(KnowledgeBaseSnapshot snapshot) {
