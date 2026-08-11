@@ -15,6 +15,7 @@ import com.ikunkk02.wishingwillow.network.packet.ExecutionSettingsPacket;
 import com.ikunkk02.wishingwillow.network.packet.UpdateExecutionSettingsPacket;
 import com.ikunkk02.wishingwillow.network.packet.UnboxingStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.UnboxingStatePacket;
+import com.ikunkk02.wishingwillow.network.packet.WishOmenPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkDirection;
@@ -23,7 +24,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetworking {
-    private static final String PROTOCOL_VERSION = "6";
+    private static final String PROTOCOL_VERSION = "7";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(WishingWillow.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
@@ -87,9 +88,12 @@ public final class ModNetworking {
         CHANNEL.messageBuilder(UnboxingStartedPacket.class,id++,NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(UnboxingStartedPacket::encode).decoder(UnboxingStartedPacket::decode)
                 .consumerMainThread(UnboxingStartedPacket::handle).add();
-        CHANNEL.messageBuilder(UnboxingStatePacket.class,id,NetworkDirection.PLAY_TO_CLIENT)
+        CHANNEL.messageBuilder(UnboxingStatePacket.class,id++,NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(UnboxingStatePacket::encode).decoder(UnboxingStatePacket::decode)
                 .consumerMainThread(UnboxingStatePacket::handle).add();
+        CHANNEL.messageBuilder(WishOmenPacket.class,id,NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(WishOmenPacket::encode).decoder(WishOmenPacket::decode)
+                .consumerMainThread(WishOmenPacket::handle).add();
     }
 
     public static void sendToPlayer(ServerPlayer player, Object packet) {

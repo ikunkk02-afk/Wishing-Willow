@@ -19,6 +19,11 @@ public final class AiTestWishScreen extends Screen {
     private Button testButton;
     private Component status = Component.translatable("screen.wishing_willow.ai.test.ready");
     private boolean running;
+    private int panelWidth;
+    private int panelLeft;
+    private int panelTop;
+    private int panelHeight;
+    private int statusY;
 
     public AiTestWishScreen(Screen parent, AiConfig config) {
         super(Component.translatable("screen.wishing_willow.ai.test.title"));
@@ -28,11 +33,16 @@ public final class AiTestWishScreen extends Screen {
 
     @Override
     protected void init() {
-        int panelWidth = Math.min(400, width - 32);
-        int left = (width - panelWidth) / 2;
-        int top = Math.max(28, height / 2 - 105);
+        panelWidth = Math.min(400, Math.max(190, width - 12));
+        panelLeft = (width - panelWidth) / 2;
+        panelTop = 3;
+        panelHeight = height - 7;
+        int buttonY = height - 27;
+        int inputTop = panelTop + 29;
+        statusY = buttonY - 14;
+        int inputHeight = Math.max(24, statusY - inputTop - 3);
         input = new MultiLineEditBox(
-                font, left + 12, top + 34, panelWidth - 24, 88,
+                font, panelLeft + 12, inputTop, panelWidth - 24, inputHeight,
                 Component.translatable("screen.wishing_willow.ai.test.placeholder"),
                 Component.translatable("screen.wishing_willow.ai.test.input")
         );
@@ -40,18 +50,12 @@ public final class AiTestWishScreen extends Screen {
         input.setValue(Component.translatable("screen.wishing_willow.ai.test.example").getString());
         input.setValueListener(value -> testButton.active = !running && !value.strip().isEmpty());
         addRenderableWidget(input);
-        testButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.test.run"),
-                        button -> runTest()
-                )
-                .bounds(width / 2 - 106, top + 152, 100, 20)
-                .build());
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.cancel"),
-                        button -> onClose()
-                )
-                .bounds(width / 2 + 6, top + 152, 100, 20)
-                .build());
+        int buttonWidth = Math.min(100, (panelWidth - 30) / 2);
+        testButton = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.ai.test.run"), button -> runTest(),
+                width / 2 - buttonWidth - 3, buttonY, buttonWidth, 20));
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.cancel"),
+                button -> onClose(), width / 2 + 3, buttonY, buttonWidth, 20));
     }
 
     private void runTest() {
@@ -101,10 +105,10 @@ public final class AiTestWishScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        int top = Math.max(28, height / 2 - 105);
-        graphics.drawCenteredString(font, title, width / 2, top + 8, 0xFFFFFFFF);
-        graphics.drawCenteredString(font, status, width / 2, top + 130, 0xFFBDB7AF);
+        RetroUiTheme.drawBackdrop(graphics);
+        RetroUiTheme.drawPaperPanel(graphics, panelLeft, panelTop, panelWidth, panelHeight);
+        graphics.drawCenteredString(font, title, width / 2, panelTop + 10, RetroUiTheme.OXBLOOD_DARK);
+        graphics.drawCenteredString(font, status, width / 2, statusY, RetroUiTheme.MUTED_INK);
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 

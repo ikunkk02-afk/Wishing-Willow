@@ -25,6 +25,8 @@ import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
+import com.ikunkk02.wishingwillow.network.packet.WishOmenPacket;
+import com.ikunkk02.wishingwillow.omen.WishOmenGenerator;
 import com.ikunkk02.wishingwillow.registry.ModItems;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -283,6 +285,7 @@ public final class WishManager {
                 WishExecutionAcceptResult result=WishExecutionManager.accept(player, accepted.plan());
                 if(!result.accepted())result=tryFallbackAfterExecutionRejection(player,accepted,catalog,result);
                 if(!result.accepted())player.sendSystemMessage(Component.translatable("message.wishing_willow.execution_failed"));
+                else sendOmenForAcceptedPlan(player,sessionId);
             }
         } catch (IllegalArgumentException exception) {
             WishPlanError acceptedError=planError(exception);
@@ -562,6 +565,17 @@ public final class WishManager {
             WishPipelineAudit.failure(record.sessionId(),"FALLBACK",planError(error).name(),error.getMessage());
             return rejected;
         }
+    }
+
+    private static void sendOmenForAcceptedPlan(ServerPlayer player, UUID sessionId) {
+        WishRecord finalRecord = WishSavedData.get(player.server).getBySession(sessionId);
+        if (finalRecord == null || finalRecord.interpretation() == null || finalRecord.plan() == null
+                || finalRecord.executionId() == null) {
+            return;
+        }
+        ModNetworking.sendToPlayer(player, new WishOmenPacket(WishOmenGenerator.generate(
+                sessionId, finalRecord.interpretation(), finalRecord.plan()
+        )));
     }
 
     private static boolean fallbackEligible(WishExecutionAcceptError error){

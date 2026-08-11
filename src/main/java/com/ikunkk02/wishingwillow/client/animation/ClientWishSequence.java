@@ -5,6 +5,8 @@ import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.WishAnimationEventPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
+import com.ikunkk02.wishingwillow.network.packet.WishOmenPacket;
+import com.ikunkk02.wishingwillow.omen.WishOmenHistory;
 import com.ikunkk02.wishingwillow.wish.WishAnimationEvent;
 import com.ikunkk02.wishingwillow.wish.WishRejectionReason;
 import com.ikunkk02.wishingwillow.wish.WishState;
@@ -20,6 +22,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
@@ -37,6 +40,7 @@ import software.bernie.geckolib.animatable.GeoItem;
 import javax.annotation.Nullable;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.List;
 
 @Mod.EventBusSubscriber(modid = WishingWillow.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientWishSequence {
@@ -52,6 +56,7 @@ public final class ClientWishSequence {
     private static final int VIGNETTE_DURATION_TICKS = 12;
     private static final int SHAKE_DURATION_TICKS = 3;
     private static final int CLIENT_TIMEOUT_TICKS = 240;
+    private static final int OMEN_DURATION_TICKS = 60;
 
     @Nullable
     private static ClientSession activeSession;
@@ -62,6 +67,14 @@ public final class ClientWishSequence {
     @Nullable
     private static Component rejectionMessage;
     private static long renderingItemId = Long.MIN_VALUE;
+    private static final WishOmenHistory processedOmens = new WishOmenHistory(32);
+    @Nullable
+    private static UUID completionSessionId;
+    @Nullable
+    private static WishOmenPacket pendingOmen;
+    @Nullable
+    private static WishOmenPacket activeOmen;
+    private static long omenStart = Long.MIN_VALUE;
 
     private ClientWishSequence() {
     }
@@ -93,8 +106,26 @@ public final class ClientWishSequence {
         } else if (packet.state() == WishState.FINISHED
                 && session != null
                 && session.sessionId.equals(packet.correlationId())) {
+            completionSessionId = session.sessionId;
             clearActive();
             completionStart = clientTicks;
+            if (pendingOmen != null && pendingOmen.sessionId().equals(completionSessionId)) {
+                scheduleOmen(pendingOmen);
+                pendingOmen = null;
+            }
+        }
+    }
+
+    public static void receiveOmen(WishOmenPacket packet) {
+        if (!packet.translationKey().startsWith("omen.wishing_willow.")
+                || packet.delayTicks() < 40 || packet.delayTicks() > 100
+                || !processedOmens.accept(packet.sessionId())) {
+            return;
+        }
+        if (packet.sessionId().equals(completionSessionId) && completionStart != Long.MIN_VALUE) {
+            scheduleOmen(packet);
+        } else {
+            pendingOmen = packet;
         }
     }
 
@@ -157,6 +188,10 @@ public final class ClientWishSequence {
                 clearActive();
             }
         }
+        if (activeOmen != null && clientTicks - omenStart > OMEN_DURATION_TICKS) {
+            activeOmen = null;
+            omenStart = Long.MIN_VALUE;
+        }
     }
 
     @SubscribeEvent
@@ -182,6 +217,7 @@ public final class ClientWishSequence {
         GuiGraphics graphics = event.getGuiGraphics();
         renderSnapOverlay(graphics, event.getPartialTick());
         renderCenteredMessages(graphics, event.getPartialTick());
+        renderOmen(graphics, event.getPartialTick());
     }
 
     private static void playSnapEffects(UUID sessionId) {
@@ -275,6 +311,36 @@ public final class ClientWishSequence {
         return Mth.clamp(Math.min(age / fadeDuration, (duration - age) / fadeDuration), 0.0F, 1.0F);
     }
 
+    private static void scheduleOmen(WishOmenPacket packet) {
+        activeOmen = packet;
+        long afterHeard = completionStart + COMPLETION_DURATION_TICKS + 1L;
+        omenStart = Math.max(clientTicks, afterHeard) + packet.delayTicks();
+    }
+
+    private static void renderOmen(GuiGraphics graphics, float partialTick) {
+        if (activeOmen == null) {
+            return;
+        }
+        float age = clientTicks - omenStart + partialTick;
+        if (age < 0.0F || age > OMEN_DURATION_TICKS) {
+            return;
+        }
+        Minecraft minecraft = Minecraft.getInstance();
+        float alpha = fadeAlpha(age, OMEN_DURATION_TICKS, 10.0F);
+        int color = ((int) (alpha * 255.0F) << 24) | 0xA99C8A;
+        int maxWidth = Math.min(280, Math.max(120, graphics.guiWidth() - 48));
+        List<FormattedCharSequence> lines = minecraft.font.split(
+                Component.translatable(activeOmen.translationKey()), maxWidth
+        );
+        int count = Math.min(2, lines.size());
+        int y = Math.max(24, graphics.guiHeight() / 3 - count * 5);
+        for (int index = 0; index < count; index++) {
+            FormattedCharSequence line = lines.get(index);
+            int x = (graphics.guiWidth() - minecraft.font.width(line)) / 2;
+            graphics.drawString(minecraft.font, line, x, y + index * 11, color, true);
+        }
+    }
+
     private static void clearActive() {
         activeSession = null;
         renderingItemId = Long.MIN_VALUE;
@@ -286,6 +352,11 @@ public final class ClientWishSequence {
         completionStart = Long.MIN_VALUE;
         rejectionStart = Long.MIN_VALUE;
         rejectionMessage = null;
+        completionSessionId = null;
+        pendingOmen = null;
+        activeOmen = null;
+        omenStart = Long.MIN_VALUE;
+        processedOmens.clear();
     }
 
     private static final class ClientSession {

@@ -12,6 +12,7 @@ import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
 import com.ikunkk02.wishingwillow.network.packet.UnboxingStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.UnboxingStatePacket;
+import com.ikunkk02.wishingwillow.network.packet.WishOmenPacket;
 import com.ikunkk02.wishingwillow.client.animation.ClientUnboxingSequence;
 import net.minecraft.client.Minecraft;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
@@ -59,5 +60,9 @@ public final class ClientPacketHandlers {
 
     public static void updateUnboxing(UnboxingStatePacket packet) {
         ClientUnboxingSequence.updateState(packet);
+    }
+
+    public static void receiveOmen(WishOmenPacket packet) {
+        ClientWishSequence.receiveOmen(packet);
     }
 }

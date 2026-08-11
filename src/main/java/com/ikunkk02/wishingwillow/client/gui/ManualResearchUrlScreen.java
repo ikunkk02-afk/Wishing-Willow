@@ -19,13 +19,15 @@ public final class ManualResearchUrlScreen extends Screen {
     }
 
     @Override protected void init() {
-        int width = Math.min(500, this.width - 40), x = (this.width - width) / 2, y = this.height / 2 - 20;
+        int width = Math.min(500, Math.max(170, this.width - 28)), x = (this.width - width) / 2;
+        int y = Math.max(34, Math.min(this.height - 63, this.height / 2 - 20));
         url = new EditBox(font, x, y, width, 20, Component.translatable("screen.wishing_willow.knowledge.manual_url"));
         url.setMaxLength(2048); addRenderableWidget(url); setInitialFocus(url);
-        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.knowledge.manual_url.submit"),
-                button -> submit()).bounds(this.width / 2 - 106, y + 34, 100, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.cancel"), button -> onClose())
-                .bounds(this.width / 2 + 6, y + 34, 100, 20).build());
+        int buttonWidth = Math.min(100, (width - 10) / 2);
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.knowledge.manual_url.submit"),
+                button -> submit(), this.width / 2 - buttonWidth - 3, y + 34, buttonWidth, 20));
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.cancel"),
+                button -> onClose(), this.width / 2 + 3, y + 34, buttonWidth, 20));
     }
     private void submit() {
         String value = url.getValue().strip();
@@ -37,8 +39,11 @@ public final class ManualResearchUrlScreen extends Screen {
         } else status = Component.translatable("screen.wishing_willow.knowledge.manual_url.invalid");
     }
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics); graphics.drawCenteredString(font, title, width / 2, height / 2 - 58, 0xFFFFFFFF);
-        graphics.drawCenteredString(font, status, width / 2, height / 2 + 42, 0xFFAAA49B);
+        RetroUiTheme.drawBackdrop(graphics);
+        int panelWidth = Math.min(540, Math.max(190, width - 12));
+        RetroUiTheme.drawPaperPanel(graphics, (width - panelWidth) / 2, 3, panelWidth, height - 7);
+        graphics.drawCenteredString(font, title, width / 2, 12, RetroUiTheme.OXBLOOD_DARK);
+        graphics.drawCenteredString(font, status, width / 2, height - 13, RetroUiTheme.MUTED_INK);
         super.render(graphics, mouseX, mouseY, partialTick);
     }
     @Override public void onClose() { if (minecraft != null) minecraft.setScreen(parent); }

@@ -31,9 +31,19 @@ public final class PackagedWishingWillowItemRenderer extends GeoItemRenderer<Pac
             return;
         }
         ClientUnboxingSequence.beginRender(stack);
+        poseStack.pushPose();
         try {
+            float scale = switch (displayContext) {
+                case FIRST_PERSON_LEFT_HAND, FIRST_PERSON_RIGHT_HAND -> 0.30F;
+                case THIRD_PERSON_LEFT_HAND, THIRD_PERSON_RIGHT_HAND -> 0.34F;
+                case GROUND -> 0.30F;
+                case FIXED -> 0.42F;
+                default -> 0.36F;
+            };
+            poseStack.scale(scale, scale, scale);
             super.renderByItem(stack, displayContext, poseStack, bufferSource, packedLight, packedOverlay);
         } finally {
+            poseStack.popPose();
             ClientUnboxingSequence.endRender();
         }
     }

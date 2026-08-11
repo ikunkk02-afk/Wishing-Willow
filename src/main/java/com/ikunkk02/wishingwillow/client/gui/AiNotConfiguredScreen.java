@@ -19,19 +19,13 @@ public final class AiNotConfiguredScreen extends Screen {
     @Override
     protected void init() {
         int centerX = width / 2;
-        int y = height / 2 + 22;
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.open_settings"),
-                        button -> minecraft.setScreen(new AiSettingsScreen(this))
-                )
-                .bounds(centerX - 106, y, 100, 20)
-                .build());
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.cancel"),
-                        button -> onClose()
-                )
-                .bounds(centerX + 6, y, 100, 20)
-                .build());
+        int y = Math.min(height - 28, height / 2 + 22);
+        int buttonWidth = Math.min(100, (Math.max(190, width - 20) - 18) / 2);
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.ai.open_settings"),
+                button -> minecraft.setScreen(new AiSettingsScreen(this)),
+                centerX - buttonWidth - 3, y, buttonWidth, 20));
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.cancel"),
+                button -> onClose(), centerX + 3, y, buttonWidth, 20));
     }
 
     @Override
@@ -43,15 +37,18 @@ public final class AiNotConfiguredScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        graphics.drawCenteredString(font, title, width / 2, height / 2 - 42, 0xFFFFFFFF);
-        graphics.drawCenteredString(
-                font,
-                Component.translatable("screen.wishing_willow.ai.not_configured.message"),
-                width / 2,
-                height / 2 - 16,
-                0xFFD0CBC3
-        );
+        RetroUiTheme.drawBackdrop(graphics);
+        int panelWidth = Math.min(390, Math.max(190, width - 12));
+        int panelHeight = Math.min(130, height - 8);
+        int panelY = (height - panelHeight) / 2;
+        RetroUiTheme.drawPaperPanel(graphics, (width - panelWidth) / 2, panelY, panelWidth, panelHeight);
+        graphics.drawCenteredString(font, title, width / 2, panelY + 13, RetroUiTheme.OXBLOOD_DARK);
+        int lineY = panelY + 34;
+        for (net.minecraft.util.FormattedCharSequence line : font.split(
+                Component.translatable("screen.wishing_willow.ai.not_configured.message"), panelWidth - 28)) {
+            graphics.drawCenteredString(font, line, width / 2, lineY, RetroUiTheme.INK);
+            lineY += 11;
+        }
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 

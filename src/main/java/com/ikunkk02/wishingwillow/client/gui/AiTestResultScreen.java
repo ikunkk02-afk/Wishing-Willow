@@ -16,6 +16,8 @@ public final class AiTestResultScreen extends Screen {
     private final Screen parent;
     private final String wish;
     private final WishInterpretation interpretation;
+    private int scroll;
+    private int maxScroll;
 
     public AiTestResultScreen(Screen parent, String wish, WishInterpretation interpretation) {
         super(Component.translatable("screen.wishing_willow.ai.test.result.title"));
@@ -26,15 +28,12 @@ public final class AiTestResultScreen extends Screen {
 
     @Override
     protected void init() {
-        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.ai.test.result.plan"),
-                        button -> PlanningDebugController.run(this, wish, interpretation))
-                .bounds(width / 2 - 106, height - 28, 100, 20).build());
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.test.result.back"),
-                        button -> onClose()
-                )
-                .bounds(width / 2 + 6, height - 28, 100, 20)
-                .build());
+        int buttonWidth = Math.min(100, (Math.max(190, width - 20) - 18) / 2);
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.ai.test.result.plan"),
+                button -> PlanningDebugController.run(this, wish, interpretation),
+                width / 2 - buttonWidth - 3, height - 24, buttonWidth, 20));
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.ai.test.result.back"),
+                button -> onClose(), width / 2 + 3, height - 24, buttonWidth, 20));
     }
 
     @Override
@@ -46,11 +45,13 @@ public final class AiTestResultScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        graphics.drawCenteredString(font, title, width / 2, 12, 0xFFFFFFFF);
+        RetroUiTheme.drawBackdrop(graphics);
+        int panelWidth = Math.min(560, Math.max(190, width - 12));
+        RetroUiTheme.drawPaperPanel(graphics, (width - panelWidth) / 2, 3, panelWidth, height - 7);
+        graphics.drawCenteredString(font, title, width / 2, 10, RetroUiTheme.OXBLOOD_DARK);
         int maxWidth = Math.min(520, width - 40);
         int x = (width - maxWidth) / 2;
-        int y = 32;
+        int y = 29;
         List<Component> sections = new ArrayList<>();
         sections.add(Component.translatable("screen.wishing_willow.ai.test.result.wish", wish));
         sections.add(Component.translatable("screen.wishing_willow.ai.test.result.outcome", interpretation.twistedOutcome()));
@@ -62,17 +63,31 @@ public final class AiTestResultScreen extends Screen {
                 "screen.wishing_willow.ai.test.result.capabilities",
                 interpretation.requiredCapabilities().stream().map(Enum::name).collect(Collectors.joining(", "))
         ));
+        List<FormattedCharSequence> lines = new ArrayList<>();
         for (Component section : sections) {
             for (FormattedCharSequence line : font.split(section, maxWidth)) {
-                if (y > height - 42) {
-                    break;
-                }
-                graphics.drawString(font, line, x, y, 0xFFD6D2CB);
-                y += 10;
+                lines.add(line);
             }
-            y += 5;
+            lines.add(FormattedCharSequence.EMPTY);
         }
+        int visible = Math.max(1, (height - 61) / 10);
+        maxScroll = Math.max(0, lines.size() - visible);
+        scroll = Math.max(0, Math.min(scroll, maxScroll));
+        graphics.enableScissor(x, 27, x + maxWidth, height - 28);
+        for (int index = scroll; index < lines.size() && y < height - 30; index++, y += 10) {
+            graphics.drawString(font, lines.get(index), x, y, RetroUiTheme.INK);
+        }
+        graphics.disableScissor();
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (maxScroll > 0) {
+            scroll = Math.max(0, Math.min(maxScroll, scroll - (int) Math.signum(delta)));
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     @Override

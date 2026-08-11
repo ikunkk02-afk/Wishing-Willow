@@ -35,23 +35,25 @@ public final class ModKnowledgeDetailScreen extends Screen {
         KnowledgeEntry entry = ModResearchManager.getInstance().knowledgeBase().findMod(modId);
         boolean unresolved = entry == null || entry.webResearch().identity().level() != IdentityConfidenceLevel.CONFIRMED;
         int buttonCount = unresolved ? 3 : 2;
-        int totalWidth = buttonCount * 110 + (buttonCount - 1) * 6;
+        int available = Math.min(620, Math.max(190, width - 12));
+        int buttonWidth = Math.min(110, (available - (buttonCount - 1) * 4 - 12) / buttonCount);
+        int totalWidth = buttonCount * buttonWidth + (buttonCount - 1) * 4;
         int x = width / 2 - totalWidth / 2;
-        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.knowledge.research_mod"),
-                        button -> ModResearchManager.getInstance().researchMod(modId))
-                .bounds(x, height - 28, 110, 20).build());
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.knowledge.research_mod"),
+                button -> ModResearchManager.getInstance().researchMod(modId),
+                x, height - 24, buttonWidth, 20));
         if (unresolved) {
-            addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.knowledge.manual_url"),
-                            button -> minecraft.setScreen(new ManualResearchUrlScreen(this, modId)))
-                    .bounds(x + 116, height - 28, 110, 20).build());
+            addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.knowledge.manual_url"),
+                    button -> minecraft.setScreen(new ManualResearchUrlScreen(this, modId)),
+                    x + buttonWidth + 4, height - 24, buttonWidth, 20));
         }
-        addRenderableWidget(Button.builder(Component.translatable("gui.back"), button -> onClose())
-                .bounds(x + (buttonCount - 1) * 116, height - 28, 110, 20).build());
+        addRenderableWidget(RetroButton.create(Component.translatable("gui.back"), button -> onClose(),
+                x + (buttonCount - 1) * (buttonWidth + 4), height - 24, buttonWidth, 20));
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        RetroUiTheme.drawBackdrop(graphics);
         KnowledgeEntry entry = ModResearchManager.getInstance().knowledgeBase().findMod(modId);
         if (entry == null) {
             graphics.drawCenteredString(font, Component.literal("Unknown mod: " + modId), width / 2, 16,
@@ -60,19 +62,18 @@ public final class ModKnowledgeDetailScreen extends Screen {
             return;
         }
 
-        int panelWidth = Math.min(620, width - 24);
+        int panelWidth = Math.min(620, Math.max(190, width - 12));
         int left = (width - panelWidth) / 2;
-        int top = 42;
-        int bottom = height - 36;
-        graphics.fill(left - 6, 6, left + panelWidth + 6, 36, 0xB8101014);
-        graphics.fill(left - 6, top, left + panelWidth + 6, bottom, 0xB8101014);
+        int top = 38;
+        int bottom = height - 28;
+        RetroUiTheme.drawPaperPanel(graphics, left - 4, 3, panelWidth + 8, height - 7);
         graphics.drawCenteredString(font, Component.literal(entry.installed().displayName()), width / 2, 10,
-                0xFFFFFFFF);
+                RetroUiTheme.OXBLOOD_DARK);
         Component status = ResearchUiText.category(entry.category()).append(Component.literal("  •  ")
                         .withStyle(ChatFormatting.DARK_GRAY)).append(ResearchUiText.level(entry.knowledgeLevel()))
                 .append(Component.literal("  •  ").withStyle(ChatFormatting.DARK_GRAY))
                 .append(ResearchUiText.state(entry.state()));
-        graphics.drawCenteredString(font, status, width / 2, 24, 0xFFFFFFFF);
+        graphics.drawCenteredString(font, status, width / 2, 24, RetroUiTheme.MUTED_INK);
 
         List<Component> logicalLines = details(entry);
         List<FormattedCharSequence> wrapped = new ArrayList<>();
@@ -86,7 +87,7 @@ public final class ModKnowledgeDetailScreen extends Screen {
         graphics.enableScissor(left, top + 2, left + panelWidth, bottom - 2);
         int y = top + 8 - scroll;
         for (FormattedCharSequence line : wrapped) {
-            graphics.drawString(font, line, left + 10, y, 0xFFE0DCD3);
+            graphics.drawString(font, line, left + 10, y, RetroUiTheme.INK);
             y += 12;
         }
         graphics.disableScissor();
@@ -96,9 +97,9 @@ public final class ModKnowledgeDetailScreen extends Screen {
             int thumbHeight = Math.max(16, trackHeight * trackHeight / Math.max(trackHeight, contentHeight));
             int thumbY = trackTop + (trackHeight - thumbHeight) * scroll / maxScroll;
             graphics.fill(left + panelWidth - 4, trackTop, left + panelWidth - 2, trackTop + trackHeight,
-                    0xFF34343A);
+                    0x555A392D);
             graphics.fill(left + panelWidth - 4, thumbY, left + panelWidth - 2, thumbY + thumbHeight,
-                    0xFF8FA8B5);
+                    RetroUiTheme.OXBLOOD);
         }
         super.render(graphics, mouseX, mouseY, partialTick);
     }

@@ -1,9 +1,7 @@
 package com.ikunkk02.wishingwillow.item;
 
-import com.ikunkk02.wishingwillow.client.renderer.PackagedWishingWillowItemRenderer;
 import com.ikunkk02.wishingwillow.unboxing.UnboxingManager;
 import net.minecraft.ChatFormatting;
-import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -13,7 +11,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.client.extensions.common.IClientItemExtensions;
 import software.bernie.geckolib.animatable.GeoItem;
 import software.bernie.geckolib.animatable.SingletonGeoAnimatable;
 import software.bernie.geckolib.core.animatable.instance.AnimatableInstanceCache;
@@ -25,7 +22,6 @@ import software.bernie.geckolib.util.GeckoLibUtil;
 
 import javax.annotation.Nullable;
 import java.util.List;
-import java.util.function.Consumer;
 
 public final class PackagedWishingWillowItem extends Item implements GeoItem {
     private static final String CONTROLLER = "unboxing_controller";
@@ -53,21 +49,6 @@ public final class PackagedWishingWillowItem extends Item implements GeoItem {
 
     public void triggerUnboxingAnimation(ServerPlayer player, long itemInstanceId) {
         triggerAnim(player, itemInstanceId, CONTROLLER, TRIGGER);
-    }
-
-    @Override
-    public void initializeClient(Consumer<IClientItemExtensions> consumer) {
-        consumer.accept(new IClientItemExtensions() {
-            private PackagedWishingWillowItemRenderer renderer;
-
-            @Override
-            public BlockEntityWithoutLevelRenderer getCustomRenderer() {
-                if (renderer == null) {
-                    renderer = new PackagedWishingWillowItemRenderer();
-                }
-                return renderer;
-            }
-        });
     }
 
     @Override

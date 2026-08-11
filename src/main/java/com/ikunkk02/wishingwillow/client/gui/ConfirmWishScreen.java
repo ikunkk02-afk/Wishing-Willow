@@ -28,18 +28,11 @@ public final class ConfirmWishScreen extends Screen {
         int panelWidth = Math.min(330, width - 32);
         int centerX = width / 2;
         int buttonY = height / 2 + 32;
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.confirm.accept"),
-                        button -> submit()
-                )
-                .bounds(centerX - 106, buttonY, 100, 20)
-                .build());
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.confirm.back"),
-                        button -> goBack()
-                )
-                .bounds(centerX + 6, buttonY, 100, 20)
-                .build());
+        int buttonWidth = Math.min(100, (panelWidth - 18) / 2);
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.confirm.accept"),
+                button -> submit(), centerX - buttonWidth - 3, buttonY, buttonWidth, 20));
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.confirm.back"),
+                button -> goBack(), centerX + 3, buttonY, buttonWidth, 20));
     }
 
     private void submit() {
@@ -77,20 +70,19 @@ public final class ConfirmWishScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
+        RetroUiTheme.drawBackdrop(graphics);
         int panelWidth = Math.min(330, width - 32);
         int panelHeight = 118;
         int left = (width - panelWidth) / 2;
         int top = (height - panelHeight) / 2;
-        graphics.fill(left, top, left + panelWidth, top + panelHeight, 0xE31A1816);
-        graphics.renderOutline(left, top, panelWidth, panelHeight, 0xFF62594F);
-        graphics.drawCenteredString(font, title, width / 2, top + 18, 0xFFD6D2CB);
+        RetroUiTheme.drawPaperPanel(graphics, left, top, panelWidth, panelHeight);
+        graphics.drawCenteredString(font, title, width / 2, top + 18, RetroUiTheme.OXBLOOD_DARK);
         graphics.drawCenteredString(
                 font,
                 Component.translatable("screen.wishing_willow.confirm.warning"),
                 width / 2,
                 top + 46,
-                0xFFB9B4AC
+                RetroUiTheme.INK
         );
         super.render(graphics, mouseX, mouseY, partialTick);
     }

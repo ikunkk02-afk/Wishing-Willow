@@ -5,21 +5,171 @@ import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.RequestExecutionSettingsPacket;
 import com.ikunkk02.wishingwillow.network.packet.UpdateExecutionSettingsPacket;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 public final class ExecutionSettingsScreen extends Screen {
-    private final Screen parent;private ExecutionSettingsSnapshot value=new ExecutionSettingsSnapshot(true,true,true,true,false,false,true,80,false);
-    public ExecutionSettingsScreen(Screen parent){super(Component.translatable("screen.wishing_willow.execution.title"));this.parent=parent;}
-    @Override protected void init(){rebuild();ModNetworking.sendToServer(new RequestExecutionSettingsPacket());}
-    public void apply(ExecutionSettingsSnapshot settings){value=settings;if(minecraft!=null)minecraft.execute(this::rebuild);}
-    private void rebuild(){clearWidgets();int x=width/2-150,y=38;addToggle(x,y,0);addToggle(x+155,y,1);addToggle(x,y+24,2);addToggle(x+155,y+24,3);addToggle(x,y+48,4);addToggle(x+155,y+48,5);addToggle(x,y+72,6);addRenderableWidget(Button.builder(label("screen.wishing_willow.execution.max_severity",Integer.toString(value.maximumDestructiveSeverity())),b->{value=new ExecutionSettingsSnapshot(value.enabled(),value.thirdPartyEntities(),value.blockModification(),value.explosions(),value.destructiveExplosions(),value.crossDimensionTeleport(),value.debugSafeMode(),(value.maximumDestructiveSeverity()+20)%120,value.canEdit());rebuild();}).bounds(x+155,y+72,145,20).build()).active=value.canEdit();Button save=addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.execution.save"),b->ModNetworking.sendToServer(new UpdateExecutionSettingsPacket(value))).bounds(x,y+108,145,20).build());save.active=value.canEdit();addRenderableWidget(Button.builder(Component.translatable("gui.done"),b->onClose()).bounds(x+155,y+108,145,20).build());}
-    private void addToggle(int x,int y,int index){String key=switch(index){case 0->"enabled";case 1->"third_party";case 2->"blocks";case 3->"explosions";case 4->"destructive";case 5->"cross_dimension";default->"safe_mode";};boolean current=get(index);Button button=addRenderableWidget(Button.builder(label("screen.wishing_willow.execution."+key,Component.translatable(current?"options.on":"options.off").getString()),b->{set(index,!get(index));rebuild();}).bounds(x,y,145,20).build());button.active=value.canEdit();}
-    private Component label(String key,String status){return Component.translatable(key).append(": ").append(status);}
-    private boolean get(int i){return switch(i){case 0->value.enabled();case 1->value.thirdPartyEntities();case 2->value.blockModification();case 3->value.explosions();case 4->value.destructiveExplosions();case 5->value.crossDimensionTeleport();default->value.debugSafeMode();};}
-    private void set(int i,boolean v){value=new ExecutionSettingsSnapshot(i==0?v:value.enabled(),i==1?v:value.thirdPartyEntities(),i==2?v:value.blockModification(),i==3?v:value.explosions(),i==4?v:value.destructiveExplosions(),i==5?v:value.crossDimensionTeleport(),i==6?v:value.debugSafeMode(),value.maximumDestructiveSeverity(),value.canEdit());}
-    @Override public void render(GuiGraphics g,int mx,int my,float partial){renderBackground(g);g.drawCenteredString(font,title,width/2,18,0xffffffff);if(value.debugSafeMode()){g.drawCenteredString(font,Component.translatable("screen.wishing_willow.execution.safe_mode_active"),width/2,174,0xffff5555);g.drawCenteredString(font,Component.translatable("screen.wishing_willow.execution.safe_mode_warning_1"),width/2,188,0xffffaa55);g.drawCenteredString(font,Component.translatable("screen.wishing_willow.execution.safe_mode_warning_2"),width/2,200,0xffffaa55);}if(!value.canEdit())g.drawCenteredString(font,Component.translatable("screen.wishing_willow.execution.read_only"),width/2,height-40,0xffffaa55);super.render(g,mx,my,partial);}
-    @Override public void onClose(){if(minecraft!=null)minecraft.setScreen(parent);}
-    @Override public boolean isPauseScreen(){return false;}
+    private final Screen parent;
+    private ExecutionSettingsSnapshot value = new ExecutionSettingsSnapshot(
+            true, true, true, true, false, false, true, 80, false);
+    private int scrollRow;
+    private int panelX;
+    private int panelWidth;
+    private int contentTop;
+    private int contentBottom;
+
+    public ExecutionSettingsScreen(Screen parent) {
+        super(Component.translatable("screen.wishing_willow.execution.title"));
+        this.parent = parent;
+    }
+
+    @Override
+    protected void init() {
+        rebuild();
+        ModNetworking.sendToServer(new RequestExecutionSettingsPacket());
+    }
+
+    public void apply(ExecutionSettingsSnapshot settings) {
+        value = settings;
+        if (minecraft != null) minecraft.execute(this::rebuild);
+    }
+
+    private void rebuild() {
+        clearWidgets();
+        panelWidth = Math.min(620, Math.max(190, width - 12));
+        panelX = (width - panelWidth) / 2;
+        boolean warning = value.debugSafeMode();
+        contentTop = warning && height >= 150 ? 72 : 39;
+        contentBottom = height - 34;
+        int columns = width < 420 ? 1 : 2;
+        int totalRows = (8 + columns - 1) / columns;
+        int visibleRows = Math.max(1, (contentBottom - contentTop) / 25);
+        scrollRow = Math.max(0, Math.min(scrollRow, Math.max(0, totalRows - visibleRows)));
+        int gap = 5;
+        int buttonWidth = (panelWidth - 20 - gap * (columns - 1)) / columns;
+        for (int index = 0; index < 8; index++) {
+            int row = index / columns;
+            if (row < scrollRow || row >= scrollRow + visibleRows) continue;
+            int column = index % columns;
+            int x = panelX + 10 + column * (buttonWidth + gap);
+            int y = contentTop + (row - scrollRow) * 25;
+            addSetting(index, x, y, buttonWidth);
+        }
+        int footerY = height - 27;
+        int footerWidth = Math.min(150, (panelWidth - 25) / 2);
+        RetroButton save = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.execution.save"),
+                button -> ModNetworking.sendToServer(new UpdateExecutionSettingsPacket(value)),
+                width / 2 - footerWidth - 3, footerY, footerWidth, 20));
+        save.active = value.canEdit();
+        addRenderableWidget(RetroButton.create(Component.translatable("gui.done"), button -> onClose(),
+                width / 2 + 3, footerY, footerWidth, 20));
+    }
+
+    private void addSetting(int index, int x, int y, int buttonWidth) {
+        if (index == 7) {
+            RetroButton severity = addRenderableWidget(RetroButton.create(label(
+                    "screen.wishing_willow.execution.max_severity",
+                    Integer.toString(value.maximumDestructiveSeverity())), button -> {
+                value = new ExecutionSettingsSnapshot(value.enabled(), value.thirdPartyEntities(),
+                        value.blockModification(), value.explosions(), value.destructiveExplosions(),
+                        value.crossDimensionTeleport(), value.debugSafeMode(),
+                        (value.maximumDestructiveSeverity() + 20) % 120, value.canEdit());
+                rebuild();
+            }, x, y, buttonWidth, 20));
+            severity.active = value.canEdit();
+            severity.setTooltip(Tooltip.create(Component.translatable("screen.wishing_willow.execution.warning.severity")));
+            return;
+        }
+        String key = switch (index) {
+            case 0 -> "enabled";
+            case 1 -> "third_party";
+            case 2 -> "blocks";
+            case 3 -> "explosions";
+            case 4 -> "destructive";
+            case 5 -> "cross_dimension";
+            default -> "safe_mode";
+        };
+        boolean danger = index >= 2 && index <= 5;
+        Component name = Component.translatable("screen.wishing_willow.execution." + key);
+        if (danger) name = name.copy().append(" ⚠");
+        Component buttonLabel = name.copy().append(": ").append(Component.translatable(
+                get(index) ? "options.on" : "options.off"));
+        RetroButton toggle = addRenderableWidget(RetroButton.create(buttonLabel, button -> {
+            set(index, !get(index));
+            rebuild();
+        }, x, y, buttonWidth, 20));
+        toggle.active = value.canEdit();
+        if (danger) toggle.setTooltip(Tooltip.create(Component.translatable(
+                "screen.wishing_willow.execution.warning." + key)));
+    }
+
+    private Component label(String key, String status) {
+        return Component.translatable(key).append(": ").append(status);
+    }
+
+    private boolean get(int index) {
+        return switch (index) {
+            case 0 -> value.enabled();
+            case 1 -> value.thirdPartyEntities();
+            case 2 -> value.blockModification();
+            case 3 -> value.explosions();
+            case 4 -> value.destructiveExplosions();
+            case 5 -> value.crossDimensionTeleport();
+            default -> value.debugSafeMode();
+        };
+    }
+
+    private void set(int index, boolean enabled) {
+        value = new ExecutionSettingsSnapshot(index == 0 ? enabled : value.enabled(),
+                index == 1 ? enabled : value.thirdPartyEntities(),
+                index == 2 ? enabled : value.blockModification(),
+                index == 3 ? enabled : value.explosions(),
+                index == 4 ? enabled : value.destructiveExplosions(),
+                index == 5 ? enabled : value.crossDimensionTeleport(),
+                index == 6 ? enabled : value.debugSafeMode(), value.maximumDestructiveSeverity(), value.canEdit());
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        int columns = width < 420 ? 1 : 2;
+        int totalRows = (8 + columns - 1) / columns;
+        int visibleRows = Math.max(1, (contentBottom - contentTop) / 25);
+        int maximum = Math.max(0, totalRows - visibleRows);
+        if (maximum > 0) {
+            scrollRow = Math.max(0, Math.min(maximum, scrollRow - (int) Math.signum(delta)));
+            rebuild();
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        RetroUiTheme.drawBackdrop(graphics);
+        RetroUiTheme.drawPaperPanel(graphics, panelX, 3, panelWidth, height - 7);
+        graphics.drawCenteredString(font, title, width / 2, 11, RetroUiTheme.OXBLOOD_DARK);
+        if (value.debugSafeMode() && height >= 150) {
+            RetroUiTheme.drawWarningBar(graphics, font,
+                    Component.translatable("screen.wishing_willow.execution.safe_mode_active"),
+                    Component.translatable("screen.wishing_willow.execution.safe_mode_warning_1"),
+                    panelX + 10, 32, panelWidth - 20);
+        }
+        if (!value.canEdit()) {
+            graphics.drawCenteredString(font, Component.translatable("screen.wishing_willow.execution.read_only"),
+                    width / 2, height >= 150 ? 22 : 25, RetroUiTheme.STATUS_WARN);
+        }
+        super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public void onClose() {
+        if (minecraft != null) minecraft.setScreen(parent);
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
 }

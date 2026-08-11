@@ -1,7 +1,6 @@
 package com.ikunkk02.wishingwillow.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -18,28 +17,41 @@ public final class WishingWillowSettingsScreen extends Screen {
 
     @Override
     protected void init() {
-        int x = width / 2 - 100;
-        int y = Math.max(40, height / 2 - 64);
-        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.settings.ai"),
-                        button -> minecraft.setScreen(new AiSettingsScreen(this)))
-                .bounds(x, y, 200, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.settings.knowledge"),
-                        button -> minecraft.setScreen(new ModKnowledgeBaseScreen(this)))
-                .bounds(x, y + 26, 200, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.settings.research"),
-                        button -> minecraft.setScreen(new ResearchSettingsScreen(this)))
-                .bounds(x, y + 52, 200, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("screen.wishing_willow.settings.execution"),
-                        button -> minecraft.setScreen(new ExecutionSettingsScreen(this)))
-                .bounds(x, y + 78, 200, 20).build());
-        addRenderableWidget(Button.builder(Component.translatable("gui.done"), button -> onClose())
-                .bounds(x, y + 112, 200, 20).build());
+        boolean compact = height < 180;
+        int panelWidth = Math.min(430, Math.max(190, width - 12));
+        int columns = compact ? 2 : 1;
+        int gap = 6;
+        int buttonWidth = columns == 1 ? Math.min(240, panelWidth - 28) : (panelWidth - 34) / 2;
+        int startX = (width - (buttonWidth * columns + gap * (columns - 1))) / 2;
+        int y = compact ? 31 : Math.max(39, height / 2 - 68);
+        Component[] labels = {
+                Component.translatable("screen.wishing_willow.settings.ai"),
+                Component.translatable("screen.wishing_willow.settings.knowledge"),
+                Component.translatable("screen.wishing_willow.settings.research"),
+                Component.translatable("screen.wishing_willow.settings.execution")
+        };
+        net.minecraft.client.gui.components.Button.OnPress[] actions = new net.minecraft.client.gui.components.Button.OnPress[]{
+                button -> minecraft.setScreen(new AiSettingsScreen(this)),
+                button -> minecraft.setScreen(new ModKnowledgeBaseScreen(this)),
+                button -> minecraft.setScreen(new ResearchSettingsScreen(this)),
+                button -> minecraft.setScreen(new ExecutionSettingsScreen(this))
+        };
+        for (int index = 0; index < labels.length; index++) {
+            addRenderableWidget(RetroButton.create(labels[index], actions[index],
+                    startX + (index % columns) * (buttonWidth + gap),
+                    y + (index / columns) * 26, buttonWidth, 20));
+        }
+        int doneY = y + ((labels.length + columns - 1) / columns) * 26 + 5;
+        addRenderableWidget(RetroButton.create(Component.translatable("gui.done"), button -> onClose(),
+                width / 2 - buttonWidth / 2, doneY, buttonWidth, 20));
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        graphics.drawCenteredString(font, title, width / 2, 24, 0xFFFFFFFF);
+        RetroUiTheme.drawBackdrop(graphics);
+        int panelWidth = Math.min(430, Math.max(190, width - 12));
+        RetroUiTheme.drawPaperPanel(graphics, (width - panelWidth) / 2, 3, panelWidth, height - 7);
+        RetroUiTheme.drawHeader(graphics, font, title, width / 2, 10);
         super.render(graphics, mouseX, mouseY, partialTick);
     }
 

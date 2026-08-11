@@ -12,6 +12,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -20,7 +21,7 @@ import java.util.Locale;
 
 public final class AiSettingsScreen extends Screen {
     private static final int PANEL_WIDTH = 390;
-    private static final int PANEL_HEIGHT = 230;
+    private static final int PANEL_HEIGHT = 246;
 
     @Nullable
     private final Screen parent;
@@ -41,6 +42,12 @@ public final class AiSettingsScreen extends Screen {
     private int panelLeft;
     private int panelTop;
     private int panelWidth;
+    private int panelHeight;
+    private int viewportTop;
+    private int viewportBottom;
+    private int contentOrigin;
+    private int statusY;
+    private int scrollOffset;
 
     public AiSettingsScreen(@Nullable Screen parent) {
         super(Component.translatable("screen.wishing_willow.ai.title"));
@@ -51,11 +58,19 @@ public final class AiSettingsScreen extends Screen {
     @Override
     protected void init() {
         captureDraft();
-        panelWidth = Math.min(PANEL_WIDTH, width - 24);
+        panelWidth = Math.min(PANEL_WIDTH, Math.max(190, width - 12));
         panelLeft = (width - panelWidth) / 2;
-        panelTop = Math.max(5, (height - PANEL_HEIGHT) / 2);
-        int fieldX = panelLeft + 18;
-        int fieldWidth = panelWidth - 36;
+        panelTop = 3;
+        panelHeight = height - 7;
+        viewportTop = 29;
+        viewportBottom = height - 32;
+        int fieldX = panelLeft + 12;
+        int fieldWidth = panelWidth - 24;
+        boolean narrow = fieldWidth < 300;
+        int totalContent = narrow ? 252 : 205;
+        scrollOffset = Math.max(0, Math.min(scrollOffset,
+                Math.max(0, totalContent - Math.max(1, viewportBottom - viewportTop))));
+        contentOrigin = viewportTop + 2 - scrollOffset;
 
         providerButton = addRenderableWidget(CycleButton.<AiProviderType>builder(
                         value -> Component.translatable(providerKey(value))
@@ -63,13 +78,13 @@ public final class AiSettingsScreen extends Screen {
                 .withValues(AiProviderType.values())
                 .withInitialValue(draftConfig.providerType())
                 .create(
-                        fieldX, panelTop + 22, fieldWidth, 20,
+                        fieldX, contentOrigin, fieldWidth, 20,
                         Component.translatable("screen.wishing_willow.ai.provider"),
                         (button, value) -> selectProvider(value)
                 ));
 
         baseUrlInput = new EditBox(
-                font, fieldX, panelTop + 58, fieldWidth, 20,
+                font, fieldX, contentOrigin + 38, fieldWidth, 20,
                 Component.translatable("screen.wishing_willow.ai.base_url")
         );
         baseUrlInput.setMaxLength(AiConfig.MAX_BASE_URL_LENGTH);
@@ -78,22 +93,19 @@ public final class AiSettingsScreen extends Screen {
         addRenderableWidget(baseUrlInput);
 
         apiKeyInput = new PasswordEditBox(
-                font, fieldX, panelTop + 94, fieldWidth - 64, 20,
+                font, fieldX, contentOrigin + 75, fieldWidth - 64, 20,
                 Component.translatable("screen.wishing_willow.ai.api_key")
         );
         apiKeyInput.setMaxLength(AiConfig.MAX_API_KEY_LENGTH);
         apiKeyInput.setValue(draftConfig.apiKey());
         apiKeyInput.setResponder(value -> invalidateTest());
         addRenderableWidget(apiKeyInput);
-        showKeyButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.show"),
-                        button -> toggleKeyVisibility()
-                )
-                .bounds(fieldX + fieldWidth - 60, panelTop + 94, 60, 20)
-                .build());
+        showKeyButton = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.ai.show"), button -> toggleKeyVisibility(),
+                fieldX + fieldWidth - 60, contentOrigin + 75, 60, 20));
 
         modelInput = new EditBox(
-                font, fieldX, panelTop + 130, fieldWidth, 20,
+                font, fieldX, contentOrigin + 112, fieldWidth, 20,
                 Component.translatable("screen.wishing_willow.ai.model")
         );
         modelInput.setMaxLength(AiConfig.MAX_MODEL_LENGTH);
@@ -101,41 +113,36 @@ public final class AiSettingsScreen extends Screen {
         modelInput.setResponder(value -> invalidateTest());
         addRenderableWidget(modelInput);
 
-        int actionsY = panelTop + 158;
-        int actionWidth = (fieldWidth - 12) / 3;
-        fetchModelsButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.fetch_models"),
-                        button -> fetchModels()
-                )
-                .bounds(fieldX, actionsY, actionWidth, 20)
-                .build());
-        testConnectionButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.test_connection"),
-                        button -> testConnection()
-                )
-                .bounds(fieldX + actionWidth + 6, actionsY, actionWidth, 20)
-                .build());
-        testInterpretationButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.test_interpretation"),
-                        button -> openTestInterpretation()
-                )
-                .bounds(fieldX + (actionWidth + 6) * 2, actionsY, actionWidth, 20)
-                .build());
+        int actionsY = contentOrigin + 142;
+        int actionWidth = narrow ? fieldWidth : (fieldWidth - 12) / 3;
+        fetchModelsButton = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.ai.fetch_models"), button -> fetchModels(),
+                fieldX, actionsY, actionWidth, 20));
+        testConnectionButton = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.ai.test_connection"), button -> testConnection(),
+                fieldX + (narrow ? 0 : actionWidth + 6), actionsY + (narrow ? 24 : 0), actionWidth, 20));
+        testInterpretationButton = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.ai.test_interpretation"),
+                button -> openTestInterpretation(), fieldX + (narrow ? 0 : (actionWidth + 6) * 2),
+                actionsY + (narrow ? 48 : 0), actionWidth, 20));
+        statusY = actionsY + (narrow ? 76 : 29);
 
-        int bottomY = panelTop + 204;
-        saveButton = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.save"),
-                        button -> save()
-                )
-                .bounds(width / 2 - 106, bottomY, 100, 20)
-                .build());
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.cancel"),
-                        button -> onClose()
-                )
-                .bounds(width / 2 + 6, bottomY, 100, 20)
-                .build());
+        int bottomY = height - 27;
+        int footerWidth = Math.min(100, (panelWidth - 28) / 2);
+        saveButton = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.ai.save"), button -> save(),
+                width / 2 - footerWidth - 3, bottomY, footerWidth, 20));
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.cancel"),
+                button -> onClose(), width / 2 + 3, bottomY, footerWidth, 20));
+        setContentVisibility(providerButton, baseUrlInput, apiKeyInput, showKeyButton, modelInput,
+                fetchModelsButton, testConnectionButton, testInterpretationButton);
         updateButtonStates();
+    }
+
+    private void setContentVisibility(AbstractWidget... widgets) {
+        for (AbstractWidget widget : widgets) {
+            widget.visible = widget.getY() >= viewportTop && widget.getY() + widget.getHeight() <= viewportBottom;
+        }
     }
 
     private void selectProvider(AiProviderType providerType) {
@@ -320,6 +327,19 @@ public final class AiSettingsScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        int fieldWidth = panelWidth - 24;
+        int totalContent = fieldWidth < 300 ? 252 : 205;
+        int maximum = Math.max(0, totalContent - Math.max(1, viewportBottom - viewportTop));
+        if (maximum > 0) {
+            scrollOffset = Math.max(0, Math.min(maximum, scrollOffset - (int) Math.signum(delta) * 20));
+            rebuildWidgets();
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
+    @Override
     public void onClose() {
         if (minecraft != null) {
             minecraft.setScreen(parent);
@@ -328,16 +348,37 @@ public final class AiSettingsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        graphics.fill(panelLeft, panelTop, panelLeft + panelWidth, panelTop + PANEL_HEIGHT, 0xE31A1816);
-        graphics.renderOutline(panelLeft, panelTop, panelWidth, PANEL_HEIGHT, 0xFF62594F);
-        graphics.drawCenteredString(font, title, width / 2, panelTop + 7, 0xFFFFFFFF);
-        int labelX = panelLeft + 18;
-        graphics.drawString(font, Component.translatable("screen.wishing_willow.ai.base_url"), labelX, panelTop + 48, 0xFFD6D2CB);
-        graphics.drawString(font, Component.translatable("screen.wishing_willow.ai.api_key"), labelX, panelTop + 84, 0xFFD6D2CB);
-        graphics.drawString(font, Component.translatable("screen.wishing_willow.ai.model"), labelX, panelTop + 120, 0xFFD6D2CB);
-        graphics.drawString(font, Component.translatable("screen.wishing_willow.ai.status", status), labelX, panelTop + 184, 0xFFBDB7AF);
+        RetroUiTheme.drawBackdrop(graphics);
+        RetroUiTheme.drawPaperPanel(graphics, panelLeft, panelTop, panelWidth, panelHeight);
+        graphics.drawCenteredString(font, title, width / 2, 10, RetroUiTheme.OXBLOOD_DARK);
+        int labelX = panelLeft + 12;
+        drawLabelIfVisible(graphics, Component.translatable("screen.wishing_willow.ai.base_url"),
+                labelX, contentOrigin + 27);
+        drawLabelIfVisible(graphics, Component.translatable("screen.wishing_willow.ai.api_key"),
+                labelX, contentOrigin + 64);
+        drawLabelIfVisible(graphics, Component.translatable("screen.wishing_willow.ai.model"),
+                labelX, contentOrigin + 101);
+        if (statusY >= viewportTop && statusY + 20 <= viewportBottom) {
+            boolean connected = testedConfig != null && !busy;
+            if (font.width(status) <= panelWidth - 42) {
+                RetroUiTheme.drawStatusBadge(graphics, font, status, width / 2, statusY, connected);
+            } else {
+                int lineY = statusY - 3;
+                for (net.minecraft.util.FormattedCharSequence line : font.split(status, panelWidth - 34)) {
+                    graphics.drawCenteredString(font, line, width / 2, lineY,
+                            connected ? RetroUiTheme.STATUS_OK : RetroUiTheme.STATUS_WARN);
+                    lineY += 10;
+                    if (lineY > statusY + 10) break;
+                }
+            }
+        }
         super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    private void drawLabelIfVisible(GuiGraphics graphics, Component label, int x, int y) {
+        if (y >= viewportTop && y + font.lineHeight <= viewportBottom) {
+            graphics.drawString(font, label, x, y, RetroUiTheme.INK, false);
+        }
     }
 
     @Override

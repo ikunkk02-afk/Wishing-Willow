@@ -15,6 +15,7 @@ public final class AiModelSelectionScreen extends Screen {
     private final List<String> models;
     private final Consumer<String> selection;
     private int page;
+    private int pageSize = PAGE_SIZE;
 
     public AiModelSelectionScreen(Screen parent, List<String> models, Consumer<String> selection) {
         super(Component.translatable("screen.wishing_willow.ai.models.title"));
@@ -25,38 +26,31 @@ public final class AiModelSelectionScreen extends Screen {
 
     @Override
     protected void init() {
-        int start = page * PAGE_SIZE;
-        int end = Math.min(models.size(), start + PAGE_SIZE);
+        pageSize = Math.max(1, Math.min(PAGE_SIZE, (height - 68) / 22));
+        int pages = Math.max(1, (models.size() + pageSize - 1) / pageSize);
+        page = Math.max(0, Math.min(page, pages - 1));
+        int start = page * pageSize;
+        int end = Math.min(models.size(), start + pageSize);
         int listWidth = Math.min(360, width - 40);
         int x = (width - listWidth) / 2;
-        int y = Math.max(42, (height - PAGE_SIZE * 22 - 54) / 2);
+        int y = Math.max(28, (height - pageSize * 22 - 44) / 2);
         for (int index = start; index < end; index++) {
             String model = models.get(index);
-            addRenderableWidget(Button.builder(Component.literal(model), button -> choose(model))
-                    .bounds(x, y + (index - start) * 22, listWidth, 20)
-                    .build());
+            addRenderableWidget(RetroButton.create(Component.literal(model), button -> choose(model),
+                    x, y + (index - start) * 22, listWidth, 20));
         }
-        int navigationY = Math.min(height - 28, y + PAGE_SIZE * 22 + 4);
-        Button previous = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.models.previous"),
-                        button -> changePage(-1)
-                )
-                .bounds(width / 2 - 156, navigationY, 96, 20)
-                .build());
+        int navigationY = Math.min(height - 24, y + pageSize * 22 + 2);
+        int navWidth = Math.min(96, (listWidth - 12) / 3);
+        Button previous = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.ai.models.previous"), button -> changePage(-1),
+                width / 2 - navWidth - navWidth / 2 - 4, navigationY, navWidth, 20));
         previous.active = page > 0;
-        Button next = addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.ai.models.next"),
-                        button -> changePage(1)
-                )
-                .bounds(width / 2 - 48, navigationY, 96, 20)
-                .build());
+        Button next = addRenderableWidget(RetroButton.create(
+                Component.translatable("screen.wishing_willow.ai.models.next"), button -> changePage(1),
+                width / 2 - navWidth / 2, navigationY, navWidth, 20));
         next.active = end < models.size();
-        addRenderableWidget(Button.builder(
-                        Component.translatable("screen.wishing_willow.cancel"),
-                        button -> onClose()
-                )
-                .bounds(width / 2 + 60, navigationY, 96, 20)
-                .build());
+        addRenderableWidget(RetroButton.create(Component.translatable("screen.wishing_willow.cancel"),
+                button -> onClose(), width / 2 + navWidth / 2 + 4, navigationY, navWidth, 20));
     }
 
     private void choose(String model) {
@@ -78,15 +72,17 @@ public final class AiModelSelectionScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        graphics.drawCenteredString(font, title, width / 2, 18, 0xFFFFFFFF);
+        RetroUiTheme.drawBackdrop(graphics);
+        int panelWidth = Math.min(410, Math.max(190, width - 12));
+        RetroUiTheme.drawPaperPanel(graphics, (width - panelWidth) / 2, 3, panelWidth, height - 7);
+        graphics.drawCenteredString(font, title, width / 2, 8, RetroUiTheme.OXBLOOD_DARK);
         graphics.drawCenteredString(
                 font,
                 Component.translatable("screen.wishing_willow.ai.models.page", page + 1,
-                        Math.max(1, (models.size() + PAGE_SIZE - 1) / PAGE_SIZE)),
+                        Math.max(1, (models.size() + pageSize - 1) / pageSize)),
                 width / 2,
-                30,
-                0xFFAAA49B
+                18,
+                RetroUiTheme.MUTED_INK
         );
         super.render(graphics, mouseX, mouseY, partialTick);
     }
