@@ -120,7 +120,8 @@ public final class WishPlanStore {
                 source.providedCapability()), kind, modId, version, source.featureName(), source.featureType(),
                 resource, 0, risk);
         return new WishPlanStep(step.stepIndex(), step.timing(), step.delaySeconds(), step.trigger(), step.action(),
-                step.capability(), step.candidateId(), step.target(), step.parameters(), step.selectionReason(), canonical);
+                step.capability(), step.candidateId(), step.target(), step.parameters(), step.selectionReason(),
+                canonical, step.batchId());
     }
 
     private static CapabilityCatalog canonicalizeCatalog(CapabilityCatalog catalog) {

@@ -6,6 +6,7 @@ import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.planning.WishActionType;
 import com.ikunkk02.wishingwillow.planning.WishPlanDraft;
 import com.ikunkk02.wishingwillow.planning.WishPlanStep;
+import com.ikunkk02.wishingwillow.planning.PlanningEnvironment;
 import com.ikunkk02.wishingwillow.execution.WishExecutionRecord;
 import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
 
@@ -17,16 +18,26 @@ public final class WishContractValidator {
     private WishContractValidator() {}
 
     public static WishContractValidation validate(WishInterpretation interpretation, WishPlanDraft plan) {
-        return validate(interpretation, plan.steps());
+        return validate(interpretation, plan.steps(), null);
     }
 
     public static WishContractValidation validate(WishInterpretation interpretation, List<WishPlanStep> steps) {
+        return validate(interpretation, steps, null);
+    }
+
+    public static WishContractValidation validate(WishInterpretation interpretation, WishPlanDraft plan,
+                                                  PlanningEnvironment environment) {
+        return validate(interpretation, plan.steps(), environment);
+    }
+
+    public static WishContractValidation validate(WishInterpretation interpretation, List<WishPlanStep> steps,
+                                                  PlanningEnvironment environment) {
         if (interpretation.schemaVersion() < 2) return fulfilled("LEGACY_SCHEMA", 0);
         WishContract contract = interpretation.contract();
         WishContractValidation machine = switch (contract.type()) {
             case OBTAIN_RESOURCE -> validateResource(contract, steps);
             case CREATE_STRUCTURE -> requireAction(steps, WishActionType.CREATE_STRUCTURE, "STRUCTURE_MISSING");
-            case CHANGE_PLAYER_STATE, PERSISTENT_CONDITION -> validatePlayerState(contract, steps);
+            case CHANGE_PLAYER_STATE, PERSISTENT_CONDITION -> validatePlayerState(contract, steps, environment);
             case SOCIAL_RELATION -> validatePositiveNumber(steps, WishActionType.CHANGE_REPUTATION, "delta", "SOCIAL_RELATION_MISSING");
             case SPAWN_COMPANION -> validateCompanion(steps);
             case TRAVEL -> requireAction(steps, WishActionType.TELEPORT, "TRAVEL_MISSING");
@@ -90,9 +101,22 @@ public final class WishContractValidator {
         return normalize(path).equals(normalize(semantic));
     }
 
-    private static WishContractValidation validatePlayerState(WishContract contract, List<WishPlanStep> steps) {
+    private static WishContractValidation validatePlayerState(WishContract contract, List<WishPlanStep> steps,
+                                                              PlanningEnvironment environment) {
         String metric = contract.semantic(WishConstraintKind.STATE_METRIC).orElse("");
         if (metric.equals("all_positive_status_effects")) {
+            if (environment != null && !environment.beneficialStatusEffectIds().isEmpty()) {
+                java.util.Set<String> planned = steps.stream()
+                        .filter(step -> step.action() == WishActionType.APPLY_EFFECT
+                                && step.candidateReference() != null
+                                && step.candidateReference().registryResource() != null)
+                        .map(step -> step.candidateReference().registryResource().id())
+                        .collect(java.util.stream.Collectors.toSet());
+                java.util.Set<String> required = environment.beneficialStatusEffectIds();
+                return planned.containsAll(required)
+                        ? fulfilled("ALL_POSITIVE_STATUS_EFFECTS_REGISTRY_PROVEN", required.size())
+                        : rejected("ALL_POSITIVE_STATUS_EFFECTS_INCOMPLETE", planned.size());
+            }
             boolean exactBuiltin = steps.stream().anyMatch(step -> step.action() == WishActionType.START_PREDEFINED_EVENT
                     && step.candidateReference() != null
                     && PredefinedWishEventRegistry.ALL_POSITIVE_EFFECTS.equals(

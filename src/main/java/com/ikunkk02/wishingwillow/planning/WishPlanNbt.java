@@ -75,6 +75,7 @@ public final class WishPlanNbt {
         tag.putString("Target", step.target().name());
         tag.putString("ParametersJson", step.parameters().toString());
         tag.putString("SelectionReason", step.selectionReason());
+        tag.putString("BatchId", step.batchId());
         tag.put("CandidateReference", saveReference(step.candidateReference()));
         return tag;
     }
@@ -85,7 +86,8 @@ public final class WishPlanNbt {
                 WishActionType.valueOf(tag.getString("Action")), WishCapability.valueOf(tag.getString("Capability")),
                 tag.getString("CandidateId"), WishTargetType.valueOf(tag.getString("Target")),
                 JsonParser.parseString(tag.getString("ParametersJson")).getAsJsonObject(),
-                tag.getString("SelectionReason"), loadReference(tag.getCompound("CandidateReference")));
+                tag.getString("SelectionReason"), loadReference(tag.getCompound("CandidateReference")),
+                tag.getString("BatchId"));
     }
 
     private static CompoundTag saveReference(CandidateReference reference) {

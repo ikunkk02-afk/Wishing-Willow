@@ -3,6 +3,10 @@ package com.ikunkk02.wishingwillow.planning;
 import com.google.gson.JsonObject;
 import com.ikunkk02.wishingwillow.ai.WishCapability;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 public final class WishPlanBudget {
     private WishPlanBudget() { }
 
@@ -13,6 +17,16 @@ public final class WishPlanBudget {
         if (severity <= 80) return 6;
         if (severity <= 95) return 8;
         return 10;
+    }
+
+    public static int logicalSteps(List<WishPlanStep> steps) {
+        int unbatched = 0;
+        Set<String> batches = new HashSet<>();
+        for (WishPlanStep step : steps) {
+            if (step.batchId().isBlank()) unbatched++;
+            else batches.add(step.batchId());
+        }
+        return unbatched + batches.size();
     }
 
     public static int maxDestructiveCost(int severity) {

@@ -50,6 +50,22 @@ class WishPlanSerializationTest {
         assertThrows(IllegalArgumentException.class,()->WishPlanValidator.validateStored(plan,PlanningFixtures.environment(false,true)));
     }
 
+    @Test void schemaTwoBatchIdRoundTripsWhileLegacyStepDefaultsBlank(){
+        CandidateReference reference = PlanningFixtures.candidate("candidate-001", WishCapability.GIVE_ITEM,
+                RegistryEntryType.ITEM, "minecraft:diamond").reference();
+        WishPlanStep batched = new WishPlanStep(0, WishStepTiming.IMMEDIATE, 0, WishTriggerType.NONE,
+                WishActionType.GIVE_ITEM, WishCapability.GIVE_ITEM, "candidate-001", WishTargetType.PLAYER,
+                JsonParser.parseString("{\"count\":64}").getAsJsonObject(), "batch", reference, "items-1");
+        WishPlan plan = new WishPlan(UUID.randomUUID(), UUID.randomUUID(), 2, "batch", WishDelivery.IMMEDIATE, 30,
+                WishEstimatedDuration.INSTANT, List.of(batched), Set.of("minecraft"), Set.of("minecraft:diamond"),
+                Set.of(), 1, 1, "READY", "k", "r", "c");
+        assertEquals("items-1", WishPlanNbt.load(WishPlanNbt.save(plan)).steps().get(0).batchId());
+        WishPlanStep legacy = new WishPlanStep(0, WishStepTiming.IMMEDIATE, 0, WishTriggerType.NONE,
+                WishActionType.GIVE_ITEM, WishCapability.GIVE_ITEM, "candidate-001", WishTargetType.PLAYER,
+                JsonParser.parseString("{\"count\":1}").getAsJsonObject(), "legacy", reference);
+        assertEquals("", legacy.batchId());
+    }
+
     private static WishRecord record(UUID session,UUID player){
         WishInterpretation interpretation=PlanningFixtures.interpretation(72,WishDelivery.HIDDEN,WishCapability.STALKING_ENTITY);
         return new WishRecord(session,player,"wish",new ResourceLocation("minecraft","overworld"),1,2,WishState.FINISHED,

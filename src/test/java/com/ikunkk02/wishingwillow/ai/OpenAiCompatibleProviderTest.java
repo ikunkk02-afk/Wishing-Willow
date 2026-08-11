@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -251,6 +252,48 @@ class OpenAiCompatibleProviderTest {
         assertTrue(requestBody.get().contains("search_mod_web"));
         assertTrue(requestBody.get().contains("no direct network"));
         assertTrue(!requestBody.get().contains("provider-secret"));
+    }
+
+    @Test
+    void synthesizesSessionLocalToolCallIdWhenCompatibleProviderOmitsIt() {
+        server.createContext("/v1/chat/completions", exchange -> respond(exchange, 200,
+                "{\"choices\":[{\"message\":{\"content\":null,\"tool_calls\":["
+                        + "{\"type\":\"function\",\"function\":{\"name\":\"probe\",\"arguments\":\"{}\"}}]}}]}"));
+        AiToolResponse response = provider("").completeTools(new AiToolRequest(
+                List.of(AiConversationMessage.text("user", "probe")),
+                List.of(new AiToolDefinition("probe", "probe",
+                        com.google.gson.JsonParser.parseString("{\"type\":\"object\"}").getAsJsonObject())), 32)).join();
+        assertEquals(1, response.toolCalls().size());
+        assertFalse(response.toolCalls().get(0).id().isBlank());
+        assertTrue(response.toolCalls().get(0).id().startsWith("provider-call-"));
+    }
+
+    @Test
+    void connectionProbeCachesToolCallingSupportWithoutFailingTextConnectivity() {
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/v1/chat/completions", exchange -> {
+            if (calls.incrementAndGet() == 1) respond(exchange, 200, completion("OK"));
+            else respond(exchange, 200, "{\"choices\":[{\"message\":{\"content\":null,\"tool_calls\":["
+                    + "{\"id\":\"probe-1\",\"type\":\"function\",\"function\":{\"name\":\"wishing_willow_tool_probe\","
+                    + "\"arguments\":\"{\\\"value\\\":\\\"OK\\\"}\"}}]}}]}");
+        });
+        AiConfig config = new AiConfig(AiExecutionMode.PLAYER_PROVIDED, AiProviderType.CUSTOM,
+                baseUrl, "", "test-model");
+        AiService service = new AiService();
+        AiConnectionResult result = service.testConnection(config).join();
+        assertTrue(result.success());
+        assertEquals(ToolCallingSupport.SUPPORTED, result.toolCallingSupport());
+        assertEquals(ToolCallingSupport.SUPPORTED, service.toolCallingSupport(config));
+    }
+
+    @Test
+    void failedToolProbeStillReportsAUsableJsonCompatibilityConnection() {
+        server.createContext("/v1/chat/completions", exchange -> respond(exchange, 200, completion("OK")));
+        AiConfig config = new AiConfig(AiExecutionMode.PLAYER_PROVIDED, AiProviderType.CUSTOM,
+                baseUrl, "", "test-model");
+        AiConnectionResult result = new AiService().testConnection(config).join();
+        assertTrue(result.success());
+        assertEquals(ToolCallingSupport.UNSUPPORTED, result.toolCallingSupport());
     }
 
     @Test

@@ -70,6 +70,12 @@ repositories {
     }
 }
 
+configurations.configureEach {
+    // Forge 1.20.1 provides SLF4J 2.0.1. LangChain4j only uses the stable 2.0 API;
+    // resolve tests/runs against the same version and never embed a second binding.
+    resolutionStrategy.force 'org.slf4j:slf4j-api:2.0.1'
+}
+
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     implementation fg.deobf("software.bernie.geckolib:geckolib-forge-${minecraft_version}:${geckolib_version}")
@@ -77,6 +83,26 @@ dependencies {
     jarJar(group: 'org.jsoup', name: 'jsoup', version: '[1.23.1,1.24)') {
         jarJar.pin(it, '1.23.1')
     }
+
+    // LangChain4j is orchestration-only. Wishing Willow keeps its existing
+    // OpenAI-compatible HTTP provider and deliberately does not include any
+    // LangChain4j provider, shell, Spring, Quarkus, or MCP integration.
+    minecraftLibrary("dev.langchain4j:langchain4j:${langchain4j_version}") {
+        exclude group: 'org.slf4j', module: 'slf4j-api'
+    }
+    minecraftLibrary("dev.langchain4j:langchain4j-skills:${langchain4j_skills_version}") {
+        exclude group: 'org.slf4j', module: 'slf4j-api'
+    }
+    jarJar(group: 'dev.langchain4j', name: 'langchain4j', version: '[1.18.1,1.19)') { transitive = false; jarJar.pin(it, '1.18.1') }
+    jarJar(group: 'dev.langchain4j', name: 'langchain4j-core', version: '[1.18.1,1.19)') { transitive = false; jarJar.pin(it, '1.18.1') }
+    jarJar(group: 'dev.langchain4j', name: 'langchain4j-skills', version: '[1.18.1-beta28,1.18.1-beta29)') { transitive = false; jarJar.pin(it, '1.18.1-beta28') }
+    jarJar(group: 'org.commonmark', name: 'commonmark', version: '[0.28.0,0.29)') { transitive = false; jarJar.pin(it, '0.28.0') }
+    jarJar(group: 'org.commonmark', name: 'commonmark-ext-yaml-front-matter', version: '[0.28.0,0.29)') { transitive = false; jarJar.pin(it, '0.28.0') }
+    jarJar(group: 'com.fasterxml.jackson.core', name: 'jackson-annotations', version: '[2.22,2.23)') { transitive = false; jarJar.pin(it, '2.22') }
+    jarJar(group: 'com.fasterxml.jackson.core', name: 'jackson-core', version: '[2.22.1,2.23)') { transitive = false; jarJar.pin(it, '2.22.1') }
+    jarJar(group: 'com.fasterxml.jackson.core', name: 'jackson-databind', version: '[2.22.1,2.23)') { transitive = false; jarJar.pin(it, '2.22.1') }
+    jarJar(group: 'org.apache.opennlp', name: 'opennlp-tools', version: '[2.5.9,2.6)') { transitive = false; jarJar.pin(it, '2.5.9') }
+    jarJar(group: 'org.jspecify', name: 'jspecify', version: '[1.0.0,2.0)') { transitive = false; jarJar.pin(it, '1.0.0') }
 
     // Production Create jars use obfuscated Minecraft names. When present in the local, ignored
     // research test pack, let ForgeGradle remap them before the userdev client loads Flywheel mixins.
@@ -116,6 +142,25 @@ tasks.register('prepareGameTestStructures', Copy) {
 tasks.named('compileJava').configure {
     dependsOn tasks.named('prepareGameTestStructures')
 }
+
+tasks.register('verifyAgentIsolation') {
+    inputs.files(fileTree('src/main/java/com/ikunkk02/wishingwillow/agent') {
+        include 'core/**/*.java', 'tool/**/*.java', 'skill/**/*.java'
+    })
+    doLast {
+        def forbidden = ['net.minecraftforge', 'net.fabricmc', 'net.neoforged']
+        inputs.files.each { source ->
+            def text = source.getText('UTF-8')
+            forbidden.each { prefix ->
+                if (text.contains('import ' + prefix)) {
+                    throw new GradleException("Loader import ${prefix} is forbidden in agent core: ${source}")
+                }
+            }
+        }
+    }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyAgentIsolation') }
 
 tasks.named('processResources', ProcessResources).configure {
     def replaceProperties = [

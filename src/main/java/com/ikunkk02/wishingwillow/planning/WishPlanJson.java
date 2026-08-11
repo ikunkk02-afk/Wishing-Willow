@@ -28,6 +28,7 @@ public final class WishPlanJson {
             value.addProperty("target", step.target().name());
             value.add("parameters", step.parameters().deepCopy());
             value.addProperty("selection_reason", step.selectionReason());
+            if (!step.batchId().isBlank()) value.addProperty("batch_id", step.batchId());
             steps.add(value);
         }
         root.add("steps", steps);

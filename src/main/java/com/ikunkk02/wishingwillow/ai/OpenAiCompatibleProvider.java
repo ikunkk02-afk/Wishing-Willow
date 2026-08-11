@@ -170,9 +170,12 @@ public final class OpenAiCompatibleProvider implements AiProvider {
                         ? message.get("content").getAsString() : "";
                 List<AiToolCall> calls = new ArrayList<>();
                 if (message.has("tool_calls") && message.get("tool_calls").isJsonArray()) {
+                    int callIndex = 0;
                     for (JsonElement element : message.getAsJsonArray("tool_calls")) {
                         JsonObject call = element.getAsJsonObject(); JsonObject function = call.getAsJsonObject("function");
-                        calls.add(new AiToolCall(call.get("id").getAsString(), function.get("name").getAsString(),
+                        String id = call.has("id") && !call.get("id").isJsonNull()
+                                ? call.get("id").getAsString() : "provider-call-" + (++callIndex);
+                        calls.add(new AiToolCall(id, function.get("name").getAsString(),
                                 function.get("arguments").getAsString()));
                     }
                 }

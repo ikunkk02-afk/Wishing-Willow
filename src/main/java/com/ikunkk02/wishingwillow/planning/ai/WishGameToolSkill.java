@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets;
 
 /** Loads the bundled planner skill that teaches the model how to call validated game actions. */
 public final class WishGameToolSkill {
-    static final String RESOURCE = "/data/wishing_willow/ai_skills/use-game-tools/SKILL.md";
+    static final String RESOURCE = "/skills/fulfill-minecraft-wish-with-tools/SKILL.md";
     public static final String TEXT = load();
 
     private WishGameToolSkill() {}

@@ -16,7 +16,7 @@ import java.util.Set;
 public record CapabilityCatalog(List<CapabilityMatchSet> matchSets, List<CapabilityCandidate> candidates,
                                 String knowledgeState, String knowledgeDigest, String registryDigest,
                                 String catalogHash) {
-    public static final int MAX_CANDIDATES = 30;
+    public static final int MAX_CANDIDATES = 512;
 
     public CapabilityCatalog {
         matchSets = List.copyOf(matchSets);

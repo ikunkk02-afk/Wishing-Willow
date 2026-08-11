@@ -7,12 +7,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import com.google.gson.JsonObject;
 
 public final class AiService {
     private static final AiService INSTANCE = new AiService();
 
     private final ScheduledExecutorService executor;
     private final HttpClient httpClient;
+    private final ConcurrentHashMap<String, ToolCallingSupport> toolSupport = new ConcurrentHashMap<>();
 
     public AiService() {
         AtomicInteger sequence = new AtomicInteger();
@@ -50,15 +54,50 @@ public final class AiService {
                 AiOutputMode.TEXT,
                 null
         );
-        return provider(config).complete(request).handle((response, throwable) -> {
-            if (throwable == null && response.assistantContent() != null && !response.assistantContent().isBlank()) {
-                return AiConnectionResult.successful();
+        AiProvider provider = provider(config);
+        return provider.complete(request).thenCompose(response -> {
+            if (response.assistantContent() == null || response.assistantContent().isBlank()) {
+                return CompletableFuture.completedFuture(AiConnectionResult.failure(AiErrorCategory.MALFORMED_RESPONSE, 200));
             }
+            JsonObject properties = new JsonObject();
+            JsonObject value = new JsonObject(); value.addProperty("type", "string"); value.addProperty("const", "OK");
+            properties.add("value", value);
+            JsonObject schema = new JsonObject(); schema.addProperty("type", "object"); schema.add("properties", properties);
+            com.google.gson.JsonArray required = new com.google.gson.JsonArray(); required.add("value");
+            schema.add("required", required); schema.addProperty("additionalProperties", false);
+            return provider.completeTools(new AiToolRequest(
+                    List.of(AiConversationMessage.text("system", "Call the provided safe probe tool exactly once."),
+                            AiConversationMessage.text("user", "Call wishing_willow_tool_probe with value OK.")),
+                    List.of(new AiToolDefinition("wishing_willow_tool_probe", "Safe tool-calling capability probe.", schema)), 64))
+                    .handle((probe, probeFailure) -> {
+                        boolean supported = probeFailure == null && probe != null && probe.toolCalls().stream()
+                                .anyMatch(call -> call.name().equals("wishing_willow_tool_probe"));
+                        ToolCallingSupport status = supported ? ToolCallingSupport.SUPPORTED : ToolCallingSupport.UNSUPPORTED;
+                        toolSupport.put(key(config), status);
+                        return AiConnectionResult.successful(status);
+                    });
+        }).exceptionally(throwable -> {
             AiRequestException failure = throwable == null
                     ? new AiRequestException(AiErrorCategory.MALFORMED_RESPONSE, 200, false)
                     : unwrap(throwable);
             return AiConnectionResult.failure(failure.category(), failure.httpStatus());
         });
+    }
+
+    public ToolCallingSupport toolCallingSupport(AiConfig config) {
+        return toolSupport.getOrDefault(key(config), ToolCallingSupport.UNKNOWN);
+    }
+
+    public void clearToolCallingSupportCache() { toolSupport.clear(); }
+
+    public void retainOnlyToolCallingSupport(AiConfig config) {
+        ToolCallingSupport retained = toolSupport.get(key(config));
+        toolSupport.clear();
+        if (retained != null) toolSupport.put(key(config), retained);
+    }
+
+    private static String key(AiConfig config) {
+        return config.providerType().name() + "\n" + config.baseUrl() + "\n" + config.model();
     }
 
     public CompletableFuture<AiModelListResult> listModels(AiConfig config) {

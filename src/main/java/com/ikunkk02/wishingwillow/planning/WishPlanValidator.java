@@ -30,12 +30,16 @@ import java.io.StringReader;
 public final class WishPlanValidator {
     public static final int MAX_SUMMARY = 1024;
     public static final int MAX_REASON = 512;
-    public static final int MAX_AI_JSON = 65536;
+    public static final int MAX_AI_JSON = 512 * 1024;
+    public static final int MAX_RAW_STEPS = 512;
     private static final Set<String> ROOT_FIELDS = Set.of(
             "schema_version", "summary", "delivery", "severity", "estimated_duration", "steps");
     private static final Set<String> STEP_FIELDS = Set.of(
             "step_index", "timing", "delay_seconds", "trigger", "action", "capability",
             "candidate_id", "target", "parameters", "selection_reason");
+    private static final Set<String> BATCH_STEP_FIELDS = Set.of(
+            "step_index", "timing", "delay_seconds", "trigger", "action", "capability",
+            "candidate_id", "target", "parameters", "selection_reason", "batch_id");
 
     private WishPlanValidator() { }
 
@@ -58,7 +62,8 @@ public final class WishPlanValidator {
             if (exception instanceof IllegalArgumentException illegal) throw illegal;
             throw invalid(WishPlanError.INVALID_JSON);
         }
-        if (!root.keySet().equals(ROOT_FIELDS) || integer(root, "schema_version") != 1) {
+        int schemaVersion = integer(root, "schema_version");
+        if (!root.keySet().equals(ROOT_FIELDS) || (schemaVersion != 1 && schemaVersion != 2)) {
             throw invalid(WishPlanError.INVALID_JSON);
         }
         String summary = string(root, "summary", MAX_SUMMARY);
@@ -70,7 +75,8 @@ public final class WishPlanValidator {
         }
         WishEstimatedDuration duration = enumValue(root, "estimated_duration", WishEstimatedDuration.class);
         JsonArray array = root.getAsJsonArray("steps");
-        if (array == null || array.size() < 1 || array.size() > WishPlanBudget.maxSteps(severity)) {
+        int rawLimit = schemaVersion == 1 ? WishPlanBudget.maxSteps(severity) : MAX_RAW_STEPS;
+        if (array == null || array.size() < 1 || array.size() > rawLimit) {
             throw invalid(WishPlanError.BUDGET_EXCEEDED);
         }
         List<WishPlanStep> steps = new ArrayList<>();
@@ -78,7 +84,8 @@ public final class WishPlanValidator {
         Set<String> unique = new HashSet<>();
         for (int index = 0; index < array.size(); index++) {
             JsonElement element = array.get(index);
-            if (!element.isJsonObject() || !element.getAsJsonObject().keySet().equals(STEP_FIELDS)) {
+            if (!element.isJsonObject() || !(element.getAsJsonObject().keySet().equals(STEP_FIELDS)
+                    || element.getAsJsonObject().keySet().equals(BATCH_STEP_FIELDS))) {
                 throw invalid(WishPlanError.INVALID_JSON);
             }
             JsonObject step = element.getAsJsonObject();
@@ -105,25 +112,30 @@ public final class WishPlanValidator {
                     parameters, target, timing, delay, trigger, severity);
             if (!actionDecision.allowed()) throw policyInvalid(actionDecision.error());
             String reason = string(step, "selection_reason", MAX_REASON);
+            String batchId = step.has("batch_id") ? string(step, "batch_id", 64) : "";
             if (WishRefusalGuard.containsRefusal(reason)) throw invalid(WishPlanError.REFUSAL_RESPONSE);
             String signature = action + "|" + candidateId + "|" + timing + "|" + delay + "|" + trigger
                     + "|" + parameters;
-            if (!unique.add(signature) && action != WishActionType.GIVE_ITEM
+            if (!unique.add(signature) && batchId.isBlank() && action != WishActionType.GIVE_ITEM
                     && action != WishActionType.REMOVE_ITEM) throw invalid(WishPlanError.INVALID_PARAMETER);
             WishPlanStep planned = new WishPlanStep(index, timing, delay, trigger, action, capability, candidateId,
-                    target, parameters, reason, candidate.reference());
+                    target, parameters, reason, candidate.reference(), batchId);
             WishPolicyDecision safetyDecision = WishSafetyPolicy.validate(planned, severity, settings);
             if (!safetyDecision.allowed()) throw policyInvalid(safetyDecision.error());
             steps.add(planned);
             covered.add(capability);
         }
+        if (WishPlanBudget.logicalSteps(steps) > WishPlanBudget.maxSteps(severity)) {
+            throw invalid(WishPlanError.BUDGET_EXCEEDED);
+        }
+        validateBatches(steps);
         validateDelivery(delivery, steps);
         int destructive = steps.stream().mapToInt(WishPlanBudget::destructiveCost).sum();
         if (destructive > WishPlanBudget.maxDestructiveCost(severity)) {
             throw invalid(WishPlanError.BUDGET_EXCEEDED);
         }
-        WishPlanDraft draft = new WishPlanDraft(1, summary, delivery, severity, duration, steps);
-        var contractValidation = WishContractValidator.validate(interpretation, draft);
+        WishPlanDraft draft = new WishPlanDraft(schemaVersion, summary, delivery, severity, duration, steps);
+        var contractValidation = WishContractValidator.validate(interpretation, draft, environment);
         if (contractValidation.state() == WishContractValidationState.CONTRACT_NOT_FULFILLED) {
             throw invalid(WishPlanError.CONTRACT_NOT_FULFILLED);
         }
@@ -140,6 +152,11 @@ public final class WishPlanValidator {
 
     public static void validateStored(WishPlan plan, PlanningEnvironment environment,
                                       ExecutionSettingsSnapshot settings) {
+        if (plan.steps().size() > MAX_RAW_STEPS
+                || WishPlanBudget.logicalSteps(plan.steps()) > WishPlanBudget.maxSteps(plan.severity())) {
+            throw invalid(WishPlanError.BUDGET_EXCEEDED);
+        }
+        validateBatches(plan.steps());
         int destructive = 0;
         for (WishPlanStep step : plan.steps()) {
             CandidateReference reference = step.candidateReference();
@@ -161,6 +178,35 @@ public final class WishPlanValidator {
         }
         if (destructive > WishPlanBudget.maxDestructiveCost(plan.severity())) {
             throw invalid(WishPlanError.BUDGET_EXCEEDED);
+        }
+    }
+
+    private static void validateBatches(List<WishPlanStep> steps) {
+        java.util.Map<String, WishPlanStep> first = new java.util.HashMap<>();
+        java.util.Map<String, java.util.Set<String>> resources = new java.util.HashMap<>();
+        for (WishPlanStep step : steps) {
+            if (step.batchId().isBlank()) continue;
+            if (!Set.of(WishActionType.GIVE_ITEM, WishActionType.REMOVE_ITEM,
+                    WishActionType.APPLY_EFFECT, WishActionType.REMOVE_EFFECT).contains(step.action())) {
+                throw invalid(WishPlanError.INVALID_PARAMETER);
+            }
+            WishPlanStep prior = first.putIfAbsent(step.batchId(), step);
+            if (prior != null && (prior.action() != step.action()
+                    || prior.capability() != step.capability()
+                    || prior.timing() != step.timing()
+                    || prior.delaySeconds() != step.delaySeconds()
+                    || prior.trigger() != step.trigger()
+                    || prior.target() != step.target())) {
+                throw invalid(WishPlanError.INVALID_PARAMETER);
+            }
+            if ((step.action() == WishActionType.GIVE_ITEM || step.action() == WishActionType.REMOVE_ITEM)
+                    && prior != null && !prior.candidateId().equals(step.candidateId())) {
+                throw invalid(WishPlanError.INVALID_PARAMETER);
+            }
+            if ((step.action() == WishActionType.APPLY_EFFECT || step.action() == WishActionType.REMOVE_EFFECT)
+                    && !resources.computeIfAbsent(step.batchId(), ignored -> new HashSet<>()).add(step.candidateId())) {
+                throw invalid(WishPlanError.INVALID_PARAMETER);
+            }
         }
     }
 
