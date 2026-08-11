@@ -1,21 +1,23 @@
 package com.ikunkk02.wishingwillow.program;
 
-import com.ikunkk02.wishingwillow.planning.CapabilityCatalog;
-import com.ikunkk02.wishingwillow.planning.WishPlanDraft;
-
 import java.util.List;
 
+/**
+ * Result of deterministically expanding a validated WishProgram into flat executable leaves.
+ *
+ * <p>Holds NO legacy plan artifacts ({@code WishPlanDraft}/{@code WishPlan}/{@code WishPlanStep}).
+ * The native program executor consumes these leaves directly.</p>
+ */
 public record CompiledWishProgram(
         WishProgram program,
-        WishPlanDraft draft,
-        CapabilityCatalog catalog,
-        List<String> coreActions,
-        List<String> presentationActions,
+        List<ProgramAction> coreActions,
+        List<ProgramAction> presentationActions,
         boolean skillUsed,
         boolean agentUsed
 ) {
-    public CompiledWishProgram {
-        coreActions = List.copyOf(coreActions);
-        presentationActions = List.copyOf(presentationActions);
+    public List<ProgramAction> allLeaves() {
+        return java.util.stream.Stream.concat(coreActions.stream(), presentationActions.stream()).toList();
     }
+
+    public int leafCount() { return coreActions.size() + presentationActions.size(); }
 }

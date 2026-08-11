@@ -1,20 +1,18 @@
 package com.ikunkk02.wishingwillow.program;
 
-import com.ikunkk02.wishingwillow.ai.*;
-import com.ikunkk02.wishingwillow.contract.*;
-import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
-import com.ikunkk02.wishingwillow.planning.*;
-import com.ikunkk02.wishingwillow.research.RegistryEntryType;
-import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * The NEW compiler only expands flow into flat {@link ProgramAction} leaves. It never lowers
+ * into {@code WishPlanDraft}/{@code WishPlanStep} and never invokes the legacy planning stack.
+ */
 class WishProgramCompilerTest {
+    private static final WishProgramCompiler COMPILER = new WishProgramCompiler();
+
     @Test
     void beneficialEffectGroupCompilesToOneCoreActionWithoutPresentationOrReviewer() {
         WishProgram program = WishProgramJson.parseAndValidate("""
@@ -22,11 +20,15 @@ class WishProgramCompilerTest {
                  {"action":"apply_effect_group","parameters":{"group":"beneficial","duration_seconds":600}}],
                  "presentation_actions":[],"skill":"","unknown_capability":""}
                 """);
-        CompiledWishProgram compiled = compile(program, allPositiveEffectsWish());
-        assertEquals(1, compiled.draft().steps().size());
-        assertEquals(WishActionType.APPLY_EFFECT_CATEGORY, compiled.draft().steps().get(0).action());
-        assertEquals("BENEFICIAL", compiled.draft().steps().get(0).parameters().get("category").getAsString());
-        assertTrue(compiled.draft().steps().get(0).batchId().startsWith("wp:core"));
+        CompiledWishProgram compiled = COMPILER.compile(program);
+        assertEquals(1, compiled.coreActions().size());
+        ProgramAction leaf = compiled.coreActions().get(0);
+        assertEquals("apply_effect_group", leaf.actionId());
+        assertEquals(0, leaf.group());
+        assertEquals(0, leaf.stepIndex());
+        assertFalse(leaf.presentation());
+        assertTrue(compiled.presentationActions().isEmpty());
+        assertEquals(1, compiled.leafCount());
         assertFalse(compiled.agentUsed());
     }
 
@@ -38,12 +40,12 @@ class WishProgramCompilerTest {
                   "height":30,"horizontal_radius":10,"count":100,"interval_ticks":2,"landing":"place_or_drop"}}],
                  "presentation_actions":[],"skill":"block_rain","unknown_capability":""}
                 """);
-        CompiledWishProgram compiled = compile(program, fallingResource());
-        var step = compiled.draft().steps().get(0);
-        assertEquals(WishActionType.FALLING_BLOCK_SHOWER, step.action());
-        assertEquals(100, step.parameters().get("count").getAsInt());
-        assertEquals("minecraft:diamond_block", step.candidateReference().registryResource().id());
+        CompiledWishProgram compiled = COMPILER.compile(program);
+        ProgramAction leaf = compiled.coreActions().get(0);
+        assertEquals("spawn_falling_block", leaf.actionId());
+        assertEquals(100, leaf.parameters().get("count").getAsInt());
         assertTrue(compiled.skillUsed());
+        assertFalse(compiled.agentUsed());
     }
 
     @Test
@@ -54,10 +56,12 @@ class WishProgramCompilerTest {
                  "presentation_actions":[{"action":"spawn_lightning","parameters":{}}],
                  "skill":"","unknown_capability":""}
                 """);
-        CompiledWishProgram compiled = compile(program, resourceWish());
-        assertEquals(List.of(WishActionType.GIVE_ITEM, WishActionType.LIGHTNING),
-                compiled.draft().steps().stream().map(WishPlanStep::action).toList());
-        assertTrue(compiled.draft().steps().get(1).batchId().startsWith("wp:presentation"));
+        CompiledWishProgram compiled = COMPILER.compile(program);
+        assertEquals(List.of("give_item"), compiled.coreActions().stream().map(ProgramAction::actionId).toList());
+        assertEquals(List.of("spawn_lightning"),
+                compiled.presentationActions().stream().map(ProgramAction::actionId).toList());
+        assertEquals(1, compiled.presentationActions().get(0).stepIndex());
+        assertTrue(compiled.presentationActions().get(0).presentation());
     }
 
     @Test
@@ -70,9 +74,10 @@ class WishProgramCompilerTest {
                   {"action":"play_sound","parameters":{"sound":"minecraft:entity.player.levelup"}}]}}],
                  "skill":"","unknown_capability":""}
                 """);
-        CompiledWishProgram parallelCompiled = compile(parallel, resourceWish());
-        assertEquals(parallelCompiled.draft().steps().get(1).batchId(),
-                parallelCompiled.draft().steps().get(2).batchId());
+        CompiledWishProgram parallelCompiled = COMPILER.compile(parallel);
+        assertEquals(2, parallelCompiled.presentationActions().size());
+        assertEquals(parallelCompiled.presentationActions().get(0).group(),
+                parallelCompiled.presentationActions().get(1).group());
 
         WishProgram delayed = WishProgramJson.parseAndValidate("""
                 {"schema_version":1,"goal":"reward then delayed celebration","core_actions":[
@@ -82,65 +87,44 @@ class WishProgramCompilerTest {
                   {"action":"spawn_lightning","parameters":{}}]}}],
                  "skill":"","unknown_capability":""}
                 """);
-        var delayedStep = compile(delayed, resourceWish()).draft().steps().get(1);
-        assertEquals(WishStepTiming.DELAYED, delayedStep.timing());
-        assertEquals(2, delayedStep.delaySeconds());
+        ProgramAction delayedLeaf = COMPILER.compile(delayed).presentationActions().get(0);
+        assertEquals(40, delayedLeaf.delayTicks());
     }
 
-    private static CompiledWishProgram compile(WishProgram program, WishInterpretation interpretation) {
-        RegistrySnapshot registry = registry();
-        CapabilityCatalog catalog = CapabilityCatalog.create(List.of(), List.of(), "READY", "", registry.digest());
-        return new WishProgramCompiler().compile(program, interpretation, catalog, registry,
-                ExecutionSettingsSnapshot.permissive());
+    @Test
+    void sequenceLeavesGetDistinctIncreasingGroups() {
+        WishProgram program = WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"weather first then time","core_actions":[
+                 {"action":"set_weather","parameters":{"weather":"thunder"}},
+                 {"action":"set_time","parameters":{"value":"night"}}],
+                 "presentation_actions":[],"skill":"","unknown_capability":""}
+                """);
+        CompiledWishProgram compiled = COMPILER.compile(program);
+        assertEquals(2, compiled.coreActions().size());
+        assertTrue(compiled.coreActions().get(0).group() < compiled.coreActions().get(1).group());
+        assertEquals(0, compiled.coreActions().get(0).stepIndex());
+        assertEquals(1, compiled.coreActions().get(1).stepIndex());
     }
 
-    private static WishInterpretation resourceWish() {
-        WishContract contract = new WishContract(WishContractType.OBTAIN_RESOURCE, "Player obtains 64 diamonds", List.of(
-                constraint(WishConstraintKind.RESOURCE_SEMANTIC, WishConstraintOperator.EQUALS, "diamond", 0),
-                constraint(WishConstraintKind.MINIMUM_QUANTITY, WishConstraintOperator.AT_LEAST, "", 64),
-                constraint(WishConstraintKind.REAL_RESOURCE, WishConstraintOperator.REQUIRED, "", 0),
-                constraint(WishConstraintKind.PLAYER_ACCESSIBLE, WishConstraintOperator.REQUIRED, "", 0)));
-        return interpretation(contract, List.of(WishCapability.GIVE_ITEM));
+    @Test
+    void programRejectsCommandsAndUnboundedRepeat() {
+        assertThrows(IllegalArgumentException.class, () -> parse("unsafe", "repeat",
+                "{\"count\":17,\"actions\":[{\"action\":\"play_sound\",\"parameters\":{\"sound\":\"minecraft:block.note_block.bell\"}}]}", "", ""));
+        assertThrows(IllegalArgumentException.class, () -> parse("unsafe", "give_item",
+                "{\"item\":\"/give @s diamond\",\"count\":1}", "", ""));
     }
 
-    private static WishInterpretation fallingResource() {
-        WishContract contract = new WishContract(WishContractType.OBTAIN_RESOURCE,
-                "Player receives 100 diamond blocks falling from the sky", List.of(
-                constraint(WishConstraintKind.RESOURCE_SEMANTIC, WishConstraintOperator.EQUALS, "diamond_block", 0),
-                constraint(WishConstraintKind.MINIMUM_QUANTITY, WishConstraintOperator.AT_LEAST, "", 100),
-                constraint(WishConstraintKind.REAL_RESOURCE, WishConstraintOperator.REQUIRED, "", 0),
-                constraint(WishConstraintKind.PLAYER_ACCESSIBLE, WishConstraintOperator.REQUIRED, "", 0),
-                constraint(WishConstraintKind.DELIVERY_SEMANTIC, WishConstraintOperator.EQUALS, "fall_from_sky", 0)));
-        return interpretation(contract, List.of(WishCapability.BLOCK_CHANGE));
+    @Test
+    void unknownCapabilityIsRejectedByTheNativeCompiler() {
+        WishProgram program = new WishProgram(1, "use the mod's original tracking AI",
+                List.of(), List.of(), "", "mod_specific_entity_ai");
+        assertThrows(IllegalArgumentException.class, () -> COMPILER.compile(program));
     }
 
-    private static WishInterpretation allPositiveEffectsWish() {
-        WishContract contract = new WishContract(WishContractType.CHANGE_PLAYER_STATE,
-                "Player has every beneficial effect", List.of(
-                constraint(WishConstraintKind.STATE_METRIC, WishConstraintOperator.EQUALS,
-                        "all_positive_status_effects", 0),
-                constraint(WishConstraintKind.TARGET_SCOPE, WishConstraintOperator.EQUALS, "player", 0)));
-        return interpretation(contract, List.of(WishCapability.POWER_BUFF));
-    }
-
-    private static WishHardConstraint constraint(WishConstraintKind kind, WishConstraintOperator operator,
-                                                 String semantic, int quantity) {
-        return new WishHardConstraint(kind, operator, semantic, quantity, 0, true);
-    }
-
-    private static WishInterpretation interpretation(WishContract contract, List<WishCapability> capabilities) {
-        return new WishInterpretation(2, "wish_program_test", contract.requiredOutcome(), contract,
-                new WishFulfillment(WishFulfillmentMode.ABSURD, "Execute registered actions",
-                        List.of(FulfillmentStyle.PHYSICAL_ABSURDITY), 80), "Program test",
-                WishTone.ABSURD, 100, WishDelivery.IMMEDIATE, capabilities);
-    }
-
-    private static RegistrySnapshot registry() {
-        return new RegistrySnapshot(Map.of(
-                RegistryEntryType.ITEM, List.of("minecraft:diamond"),
-                RegistryEntryType.BLOCK, List.of("minecraft:diamond_block"),
-                RegistryEntryType.EFFECT, List.of("minecraft:speed"),
-                RegistryEntryType.SOUND, List.of("minecraft:entity.player.levelup")),
-                Map.of("minecraft", "minecraft"), Set.of());
+    private static WishProgram parse(String goal, String action, String parameters, String skill, String unknown) {
+        return WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"%s","core_actions":[{"action":"%s","parameters":%s}],
+                 "presentation_actions":[],"skill":"%s","unknown_capability":"%s"}
+                """.formatted(goal, action, parameters, skill, unknown));
     }
 }

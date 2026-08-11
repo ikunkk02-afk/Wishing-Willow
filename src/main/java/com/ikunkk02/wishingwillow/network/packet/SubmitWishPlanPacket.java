@@ -15,6 +15,10 @@ import javax.annotation.Nullable;
 import java.util.UUID;
 import java.util.function.Supplier;
 
+/**
+ * @deprecated Legacy WishPlan compatibility only. Do not use for WishProgram execution.
+ */
+@Deprecated
 public record SubmitWishPlanPacket(UUID sessionId,UUID attemptId,WishPlanError error,int attemptsUsed,
                                    @Nullable CapabilityCatalog catalog,@Nullable String draftJson) {
     public SubmitWishPlanPacket {

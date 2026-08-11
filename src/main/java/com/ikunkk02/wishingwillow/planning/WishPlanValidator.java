@@ -27,6 +27,10 @@ import java.util.List;
 import java.util.Set;
 import java.io.StringReader;
 
+/**
+ * @deprecated Legacy WishPlan compatibility only. Do not use for WishProgram execution.
+ */
+@Deprecated
 public final class WishPlanValidator {
     public static final int MAX_SUMMARY = 1024;
     public static final int MAX_REASON = 512;

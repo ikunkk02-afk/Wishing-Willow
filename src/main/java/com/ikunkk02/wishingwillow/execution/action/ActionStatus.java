@@ -7,5 +7,7 @@ public enum ActionStatus {
     FAILED,
     TIMEOUT,
     CANCELLED,
-    UNSUPPORTED
+    UNSUPPORTED,
+    STALE,
+    RETRY
 }

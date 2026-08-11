@@ -15,9 +15,14 @@ import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
 import com.ikunkk02.wishingwillow.ai.AiExecutionMode;
 import com.ikunkk02.wishingwillow.ai.AiProviderType;
 import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
+import com.ikunkk02.wishingwillow.execution.action.WishExecutionContext;
 import com.ikunkk02.wishingwillow.contract.*;
 import com.ikunkk02.wishingwillow.network.packet.SubmitWishPlanPacket;
 import com.ikunkk02.wishingwillow.planning.*;
+import com.ikunkk02.wishingwillow.program.WishProgram;
+import com.ikunkk02.wishingwillow.program.WishProgramJson;
+import com.ikunkk02.wishingwillow.program.WishProgramValidator;
+import com.ikunkk02.wishingwillow.program.ValidatedWishProgram;
 import com.ikunkk02.wishingwillow.research.FeatureType;
 import com.ikunkk02.wishingwillow.research.KnowledgeLevel;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
@@ -27,6 +32,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.effect.MobEffects;
@@ -47,6 +53,7 @@ import com.ikunkk02.wishingwillow.wish.WishSavedData;
 import com.ikunkk02.wishingwillow.wish.WishState;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -103,7 +110,7 @@ public final class WishExecutionGameTests {
                 WishEstimatedDuration.SHORT,List.of(step),Set.of("minecraft"),Set.of("minecraft:diamond_block"),Set.of(),
                 helper.getLevel().getGameTime(),0,"VERIFIED","","","");
         WishExecutionRecord record=new WishExecutionRecord(execution,planId,session,player.getUUID(),1,helper.getLevel().getGameTime());
-        WishExecutionContext context=new WishExecutionContext(helper.getLevel(),player,plan,step,candidate,record);
+        WishExecutionContext context=WishExecutionContext.legacy(helper.getLevel(),player,plan,step,record);
         var executor=WishActionRegistry.defaults().get(WishActionType.FALLING_BLOCK_SHOWER);
         boolean[] finished={false},sawPhysicalEntity={false};
         helper.onEachTick(()->{
@@ -167,12 +174,158 @@ public final class WishExecutionGameTests {
     @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=180)
     public static void speedCompanionReputationAndHouseAreReal(GameTestHelper helper){var player=serverPlayer(helper);place(player,helper.absolutePos(new BlockPos(1,4,1)));prepareFloor(helper);double before=player.getAttributeValue(Attributes.MOVEMENT_SPEED);WishActionResult speed=execute(helper,player,WishActionType.MODIFY_ATTRIBUTE,WishCapability.PLAYER_ATTRIBUTE,WishTargetType.PLAYER,null,null,"{\"attribute\":\"MOVEMENT_SPEED\",\"operation\":\"MULTIPLY\",\"amount\":1,\"duration_seconds\":3600}");if(!speed.successful()||player.getAttributeValue(Attributes.MOVEMENT_SPEED)<=before){helper.fail("Speed contract did not increase movement speed");return;}WishActionResult companion=execute(helper,player,WishActionType.SPAWN_ENTITY,WishCapability.PERSISTENT_FOLLOWER,WishTargetType.PLAYER,RegistryEntryType.ENTITY,"minecraft:wolf","{\"count\":1,\"distance_min\":2,\"distance_max\":4}");if(!companion.successful()||companion.affected()!=1){helper.fail("Persistent companion did not spawn");return;}Villager villager=EntityType.VILLAGER.create(helper.getLevel());if(villager==null){helper.fail("Villager creation failed");return;}villager.moveTo(player.position().add(2,0,0));helper.getLevel().addFreshEntity(villager);WishActionResult relation=execute(helper,player,WishActionType.CHANGE_REPUTATION,WishCapability.REPUTATION,WishTargetType.NEARBY_ENTITIES,null,null,"{\"delta\":100,\"radius\":64}");if(!relation.successful()||villager.getPlayerReputation(player)<=0){helper.fail("Villager relation was not positive");return;}WishActionResult house=execute(helper,player,WishActionType.CREATE_STRUCTURE,WishCapability.STRUCTURE,WishTargetType.PLAYER,null,null,"{\"template\":\"SIMPLE_HOUSE\"}");long planks=BlockPos.betweenClosedStream(player.blockPosition().offset(-4,-2,-4),player.blockPosition().offset(4,5,4)).filter(pos->helper.getLevel().getBlockState(pos).is(Blocks.OAK_PLANKS)).count();if(!house.successful()||planks<100){helper.fail("Simple house did not materially exist: "+planks);return;}helper.succeed();}
 
+    /** NEW path runtime integration: WishProgram → server validation → startProgram → tick loop → real executors. */
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=300)
+    public static void nativeProgramWorldActionsExecuteThroughTickLoop(GameTestHelper helper){
+        var server=helper.getLevel().getServer();UUID session=UUID.randomUUID(),owner=UUID.randomUUID();
+        WishProgram program=WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"make it thunder and set night","core_actions":[
+                 {"action":"set_weather","parameters":{"weather":"thunder","duration_seconds":300}},
+                 {"action":"set_time","parameters":{"value":"night"}}],
+                 "presentation_actions":[],"skill":"","unknown_capability":""}""");
+        WishInterpretation interpretation=new WishInterpretation(1,"weather","Thunder night","","Thunder night falls","GameTest",WishTone.DARK,30,WishDelivery.IMMEDIATE,List.of(WishCapability.CHANGE_WEATHER));
+        WishRecord wish=new WishRecord(session,owner,"make it thunder at night",helper.getLevel().dimension().location(),
+                helper.getLevel().getGameTime(),System.currentTimeMillis(),WishState.FINISHED,InterpretationState.SUCCESS,
+                AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,AiProviderType.CUSTOM,"gametest",
+                System.currentTimeMillis(),interpretation).withProgram(program);
+        WishSavedData.get(server).update(wish);
+        ValidatedWishProgram validated=WishProgramValidator.validate(program,new ForgeWishProgramResourceResolver(server));
+        WishExecutionAcceptResult accepted=WishActionManager.startProgram(ownerPlayer(helper,owner),wish,validated);
+        if(!accepted.accepted()){helper.fail("Program start failed: "+accepted.error()+" "+accepted.detail());return;}
+        helper.runAfterDelay(260,()->{
+            WishRecord stored=WishSavedData.get(server).getBySession(session);
+            WishExecutionRecord execution=stored==null||stored.executionId()==null?null:
+                    WishExecutionSavedData.get(server).get(stored.executionId());
+            if(stored==null||execution==null){helper.fail("Program execution record missing");return;}
+            if(execution.source()!=ExecutionSource.WISH_PROGRAM){helper.fail("Program record has wrong source: "+execution.source());return;}
+            if(stored.plan()!=null){helper.fail("NEW path must not create a legacy WishPlan");return;}
+            if(!helper.getLevel().getLevelData().isThundering()){helper.fail("set_weather did not execute");return;}
+            long dayTime=Math.floorMod(helper.getLevel().getDayTime(),24000L);
+            if(dayTime<13000||dayTime>=23000){helper.fail("set_time did not execute, dayTime="+dayTime);return;}
+            if(execution.state()!=WishExecutionState.COMPLETED){helper.fail("Program did not complete: "+execution.state()+" "+execution.lastError());return;}
+            helper.succeed();
+        });
+    }
+
+    /** NEW path: give_item runs natively; no legacy plan is created and the inventory changes. */
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=300)
+    public static void nativeProgramGiveItemExecutesThroughTickLoop(GameTestHelper helper){
+        var server=helper.getLevel().getServer();UUID session=UUID.randomUUID(),owner=UUID.randomUUID();
+        ServerPlayer player=ownerPlayer(helper,owner);place(player,helper.absolutePos(new BlockPos(1,2,1)));
+        registerPlayer(server,player);
+        WishProgram program=WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"give me 64 diamonds","core_actions":[
+                 {"action":"give_item","parameters":{"item":"minecraft:diamond","count":64}}],
+                 "presentation_actions":[],"skill":"","unknown_capability":""}""");
+        WishInterpretation interpretation=new WishInterpretation(1,"item","64 diamonds","","64 diamonds granted","GameTest",WishTone.ABSURD,40,WishDelivery.IMMEDIATE,List.of(WishCapability.GIVE_ITEM));
+        WishRecord wish=new WishRecord(session,owner,"give me 64 diamonds",helper.getLevel().dimension().location(),
+                helper.getLevel().getGameTime(),System.currentTimeMillis(),WishState.FINISHED,InterpretationState.SUCCESS,
+                AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,AiProviderType.CUSTOM,"gametest",
+                System.currentTimeMillis(),interpretation).withProgram(program);
+        WishSavedData.get(server).update(wish);
+        ValidatedWishProgram validated=WishProgramValidator.validate(program,new ForgeWishProgramResourceResolver(server));
+        WishExecutionAcceptResult accepted=WishActionManager.startProgram(player,wish,validated);
+        if(!accepted.accepted()){unregisterPlayer(server,player);helper.fail("Program start failed: "+accepted.error()+" "+accepted.detail());return;}
+        helper.runAfterDelay(220,()->{
+            WishRecord stored=WishSavedData.get(server).getBySession(session);
+            WishExecutionRecord execution=stored==null||stored.executionId()==null?null:
+                    WishExecutionSavedData.get(server).get(stored.executionId());
+            boolean ok=execution!=null&&execution.source()==ExecutionSource.WISH_PROGRAM
+                    &&stored.plan()==null&&execution.state()==WishExecutionState.COMPLETED
+                    &&player.getInventory().countItem(Items.DIAMOND)==64;
+            unregisterPlayer(server,player);
+            if(!ok){helper.fail("Native give_item program failed state="
+                    +(execution==null?"none":execution.state())+" diamonds="+player.getInventory().countItem(Items.DIAMOND));return;}
+            helper.succeed();
+        });
+    }
+
+    /** NEW path: spawn_falling_block showers real FallingBlockEntities and delivers them. */
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=400)
+    public static void nativeProgramFallingBlockShowerExecutesThroughTickLoop(GameTestHelper helper){
+        var server=helper.getLevel().getServer();UUID session=UUID.randomUUID(),owner=UUID.randomUUID();
+        ServerPlayer player=ownerPlayer(helper,owner);place(player,helper.absolutePos(new BlockPos(1,4,1)));prepareFloor(helper);
+        registerPlayer(server,player);
+        WishProgram program=WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"20 diamond blocks fall from the sky","core_actions":[
+                 {"action":"spawn_falling_block","parameters":{"block":"minecraft:diamond_block","count":20,
+                  "target":"self","height":12,"horizontal_radius":3,"interval_ticks":1,"landing":"deliver_to_player"}}],
+                 "presentation_actions":[],"skill":"block_rain","unknown_capability":""}""");
+        WishInterpretation interpretation=new WishInterpretation(1,"block","20 diamond blocks","","20 diamond blocks fall","GameTest",WishTone.ABSURD,50,WishDelivery.IMMEDIATE,List.of(WishCapability.BLOCK_CHANGE));
+        WishRecord wish=new WishRecord(session,owner,"20 diamond blocks fall from the sky",helper.getLevel().dimension().location(),
+                helper.getLevel().getGameTime(),System.currentTimeMillis(),WishState.FINISHED,InterpretationState.SUCCESS,
+                AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,AiProviderType.CUSTOM,"gametest",
+                System.currentTimeMillis(),interpretation).withProgram(program);
+        WishSavedData.get(server).update(wish);
+        ValidatedWishProgram validated=WishProgramValidator.validate(program,new ForgeWishProgramResourceResolver(server));
+        WishExecutionAcceptResult accepted=WishActionManager.startProgram(player,wish,validated);
+        if(!accepted.accepted()){unregisterPlayer(server,player);helper.fail("Program start failed: "+accepted.error()+" "+accepted.detail());return;}
+        boolean[] sawPhysicalEntity={false};
+        helper.onEachTick(()->{
+            if(!helper.getLevel().getEntitiesOfClass(FallingBlockEntity.class,new AABB(player.blockPosition()).inflate(24,40,24)).isEmpty()){
+                sawPhysicalEntity[0]=true;
+            }
+        });
+        helper.runAfterDelay(320,()->{
+            WishRecord stored=WishSavedData.get(server).getBySession(session);
+            WishExecutionRecord execution=stored==null||stored.executionId()==null?null:
+                    WishExecutionSavedData.get(server).get(stored.executionId());
+            int delivered=player.getInventory().countItem(Blocks.DIAMOND_BLOCK.asItem());
+            boolean ok=execution!=null&&execution.source()==ExecutionSource.WISH_PROGRAM
+                    &&stored.plan()==null&&execution.state()==WishExecutionState.COMPLETED
+                    &&delivered==20&&sawPhysicalEntity[0];
+            unregisterPlayer(server,player);
+            if(!ok){helper.fail("Native falling shower failed state="
+                    +(execution==null?"none":execution.state()+" "+execution.lastError())
+                    +" delivered="+delivered+" sawEntity="+sawPhysicalEntity[0]);return;}
+            helper.succeed();
+        });
+    }
+
+    private static void registerPlayer(MinecraftServer server,ServerPlayer player){
+        try{
+            var listClass=net.minecraft.server.players.PlayerList.class;
+            @SuppressWarnings("unchecked")
+            List<ServerPlayer> players=(List<ServerPlayer>)field(listClass,"players").get(server.getPlayerList());
+            @SuppressWarnings("unchecked")
+            Map<UUID,ServerPlayer> byUuid=(Map<UUID,ServerPlayer>)field(listClass,"playersByUUID").get(server.getPlayerList());
+            net.minecraft.network.Connection connection=new net.minecraft.network.Connection(
+                    net.minecraft.network.protocol.PacketFlow.SERVERBOUND);
+            var channelField=net.minecraft.network.Connection.class.getDeclaredField("channel");
+            channelField.setAccessible(true);
+            channelField.set(connection,new io.netty.channel.embedded.EmbeddedChannel());
+            player.connection=new net.minecraft.server.network.ServerGamePacketListenerImpl(
+                    server,connection,player);
+            players.add(player);
+            byUuid.put(player.getUUID(),player);
+        }catch(ReflectiveOperationException error){
+            throw new RuntimeException("cannot register gametest player",error);
+        }
+    }
+    private static void unregisterPlayer(MinecraftServer server,ServerPlayer player){
+        try{
+            var listClass=net.minecraft.server.players.PlayerList.class;
+            @SuppressWarnings("unchecked")
+            List<ServerPlayer> players=(List<ServerPlayer>)field(listClass,"players").get(server.getPlayerList());
+            @SuppressWarnings("unchecked")
+            Map<UUID,ServerPlayer> byUuid=(Map<UUID,ServerPlayer>)field(listClass,"playersByUUID").get(server.getPlayerList());
+            players.remove(player);
+            byUuid.remove(player.getUUID());
+        }catch(ReflectiveOperationException ignored){}
+    }
+    private static java.lang.reflect.Field field(Class<?> type,String name) throws ReflectiveOperationException {
+        var result=type.getDeclaredField(name);
+        result.setAccessible(true);
+        return result;
+    }
+
     private static void prepareFloor(GameTestHelper helper){WishExecutionConfig.DEBUG_SAFE_MODE.set(false);for(int x=-5;x<=7;x++)for(int z=-5;z<=7;z++){BlockPos floor=helper.absolutePos(new BlockPos(x,1,z));helper.getLevel().setBlock(floor,Blocks.STONE.defaultBlockState(),3);helper.getLevel().setBlock(floor.above(),Blocks.AIR.defaultBlockState(),3);helper.getLevel().setBlock(floor.above(2),Blocks.AIR.defaultBlockState(),3);}}
     private static ServerPlayer serverPlayer(GameTestHelper helper){return new ServerPlayer(helper.getLevel().getServer(),helper.getLevel(),new GameProfile(UUID.randomUUID(),"WishGameTest"));}
+    private static ServerPlayer ownerPlayer(GameTestHelper helper,UUID owner){return new ServerPlayer(helper.getLevel().getServer(),helper.getLevel(),new GameProfile(owner,"WishGameTest"));}
     private static ServerPlayer effectPlayer(GameTestHelper helper){return new ServerPlayer(helper.getLevel().getServer(),helper.getLevel(),new GameProfile(UUID.randomUUID(),"WishEffectTest")){
         @Override protected void onEffectAdded(MobEffectInstance effect,Entity source){}
         @Override protected void onEffectUpdated(MobEffectInstance effect,boolean forced,Entity source){}
     };}
     private static void place(ServerPlayer player,BlockPos pos){player.setPos(pos.getX()+.5,pos.getY(),pos.getZ()+.5);}
-    private static WishActionResult execute(GameTestHelper helper,net.minecraft.server.level.ServerPlayer player,WishActionType action,WishCapability capability,WishTargetType target,RegistryEntryType type,String resource,String json){UUID execution=UUID.randomUUID(),planId=UUID.randomUUID(),session=UUID.randomUUID();VerifiedRegistryResource registry=type==null?null:new VerifiedRegistryResource(type,resource);CandidateReference candidate=new CandidateReference("candidate-001",capability,capability,MatchType.EXACT,registry==null?CandidateSourceKind.VANILLA_BUILTIN:CandidateSourceKind.VANILLA_REGISTRY,"minecraft","1.20.1",resource==null?action.name():resource,type==null?FeatureType.WORLD_SYSTEM:switch(type){case ITEM->FeatureType.ITEM;case ENTITY->FeatureType.ENTITY;case EFFECT->FeatureType.EFFECT;case SOUND->FeatureType.SOUND;default->FeatureType.UNKNOWN;},registry,100,25);WishPlanStep step=new WishPlanStep(0,WishStepTiming.IMMEDIATE,0,WishTriggerType.NONE,action,capability,"candidate-001",target,JsonParser.parseString(json).getAsJsonObject(),"GameTest",candidate);WishPlan plan=new WishPlan(planId,session,1,"GameTest",WishDelivery.IMMEDIATE,70,WishEstimatedDuration.INSTANT,List.of(step),Set.of("minecraft"),resource==null?Set.of():Set.of(resource),Set.of(),helper.getLevel().getGameTime(),0,"VERIFIED","","","");WishExecutionRecord record=new WishExecutionRecord(execution,planId,session,player.getUUID(),1,helper.getLevel().getGameTime());return WishActionRegistry.defaults().get(action).execute(new WishExecutionContext(helper.getLevel(),player,plan,step,candidate,record));}
+    private static WishActionResult execute(GameTestHelper helper,net.minecraft.server.level.ServerPlayer player,WishActionType action,WishCapability capability,WishTargetType target,RegistryEntryType type,String resource,String json){UUID execution=UUID.randomUUID(),planId=UUID.randomUUID(),session=UUID.randomUUID();VerifiedRegistryResource registry=type==null?null:new VerifiedRegistryResource(type,resource);CandidateReference candidate=new CandidateReference("candidate-001",capability,capability,MatchType.EXACT,registry==null?CandidateSourceKind.VANILLA_BUILTIN:CandidateSourceKind.VANILLA_REGISTRY,"minecraft","1.20.1",resource==null?action.name():resource,type==null?FeatureType.WORLD_SYSTEM:switch(type){case ITEM->FeatureType.ITEM;case ENTITY->FeatureType.ENTITY;case EFFECT->FeatureType.EFFECT;case SOUND->FeatureType.SOUND;default->FeatureType.UNKNOWN;},registry,100,25);WishPlanStep step=new WishPlanStep(0,WishStepTiming.IMMEDIATE,0,WishTriggerType.NONE,action,capability,"candidate-001",target,JsonParser.parseString(json).getAsJsonObject(),"GameTest",candidate);WishPlan plan=new WishPlan(planId,session,1,"GameTest",WishDelivery.IMMEDIATE,70,WishEstimatedDuration.INSTANT,List.of(step),Set.of("minecraft"),resource==null?Set.of():Set.of(resource),Set.of(),helper.getLevel().getGameTime(),0,"VERIFIED","","","");WishExecutionRecord record=new WishExecutionRecord(execution,planId,session,player.getUUID(),1,helper.getLevel().getGameTime());return WishActionRegistry.defaults().get(action).execute(WishExecutionContext.legacy(helper.getLevel(),player,plan,step,record));}
 }

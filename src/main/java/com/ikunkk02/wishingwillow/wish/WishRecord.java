@@ -126,6 +126,14 @@ public record WishRecord(
                 executionError, executionErrorDetail);
     }
 
+    /** Replaces the stored program with the exact program the server validated and will execute. */
+    public WishRecord withProgram(@Nullable WishProgram newProgram) {
+        return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
+                state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,
+                interpretationUpdatedAtEpochMillis, interpretation, newProgram, planState, planError, plan,
+                executionId, executionState, executionError, executionErrorDetail);
+    }
+
     public WishRecord withPlanning(WishPlanState newState, WishPlanError error, @Nullable WishPlan newPlan) {
         return new WishRecord(sessionId, playerId, rawWish, dimension, submittedGameTime, submittedAtEpochMillis,
                 state, interpretationState, aiErrorCategory, aiExecutionMode, providerType, model,

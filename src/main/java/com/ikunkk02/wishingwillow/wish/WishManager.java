@@ -15,10 +15,13 @@ import com.ikunkk02.wishingwillow.planning.WishPlanError;
 import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import com.ikunkk02.wishingwillow.planning.WishPlanStore;
 import com.ikunkk02.wishingwillow.planning.WishPlanResult;
+import com.ikunkk02.wishingwillow.planning.WishActionRouter;
+import com.ikunkk02.wishingwillow.planning.WishExecutionRoute;
 import com.ikunkk02.wishingwillow.execution.WishActionManager;
 import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptResult;
 import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptError;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
+import com.ikunkk02.wishingwillow.execution.ForgeWishProgramResourceResolver;
 import com.ikunkk02.wishingwillow.item.WishingWillowItem;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
@@ -28,7 +31,11 @@ import com.ikunkk02.wishingwillow.network.packet.WishOmenPacket;
 import com.ikunkk02.wishingwillow.agent.core.WishAgentDebugStore;
 import com.ikunkk02.wishingwillow.omen.WishOmenGenerator;
 import com.ikunkk02.wishingwillow.program.WishProgram;
+import com.ikunkk02.wishingwillow.program.WishProgramAction;
+import com.ikunkk02.wishingwillow.program.WishProgramError;
 import com.ikunkk02.wishingwillow.program.WishProgramJson;
+import com.ikunkk02.wishingwillow.program.WishProgramValidator;
+import com.ikunkk02.wishingwillow.program.ValidatedWishProgram;
 import com.ikunkk02.wishingwillow.registry.ModItems;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -244,7 +251,12 @@ public final class WishManager {
             beginPlanning(player, sessionId, acceptedInterpretation);
         } else {
             WishPipelineAudit.failure(sessionId,"INTERPRETATION",acceptedError.name(),state.name());
-            WishPlanStore.fail(player.server, sessionId, WishPlanError.AI_REQUEST_FAILED);
+            if (record != null && record.program() != null) {
+                recordProgramFailure(player, sessionId, WishProgramError.INVALID_PROGRAM,
+                        "interpretation: " + acceptedError.name());
+            } else {
+                WishPlanStore.fail(player.server, sessionId, WishPlanError.AI_REQUEST_FAILED);
+            }
         }
     }
 
@@ -268,7 +280,13 @@ public final class WishManager {
         if (attempt == null || !attempt.attemptId.equals(attemptId)
                 || !attempt.playerId.equals(player.getUUID())) return;
         PLANNING_ATTEMPTS.remove(sessionId);
-        WishPlanStore.fail(player.server, sessionId, WishPlanError.AI_REQUEST_FAILED);
+        WishRecord cancelled = WishSavedData.get(player.server).getBySession(sessionId);
+        if (cancelled != null && cancelled.program() != null) {
+            recordProgramFailure(player, sessionId, WishProgramError.UNKNOWN,
+                    "cancelled: superseded by a newer wish");
+        } else {
+            WishPlanStore.fail(player.server, sessionId, WishPlanError.AI_REQUEST_FAILED);
+        }
         WishPipelineAudit.failure(sessionId, "PLANNING", "CANCELLED_SUPERSEDED",
                 "newer wish planning request replaced this attempt");
         WishingWillow.LOGGER.info("Wish planning cancelled session={} attempt={} reason=SUPERSEDED",
@@ -323,6 +341,73 @@ public final class WishManager {
             WishPipelineAudit.failure(sessionId,"SERVER_PLAN_VALIDATION",acceptedError.name(),exception.getMessage());
             sendPlanningFailure(player, sessionId);
         }
+    }
+
+    /**
+     * NEW path server entry for {@link SubmitWishProgramPacket}: verifies the planning attempt,
+     * re-validates the submitted program (schema / registry / policy / budget — the client is
+     * untrusted), stores the exact validated program and starts native program execution via
+     * {@link WishActionManager#startProgram}. Never touches WishPlanStore or the legacy executor.
+     */
+    public static void handleProgramSubmission(ServerPlayer player, UUID sessionId, UUID attemptId,
+                                               int schemaVersion, WishProgramError error,
+                                               @Nullable String programJson) {
+        PlanningAttempt attempt = PLANNING_ATTEMPTS.get(sessionId);
+        if (attempt == null || !attempt.attemptId.equals(attemptId)
+                || !attempt.playerId.equals(player.getUUID())) return;
+        PLANNING_ATTEMPTS.remove(sessionId);
+        WishRecord record = WishSavedData.get(player.server).getBySession(sessionId);
+        if (record == null || !record.playerId().equals(player.getUUID())
+                || record.executionId() != null) return;
+        if (error != WishProgramError.UNKNOWN || programJson == null) {
+            WishProgramError acceptedError = error == WishProgramError.UNKNOWN
+                    ? WishProgramError.INVALID_PROGRAM : error;
+            recordProgramFailure(player, sessionId, acceptedError, "client reported failure");
+            return;
+        }
+        try {
+            WishProgram program = WishProgramJson.parseAndValidate(programJson);
+            WishSavedData data = WishSavedData.get(player.server);
+            WishRecord stored = data.getBySession(sessionId);
+            data.update(stored.withProgram(program));
+            ValidatedWishProgram validated = WishProgramValidator.validate(program,
+                    new ForgeWishProgramResourceResolver(player.server));
+            WishingWillow.LOGGER.info(
+                    "Wish program accepted session={} program={} coreActions={} presentationActions={}",
+                    sessionId, WishProgramJson.toJson(program).length(),
+                    program.coreActions().stream().map(WishProgramAction::action).toList(),
+                    program.presentationActions().stream().map(WishProgramAction::action).toList());
+            WishExecutionAcceptResult result = WishActionManager.startProgram(player,
+                    WishSavedData.get(player.server).getBySession(sessionId), validated);
+            if (result.accepted()) {
+                WishPipelineAudit.success(sessionId, "PROGRAM_SUBMIT",
+                        "execution=" + result.executionId());
+            } else {
+                WishPipelineAudit.failure(sessionId, "PROGRAM_SUBMIT",
+                        result.error().name(), result.detail());
+                player.sendSystemMessage(
+                        Component.translatable("message.wishing_willow.technical_failure"));
+            }
+        } catch (IllegalArgumentException exception) {
+            WishProgramError acceptedError = WishProgramError.fromMessage(exception.getMessage());
+            recordProgramFailure(player, sessionId, acceptedError, exception.getMessage());
+        }
+    }
+
+    private static void recordProgramFailure(ServerPlayer player, UUID sessionId,
+                                             WishProgramError error, String detail) {
+        WishRecord record = WishSavedData.get(player.server).getBySession(sessionId);
+        if (record == null) return;
+        WishSavedData.get(player.server).update(record.withExecution(null,
+                com.ikunkk02.wishingwillow.execution.WishExecutionState.FAILED,
+                WishExecutionAcceptError.VALIDATION_FAILED,
+                "program=" + error.name() + " " + sanitize(detail)));
+        WishPipelineAudit.failure(sessionId, "PROGRAM_SUBMIT", error.name(), detail);
+        sendPlanningFailure(player, sessionId);
+    }
+
+    private static String sanitize(String value) {
+        return value == null ? "" : value.replace('\n', ' ').replace('\r', ' ').trim();
     }
 
     @Nullable
@@ -558,11 +643,15 @@ public final class WishManager {
         if (existing != null) return;
         UUID attemptId = UUID.randomUUID();
         PLANNING_ATTEMPTS.put(sessionId, new PlanningAttempt(attemptId, player.getUUID()));
-        WishPlanStore.updateState(player.server, sessionId, WishPlanState.MATCHING);
         if (record.program() == null) {
             WishPlanStore.fail(player.server, sessionId, WishPlanError.INVALID_JSON);
             PLANNING_ATTEMPTS.remove(sessionId);
             return;
+        }
+        // Direct programs never enter the legacy WishPlanStore state machine; only the complex
+        // agent route (which still researches capabilities) reports MATCHING progress.
+        if (new WishActionRouter().select(record.program()).route() == WishExecutionRoute.COMPLEX_AGENT) {
+            WishPlanStore.updateState(player.server, sessionId, WishPlanState.MATCHING);
         }
         ModNetworking.sendToPlayer(player, new WishPlanningRequestPacket(sessionId, attemptId, record.rawWish(),
                 record.providerType(), record.model(), interpretation, record.program(), WishContextCollector.collect(player),

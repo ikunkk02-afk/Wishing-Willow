@@ -9,4 +9,10 @@ public final class WishExecutionAudit {
         WishingWillow.LOGGER.info("Wish pipeline session={} stage=STEP execution={} step={} action={} status={} code={} affected={}",
                 record.wishSessionId(),record.executionId(),step,action,status,code==null?"":code,affected);
     }
+
+    /** Native program steps carry the registry action id instead of a legacy {@link WishActionType}. */
+    public static void transition(WishExecutionRecord record,int step,String actionId,String status,String code,int affected){
+        WishingWillow.LOGGER.info("Wish pipeline session={} stage=STEP execution={} step={} action={} status={} code={} affected={}",
+                record.wishSessionId(),record.executionId(),step,actionId,status,code==null?"":code,affected);
+    }
 }

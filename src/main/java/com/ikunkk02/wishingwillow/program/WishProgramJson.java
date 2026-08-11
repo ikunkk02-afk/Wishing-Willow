@@ -72,29 +72,66 @@ public final class WishProgramJson {
         return GSON.toJson(root);
     }
 
+    /**
+     * Strict JSON Schema generated directly from the action registry: each action becomes a
+     * discriminated {@code oneOf} variant with {@code const} action id and a bounded parameter
+     * schema. The AI cannot invent parameters, mix types, or emit out-of-range values.
+     */
     public static JsonObject jsonSchema() {
-        JsonObject root = JsonParser.parseString("""
-                {"type":"object","additionalProperties":false,
-                 "required":["schema_version","goal","core_actions","presentation_actions","skill","unknown_capability"],
-                 "properties":{
-                   "schema_version":{"type":"integer","const":1},
-                   "goal":{"type":"string","minLength":1,"maxLength":512},
-                   "core_actions":{"type":"array","minItems":0,"maxItems":32},
-                   "presentation_actions":{"type":"array","minItems":0,"maxItems":8},
-                   "skill":{"type":"string","maxLength":64},
-                   "unknown_capability":{"type":"string","maxLength":256}
-                 }}
-                """).getAsJsonObject();
-        JsonObject action = JsonParser.parseString("""
-                {"type":"object","additionalProperties":false,"required":["action","parameters"],
-                 "properties":{"action":{"type":"string"},"parameters":{"type":"object"}}}
-                """).getAsJsonObject();
-        JsonArray ids = new JsonArray();
-        WishActionRegistry.defaults().ids().forEach(ids::add);
-        action.getAsJsonObject("properties").getAsJsonObject("action").add("enum", ids);
-        root.getAsJsonObject("properties").getAsJsonObject("core_actions").add("items", action.deepCopy());
-        root.getAsJsonObject("properties").getAsJsonObject("presentation_actions").add("items", action.deepCopy());
+        JsonObject root = new JsonObject();
+        root.addProperty("type", "object");
+        root.addProperty("additionalProperties", false);
+        JsonArray rootRequired = new JsonArray();
+        rootRequired.add("schema_version"); rootRequired.add("goal");
+        rootRequired.add("core_actions"); rootRequired.add("presentation_actions");
+        rootRequired.add("skill"); rootRequired.add("unknown_capability");
+        root.add("required", rootRequired);
+        JsonObject properties = new JsonObject();
+        JsonObject schemaVersion = new JsonObject();
+        schemaVersion.addProperty("type", "integer"); schemaVersion.addProperty("const", 1);
+        properties.add("schema_version", schemaVersion);
+        JsonObject goal = new JsonObject();
+        goal.addProperty("type", "string"); goal.addProperty("minLength", 1); goal.addProperty("maxLength", 512);
+        properties.add("goal", goal);
+        JsonObject items = actionItems();
+        JsonObject core = new JsonObject();
+        core.addProperty("type", "array"); core.addProperty("minItems", 0); core.addProperty("maxItems", 32);
+        core.add("items", items.deepCopy());
+        properties.add("core_actions", core);
+        JsonObject presentation = new JsonObject();
+        presentation.addProperty("type", "array"); presentation.addProperty("minItems", 0); presentation.addProperty("maxItems", 8);
+        presentation.add("items", items.deepCopy());
+        properties.add("presentation_actions", presentation);
+        JsonObject skill = new JsonObject();
+        skill.addProperty("type", "string"); skill.addProperty("maxLength", 64);
+        properties.add("skill", skill);
+        JsonObject unknown = new JsonObject();
+        unknown.addProperty("type", "string"); unknown.addProperty("maxLength", 256);
+        properties.add("unknown_capability", unknown);
+        root.add("properties", properties);
         return root;
+    }
+
+    private static JsonObject actionItems() {
+        JsonArray oneOf = new JsonArray();
+        for (WishActionDefinition definition : WishActionRegistry.defaults().definitions()) {
+            JsonObject variant = new JsonObject();
+            variant.addProperty("type", "object");
+            variant.addProperty("additionalProperties", false);
+            JsonArray required = new JsonArray();
+            required.add("action"); required.add("parameters");
+            variant.add("required", required);
+            JsonObject props = new JsonObject();
+            JsonObject action = new JsonObject();
+            action.addProperty("type", "string"); action.addProperty("const", definition.id());
+            props.add("action", action);
+            props.add("parameters", definition.parameterSchema());
+            variant.add("properties", props);
+            oneOf.add(variant);
+        }
+        JsonObject items = new JsonObject();
+        items.add("oneOf", oneOf);
+        return items;
     }
 
     static String canonical(JsonElement element) {
@@ -111,6 +148,12 @@ public final class WishProgramJson {
         JsonObject properties = definition.parameterSchema().getAsJsonObject("properties");
         if (properties != null && !properties.keySet().containsAll(parameters.keySet())) {
             throw invalid("UNDECLARED_PARAMETER_" + definition.id());
+        }
+        for (String key : parameters.keySet()) {
+            JsonObject property = properties == null ? null : properties.getAsJsonObject(key);
+            if (property == null) continue;
+            JsonElement value = parameters.get(key);
+            validateProperty(definition.id(), key, property, value);
         }
         if (definition.flowControl()) {
             if (definition.id().equals("repeat")) {
@@ -132,6 +175,45 @@ public final class WishProgramJson {
                     validateParameters(parsed.parameters(), childDefinition, registry, depth + 1);
                 }
             }
+        }
+    }
+
+    private static void validateProperty(String actionId, String key, JsonObject property,
+                                         JsonElement value) {
+        String type = property.has("type") ? property.get("type").getAsString() : null;
+        if (value.isJsonPrimitive()) {
+            JsonElement primitive = value.getAsJsonPrimitive();
+            if (primitive.getAsJsonPrimitive().isNumber()) {
+                if ("integer".equals(type) && !value.getAsString().matches("-?(0|[1-9][0-9]*)")) {
+                    throw invalid("PARAMETER_TYPE_" + key);
+                }
+                if (property.has("minimum")) {
+                    double minimum = property.get("minimum").getAsDouble();
+                    if (value.getAsDouble() < minimum) throw invalid("PARAMETER_MIN_" + key);
+                }
+                if (property.has("maximum")) {
+                    double maximum = property.get("maximum").getAsDouble();
+                    if (value.getAsDouble() > maximum) throw invalid("PARAMETER_MAX_" + key);
+                }
+            } else if (primitive.getAsJsonPrimitive().isString()) {
+                if ("integer".equals(type) || "number".equals(type)) {
+                    throw invalid("PARAMETER_TYPE_" + key);
+                }
+                if (property.has("enum")) {
+                    String candidate = value.getAsString();
+                    boolean matched = false;
+                    for (JsonElement allowed : property.getAsJsonArray("enum")) {
+                        if (allowed.getAsString().equalsIgnoreCase(candidate)) { matched = true; break; }
+                    }
+                    if (!matched) throw invalid("PARAMETER_ENUM_" + key);
+                }
+            } else if (primitive.getAsJsonPrimitive().isBoolean() && !"boolean".equals(type)) {
+                throw invalid("PARAMETER_TYPE_" + key);
+            }
+        } else if (value.isJsonArray() && !"array".equals(type)) {
+            throw invalid("PARAMETER_TYPE_" + key);
+        } else if (value.isJsonObject() && !"object".equals(type)) {
+            throw invalid("PARAMETER_TYPE_" + key);
         }
     }
 

@@ -57,18 +57,44 @@ public final class WishExecutionCommands {
                                     : WishExecutionSavedData.get(context.getSource().getServer()).get(wish.executionId());
                             long elapsed = execution == null ? 0L
                                     : Math.max(0L, execution.updatedGameTime() - execution.createdGameTime()) * 50L;
-                            int completed = execution == null ? 0 : (int) execution.steps().stream()
-                                    .filter(step -> step.state() == WishStepExecutionState.SUCCEEDED).count();
-                            int failed = execution == null ? 0 : (int) execution.steps().stream()
-                                    .filter(step -> step.state() == WishStepExecutionState.FAILED
-                                            || step.state() == WishStepExecutionState.STALE).count();
-                            context.getSource().sendSuccess(() -> Component.literal("session=" + wish.sessionId()
-                                    + " goal=" + wish.program().goal() + " state=" + wish.executionState()
+                            int core = execution == null ? 0 : Math.min(execution.coreActionCount(), execution.steps().size());
+                            long completedCore = execution == null ? 0 : execution.steps().stream()
+                                    .filter(step -> step.stepIndex() < core
+                                            && step.state() == WishStepExecutionState.SUCCEEDED).count();
+                            long failedCore = execution == null ? 0 : execution.steps().stream()
+                                    .filter(step -> step.stepIndex() < core
+                                            && (step.state() == WishStepExecutionState.FAILED
+                                            || step.state() == WishStepExecutionState.STALE)).count();
+                            long completedPresentation = execution == null ? 0 : execution.steps().stream()
+                                    .filter(step -> step.stepIndex() >= core
+                                            && step.state() == WishStepExecutionState.SUCCEEDED).count();
+                            long failedPresentation = execution == null ? 0 : execution.steps().stream()
+                                    .filter(step -> step.stepIndex() >= core
+                                            && (step.state() == WishStepExecutionState.FAILED
+                                            || step.state() == WishStepExecutionState.STALE)).count();
+                            WishStepExecution current = execution == null ? null : execution.steps().stream()
+                                    .filter(step -> !step.state().terminal()).findFirst().orElse(null);
+                            String currentAction = current == null ? "none"
+                                    : execution.steps().isEmpty() ? "none"
+                                    : (current.stepIndex() < core ? "CORE:" : "PRESENTATION:")
+                                    + current.stepIndex();
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    "source=" + (execution == null ? "UNKNOWN" : execution.source().name())
+                                    + " session=" + wish.sessionId()
+                                    + " programId=" + (execution == null ? "none" : execution.planId())
+                                    + " executionId=" + (execution == null ? "none" : wish.executionId())
+                                    + " goal=" + wish.program().goal()
+                                    + " state=" + wish.executionState()
+                                    + " currentAction=" + currentAction
+                                    + " completedCore=" + completedCore + " failedCore=" + failedCore
+                                    + " completedPresentation=" + completedPresentation
+                                    + " failedPresentation=" + failedPresentation
                                     + " coreActions=" + wish.program().coreActions().stream().map(a -> a.action()).toList()
                                     + " presentationActions=" + wish.program().presentationActions().stream().map(a -> a.action()).toList()
-                                    + " completedActions=" + completed + " failedActions=" + failed
-                                    + " selectedSkill=" + wish.program().skill()
-                                    + " agentUsed=" + wish.program().requiresAgent() + " elapsedMs=" + elapsed), false);
+                                    + " agentUsed=" + wish.program().requiresAgent()
+                                    + " legacyPlanUsed=" + (execution != null
+                                    && execution.source() == ExecutionSource.LEGACY_WISH_PLAN)
+                                    + " elapsedMs=" + elapsed), false);
                             return 1;
                         })))
                 .then(Commands.literal("action")
@@ -144,8 +170,29 @@ public final class WishExecutionCommands {
                                                         " result="+step.lastResult()+" error="+step.lastError()),false);
                                     return 1;
                                 }))))
-                .then(Commands.literal("execution").requires(source->source.hasPermission(2))
-                        .then(Commands.literal("list").executes(context -> {
+                .then(Commands.literal("execution")
+                        .then(Commands.literal("latest").executes(context -> {
+                            var player = context.getSource().getPlayerOrException();
+                            WishRecord wish = WishSavedData.get(context.getSource().getServer()).getLatest(player.getUUID());
+                            WishExecutionRecord execution = wish == null || wish.executionId() == null ? null
+                                    : WishExecutionSavedData.get(context.getSource().getServer()).get(wish.executionId());
+                            if (execution == null) {
+                                context.getSource().sendFailure(Component.literal("No execution record found.")); return 0;
+                            }
+                            long elapsed = Math.max(0L, execution.updatedGameTime() - execution.createdGameTime()) * 50L;
+                            context.getSource().sendSuccess(() -> Component.literal(
+                                    "execution=" + execution.executionId()
+                                    + " source=" + execution.source()
+                                    + " session=" + execution.wishSessionId()
+                                    + " owner=" + execution.ownerId()
+                                    + " state=" + execution.state()
+                                    + " steps=" + execution.steps().size()
+                                    + " coreActions=" + execution.coreActionCount()
+                                    + " error=" + execution.lastError()
+                                    + " elapsedMs=" + elapsed), false);
+                            return 1;
+                        }))
+                        .then(Commands.literal("list").requires(source->source.hasPermission(2)).executes(context -> {
                             var all=WishExecutionSavedData.get(context.getSource().getServer()).all();
                             context.getSource().sendSuccess(()->Component.literal("Wish executions: "+all.size()),false);
                             all.stream().filter(record->!record.state().terminal()).limit(20).forEach(record->
@@ -153,7 +200,7 @@ public final class WishExecutionCommands {
                                             record.executionId()+" "+record.state()+" plan="+record.planId()),false));
                             return all.size();
                         }))
-                        .then(Commands.literal("info").then(Commands.argument("id",UuidArgument.uuid()).executes(context -> {
+                        .then(Commands.literal("info").requires(source->source.hasPermission(2)).then(Commands.argument("id",UuidArgument.uuid()).executes(context -> {
                             UUID id=UuidArgument.getUuid(context,"id");
                             WishExecutionRecord record=WishExecutionSavedData.get(context.getSource().getServer()).get(id);
                             if(record==null){context.getSource().sendFailure(Component.literal("Execution not found."));return 0;}
@@ -166,12 +213,12 @@ public final class WishExecutionCommands {
                                             " result="+step.lastResult()+" error="+step.lastError()),false);
                             return 1;
                         })))
-                        .then(Commands.literal("cancel").then(Commands.argument("id",UuidArgument.uuid()).executes(context -> {
+                        .then(Commands.literal("cancel").requires(source->source.hasPermission(2)).then(Commands.argument("id",UuidArgument.uuid()).executes(context -> {
                             boolean ok=WishExecutionManager.cancel(context.getSource().getServer(),UuidArgument.getUuid(context,"id"));
                             if(!ok)context.getSource().sendFailure(Component.literal("Execution cannot be cancelled."));
                             return ok?1:0;
                         })))
-                        .then(Commands.literal("dryrun").then(Commands.argument("planId",UuidArgument.uuid()).executes(context -> {
+                        .then(Commands.literal("dryrun").requires(source->source.hasPermission(2)).then(Commands.argument("planId",UuidArgument.uuid()).executes(context -> {
                             UUID id=UuidArgument.getUuid(context,"planId");
                             var plan=WishSavedData.get(context.getSource().getServer()).allRecords().stream()
                                     .map(WishRecord::plan).filter(Objects::nonNull).filter(value->value.planId().equals(id))

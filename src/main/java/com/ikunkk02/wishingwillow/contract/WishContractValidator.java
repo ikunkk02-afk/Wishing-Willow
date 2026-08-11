@@ -9,6 +9,7 @@ import com.ikunkk02.wishingwillow.planning.WishPlanStep;
 import com.ikunkk02.wishingwillow.planning.PlanningEnvironment;
 import com.ikunkk02.wishingwillow.execution.WishExecutionRecord;
 import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
+import com.ikunkk02.wishingwillow.execution.WishPipelineProbe;
 import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.planning.WishTargetType;
 import com.ikunkk02.wishingwillow.planning.semantic.WishSemanticRecipeRegistry;
@@ -17,25 +18,37 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-/** Proves that a legal-looking plan actually grants the non-negotiable outcome. */
+/**
+ * Proves that a legal-looking plan actually grants the non-negotiable outcome.
+ *
+ * @deprecated Legacy WishPlan compatibility and optional deterministic post-condition
+ * diagnostics only. Do not use for WishProgram execution — the NEW path validates programs
+ * with {@link com.ikunkk02.wishingwillow.program.WishProgramValidator} and treats action
+ * results as the source of truth.
+ */
+@Deprecated
 public final class WishContractValidator {
     private WishContractValidator() {}
 
     public static WishContractValidation validate(WishInterpretation interpretation, WishPlanDraft plan) {
+        WishPipelineProbe.contractValidator();
         return validate(interpretation, plan.steps(), null);
     }
 
     public static WishContractValidation validate(WishInterpretation interpretation, List<WishPlanStep> steps) {
+        WishPipelineProbe.contractValidator();
         return validate(interpretation, steps, null);
     }
 
     public static WishContractValidation validate(WishInterpretation interpretation, WishPlanDraft plan,
                                                   PlanningEnvironment environment) {
+        WishPipelineProbe.contractValidator();
         return validate(interpretation, plan.steps(), environment);
     }
 
     public static WishContractValidation validate(WishInterpretation interpretation, List<WishPlanStep> steps,
                                                   PlanningEnvironment environment) {
+        WishPipelineProbe.contractValidator();
         if (interpretation.schemaVersion() < 2) return fulfilled("LEGACY_SCHEMA", 0);
         WishContract contract = interpretation.contract();
         String structuredDelivery = contract.semantic(WishConstraintKind.DELIVERY_SEMANTIC).orElse("");
@@ -73,6 +86,7 @@ public final class WishContractValidator {
     public static WishContractValidation validateActual(WishInterpretation interpretation,
                                                         List<WishPlanStep> steps,
                                                         WishExecutionRecord execution) {
+        WishPipelineProbe.contractValidator();
         WishContractValidation promised = validate(interpretation, steps);
         if (promised.state() == WishContractValidationState.CONTRACT_NOT_FULFILLED) return promised;
         if (interpretation.schemaVersion() < 2 || interpretation.contract().type() != WishContractType.OBTAIN_RESOURCE) {

@@ -13,6 +13,7 @@ import com.ikunkk02.wishingwillow.contract.WishContractType;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
 import com.ikunkk02.wishingwillow.execution.WishActionPolicy;
+import com.ikunkk02.wishingwillow.execution.WishPipelineProbe;
 import com.ikunkk02.wishingwillow.planning.*;
 import com.ikunkk02.wishingwillow.planning.semantic.WishSemanticRecipeRegistry;
 import com.ikunkk02.wishingwillow.research.FeatureType;
@@ -30,6 +31,10 @@ import java.util.List;
 import java.util.Set;
 
 /** Compiles the external Action DSL into the existing authoritative WishPlan draft model. */
+/**
+ * @deprecated Legacy WishPlan compatibility only. Do not use for WishProgram execution.
+ */
+@Deprecated
 public final class DirectActionPlanCompiler {
     private final WishAbsurdityPlanner absurdityPlanner;
 
@@ -44,6 +49,7 @@ public final class DirectActionPlanCompiler {
     public CompiledDirectActionPlan compile(DirectActionPlan direct, WishInterpretation interpretation,
                                             CapabilityCatalog initialCatalog, RegistrySnapshot registry,
                                             ExecutionSettingsSnapshot settings) {
+        WishPipelineProbe.legacyPlanCompile();
         if (direct.route() != WishExecutionRoute.DIRECT_ACTION) throw invalid(WishPlanError.UNSUPPORTED_ACTION);
         if (interpretation.delivery() == WishDelivery.CONDITIONAL
                 || interpretation.delivery() == WishDelivery.PROGRESSIVE) {

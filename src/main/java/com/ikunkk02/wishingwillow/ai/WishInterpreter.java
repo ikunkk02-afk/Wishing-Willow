@@ -122,6 +122,8 @@ public final class WishInterpreter {
                 + "Creative wording is never an unknown capability. Never output Minecraft commands, Java, scripts, code, NBT or shell text.\n"
                 + "For all beneficial effects use apply_effect_group group=BENEFICIAL. For physical block rain use spawn_falling_block, never give_item or place_pattern.\n"
                 + "Resource parameters use exact namespaced ids (for example minecraft:diamond and minecraft:diamond_block).\n"
+                + "The program JSON Schema is strict: every action is a discriminated oneOf with a const action id.\n"
+                + "Emit only declared parameters with exactly their declared types; counts are integers (never words), enums must be one of the listed values, and every value must stay within the declared bounds.\n"
                 + "ACTION CATALOG (single source of truth):\n" + WishActionRegistry.defaults().catalogPrompt()
                 + "\nTOP MATCHING REUSABLE SKILLS (use at most one; include its required primitive actions):\n"
                 + WishSkillRegistry.defaults().candidatePrompt(wish);

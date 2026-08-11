@@ -20,6 +20,10 @@ import com.ikunkk02.wishingwillow.ai.WishCapability;
 import java.util.EnumMap;
 import java.util.Map;
 
+/**
+ * @deprecated Legacy WishPlan compatibility only. Do not use for WishProgram execution.
+ */
+@Deprecated
 public final class WishPlanStore {
     private WishPlanStore() { }
 

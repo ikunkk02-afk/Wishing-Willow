@@ -26,6 +26,6 @@ public record WishActionResult(Status status, String code, int affected) {
             case UNSUPPORTED -> ActionStatus.UNSUPPORTED;
             case RETRY, FAILED, STALE -> ActionStatus.FAILED;
         };
-        return new ActionResult(publicStatus, total, completed, Math.max(0, total - completed), code);
+        return new ActionResult(publicStatus, total, completed, Math.max(0, total - completed), code, code);
     }
 }

@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import com.ikunkk02.wishingwillow.ai.*;
 import com.ikunkk02.wishingwillow.planning.WishPlanDraft;
 import com.ikunkk02.wishingwillow.planning.WishPlanJson;
+import com.ikunkk02.wishingwillow.execution.WishPipelineProbe;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -28,6 +29,7 @@ public final class WishContractReviewer {
                                                                WishInterpretation interpretation,
                                                                WishPlanDraft plan,
                                                                Duration timeout) {
+        WishPipelineProbe.contractReviewer();
         String contractHash = WishContractHasher.contractHash(interpretation);
         String planHash = WishContractHasher.planHash(plan);
         JsonObject input = new JsonObject();

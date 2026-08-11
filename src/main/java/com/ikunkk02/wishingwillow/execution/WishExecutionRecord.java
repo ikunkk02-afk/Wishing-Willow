@@ -12,6 +12,8 @@ public final class WishExecutionRecord {
     private final UUID planId;
     private final UUID wishSessionId;
     private final UUID ownerId;
+    private final ExecutionSource source;
+    private final int coreActionCount;
     private WishExecutionState state;
     private final List<WishStepExecution> steps;
     private final Map<Integer, List<UUID>> entityBindings;
@@ -27,8 +29,16 @@ public final class WishExecutionRecord {
 
     public WishExecutionRecord(UUID executionId, UUID planId, UUID wishSessionId, UUID ownerId,
                                int stepCount, long gameTime) {
-        this.executionId = executionId; this.planId = planId; this.wishSessionId = wishSessionId;
-        this.ownerId = ownerId; this.state = WishExecutionState.VALIDATING;
+        this(executionId, planId, wishSessionId, ownerId, stepCount, gameTime,
+                ExecutionSource.LEGACY_WISH_PLAN, 0);
+    }
+
+    /** Program-native constructor: {@code planId} carries the programId; steps are program leaves. */
+    public WishExecutionRecord(UUID executionId, UUID programId, UUID wishSessionId, UUID ownerId,
+                               int stepCount, long gameTime, ExecutionSource source, int coreActionCount) {
+        this.executionId = executionId; this.planId = programId; this.wishSessionId = wishSessionId;
+        this.ownerId = ownerId; this.source = source; this.coreActionCount = coreActionCount;
+        this.state = WishExecutionState.VALIDATING;
         this.steps = new ArrayList<>();
         for (int i = 0; i < stepCount; i++) steps.add(new WishStepExecution(i));
         this.entityBindings = new HashMap<>(); this.selectedResources = new HashMap<>();
@@ -39,6 +49,7 @@ public final class WishExecutionRecord {
     }
 
     private WishExecutionRecord(UUID executionId, UUID planId, UUID wishSessionId, UUID ownerId,
+                                ExecutionSource source, int coreActionCount,
                                 WishExecutionState state, List<WishStepExecution> steps,
                                 Map<Integer, List<UUID>> bindings, Map<Integer, String> resources,
                                 Map<Integer,WishWorldChangeJournal> journals,Map<Integer,AttributeLease> leases,
@@ -46,12 +57,18 @@ public final class WishExecutionRecord {
                                 Map<Integer,FallingBlockShowerProgress> fallingBlockShowers,
                                 long created, long updated, String error) {
         this.executionId=executionId;this.planId=planId;this.wishSessionId=wishSessionId;this.ownerId=ownerId;
+        this.source=source;this.coreActionCount=coreActionCount;
         this.state=state;this.steps=steps;this.entityBindings=bindings;this.selectedResources=resources;this.journals=journals;this.attributeLeases=leases;this.behaviorLeases=behaviorLeases;this.eventLeases=eventLeases;this.fallingBlockShowers=fallingBlockShowers;
         this.createdGameTime=created;this.updatedGameTime=updated;this.lastError=error;
     }
 
     public UUID executionId(){return executionId;} public UUID planId(){return planId;}
     public UUID wishSessionId(){return wishSessionId;} public UUID ownerId(){return ownerId;}
+    /** {@code WISH_PROGRAM} for native program execution; {@code LEGACY_WISH_PLAN} for old saved plans. */
+    public ExecutionSource source(){return source;}
+    /** Number of leading core leaves; the remaining steps are presentation leaves. */
+    public int coreActionCount(){return coreActionCount;}
+    public boolean isProgram(){return source == ExecutionSource.WISH_PROGRAM;}
     public WishExecutionState state(){return state;} public List<WishStepExecution> steps(){return List.copyOf(steps);}
     public long createdGameTime(){return createdGameTime;} public long updatedGameTime(){return updatedGameTime;}
     public String lastError(){return lastError;}
@@ -79,6 +96,7 @@ public final class WishExecutionRecord {
     public CompoundTag save(){
         CompoundTag tag=new CompoundTag();tag.putUUID("ExecutionId",executionId);tag.putUUID("PlanId",planId);
         tag.putUUID("WishSessionId",wishSessionId);tag.putUUID("OwnerId",ownerId);tag.putString("State",state.name());
+        tag.putString("Source",source.name());tag.putInt("CoreActionCount",coreActionCount);
         tag.putLong("CreatedGameTime",createdGameTime);tag.putLong("UpdatedGameTime",updatedGameTime);tag.putString("LastError",lastError);
         ListTag stepTags=new ListTag();steps.stream().map(WishStepExecution::save).forEach(stepTags::add);tag.put("Steps",stepTags);
         ListTag bindings=new ListTag();entityBindings.forEach((index,ids)->ids.forEach(id->{CompoundTag v=new CompoundTag();v.putInt("Step",index);v.putUUID("Entity",id);bindings.add(v);}));tag.put("EntityBindings",bindings);
@@ -101,10 +119,14 @@ public final class WishExecutionRecord {
         Map<String,Long> events=new HashMap<>();for(Tag value:tag.getList("EventLeases",Tag.TAG_COMPOUND)){CompoundTag v=(CompoundTag)value;events.put(v.getString("Id"),v.getLong("Expires"));}
         Map<Integer,FallingBlockShowerProgress> showers=new HashMap<>();for(Tag value:tag.getList("FallingBlockShowers",Tag.TAG_COMPOUND)){CompoundTag v=(CompoundTag)value;showers.put(v.getInt("Step"),FallingBlockShowerProgress.load(v));}
         WishExecutionState state;try{state=WishExecutionState.valueOf(tag.getString("State"));}catch(IllegalArgumentException ignored){state=WishExecutionState.STALE;}
+        ExecutionSource source;
+        try { source = ExecutionSource.valueOf(tag.getString("Source")); }
+        catch (IllegalArgumentException ignored) { source = ExecutionSource.LEGACY_WISH_PLAN; }
+        int coreCount = tag.contains("CoreActionCount") ? tag.getInt("CoreActionCount") : 0;
         boolean hasRunning=steps.stream().anyMatch(step->step.state()==WishStepExecutionState.RUNNING);
         if(state==WishExecutionState.RUNNING){boolean resumable=false;for(WishStepExecution step:steps)if(step.state()==WishStepExecutionState.RUNNING&&(journals.containsKey(step.stepIndex())||showers.containsKey(step.stepIndex()))){step.recoverBlockBatch();resumable=true;}if(!resumable)for(WishStepExecution step:steps)step.markStale();state=resumable?WishExecutionState.SCHEDULED:WishExecutionState.STALE;}
         else if(hasRunning){for(WishStepExecution step:steps)step.markStale();if(!state.terminal())state=WishExecutionState.STALE;}
-        return new WishExecutionRecord(tag.getUUID("ExecutionId"),tag.getUUID("PlanId"),tag.getUUID("WishSessionId"),tag.getUUID("OwnerId"),state,steps,bindings,resources,journals,leases,behaviors,events,showers,tag.getLong("CreatedGameTime"),tag.getLong("UpdatedGameTime"),tag.getString("LastError"));
+        return new WishExecutionRecord(tag.getUUID("ExecutionId"),tag.getUUID("PlanId"),tag.getUUID("WishSessionId"),tag.getUUID("OwnerId"),source,coreCount,state,steps,bindings,resources,journals,leases,behaviors,events,showers,tag.getLong("CreatedGameTime"),tag.getLong("UpdatedGameTime"),tag.getString("LastError"));
     }
     public record AttributeLease(String attribute,UUID modifier,long expires){}
     public record BehaviorLease(UUID entity,String mode,double speed,double minDistance,long expires){}

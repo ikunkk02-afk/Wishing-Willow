@@ -3,8 +3,8 @@ package com.ikunkk02.wishingwillow.execution.action;
 import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.execution.FallingBlockShowerProgress;
 import com.ikunkk02.wishingwillow.execution.WishActionResult;
-import com.ikunkk02.wishingwillow.execution.WishExecutionContext;
 import com.ikunkk02.wishingwillow.execution.WishExecutionSavedData;
+import com.ikunkk02.wishingwillow.execution.action.WishExecutionContext;
 import com.ikunkk02.wishingwillow.planning.WishPlanBudget;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 import net.minecraft.core.BlockPos;
@@ -49,13 +49,13 @@ final class FallingBlockShowerExecutor implements WishActionExecutor {
         if (block == null) return WishActionResult.stale("BLOCK_NOT_FOUND");
         if (!fallableResource(block)) return WishActionResult.failed("BLOCK_CANNOT_FALL_SAFELY");
 
-        int stepIndex = context.step().stepIndex();
+        int stepIndex = context.stepIndex();
         int requested = integer(context, "count");
         int interval = integer(context, "interval_ticks");
         FallingBlockShowerProgress progress = context.execution().fallingBlockShower(stepIndex);
         if (progress.spawned() == 0 && progress.activeCount() == 0) {
             WishingWillow.LOGGER.info("Falling block shower started session={} requested={}",
-                    context.plan().wishSessionId(), requested);
+                    context.wishSessionId(), requested);
         }
 
         settleFinished(context, block, progress);
@@ -74,7 +74,7 @@ final class FallingBlockShowerExecutor implements WishActionExecutor {
         if (progress.spawned() >= requested && progress.activeCount() == 0) {
             WishingWillow.LOGGER.info(
                     "Falling block shower completed session={} spawned={} delivered={} failed={}",
-                    context.plan().wishSessionId(), progress.spawned(), progress.delivered(), progress.failed());
+                    context.wishSessionId(), progress.spawned(), progress.delivered(), progress.failed());
             return progress.delivered() >= requested
                     ? WishActionResult.success(progress.delivered())
                     : WishActionResult.partial("FALLING_BLOCK_DELIVERY_INCOMPLETE", progress.delivered());
@@ -112,7 +112,7 @@ final class FallingBlockShowerExecutor implements WishActionExecutor {
         String mode = string(context, "landing_mode");
         if ("DELIVER_TO_PLAYER".equals(mode) || "DROP_ITEM".equals(mode)) entity.disableDrop();
         progress.track(entity.getUUID(), position);
-        context.execution().bindEntity(context.step().stepIndex(), entity.getUUID());
+        context.execution().bindEntity(context.stepIndex(), entity.getUUID());
         return true;
     }
 
@@ -165,7 +165,7 @@ final class FallingBlockShowerExecutor implements WishActionExecutor {
     }
 
     private static Block block(WishExecutionContext context) {
-        if (context.candidate().registryResource() == null
+        if (context.candidate() == null || context.candidate().registryResource() == null
                 || context.candidate().registryResource().type() != RegistryEntryType.BLOCK) return null;
         ResourceLocation id = ResourceLocation.tryParse(context.candidate().registryResource().id());
         return id == null ? null : ForgeRegistries.BLOCKS.getValue(id);
@@ -177,10 +177,10 @@ final class FallingBlockShowerExecutor implements WishActionExecutor {
     }
 
     private static int integer(WishExecutionContext context, String key) {
-        return context.step().parameters().get(key).getAsInt();
+        return context.parameters().get(key).getAsInt();
     }
 
     private static String string(WishExecutionContext context, String key) {
-        return context.step().parameters().get(key).getAsString();
+        return context.parameters().get(key).getAsString();
     }
 }
