@@ -23,7 +23,19 @@ public final class WishExecutionCommands {
                             var player = context.getSource().getPlayerOrException();
                             var debug = WishAgentDebugStore.latest(player.getUUID());
                             if (debug == null) { context.getSource().sendFailure(Component.literal("No agent debug record found.")); return 0; }
+                            WishRecord latest = WishSavedData.get(context.getSource().getServer()).getLatest(player.getUUID());
+                            String executionState = latest != null && latest.sessionId().equals(debug.sessionId())
+                                    ? latest.executionState().name() : "UNKNOWN";
                             context.getSource().sendSuccess(() -> Component.literal("session=" + debug.sessionId()
+                                    + " route=" + debug.route() + " route_reason=" + debug.routeReason()
+                                    + " core_outcome=" + debug.coreOutcome()
+                                    + " absurdity_style=" + debug.absurdityStyle()
+                                    + " absurdity_intensity=" + debug.absurdityIntensity()
+                                    + " direct_actions=" + debug.directActions()
+                                    + " agent_tools=" + (debug.route() == com.ikunkk02.wishingwillow.planning.WishExecutionRoute.DIRECT_ACTION
+                                    ? "not used" : debug.toolsUsed())
+                                    + " validation_state=" + debug.verificationState()
+                                    + " execution_state=" + executionState
                                     + " mode=" + debug.mode() + " state=" + debug.state()
                                     + " iterations=" + debug.iterations()
                                     + " toolCalls=" + debug.toolCalls() + " toolsUsed=" + debug.toolsUsed()
@@ -42,10 +54,18 @@ public final class WishExecutionCommands {
                             var debug=WishAgentDebugStore.latest(player.getUUID());
                             context.getSource().sendSuccess(()->Component.literal(
                                     "session="+wish.sessionId()+
+                                            (debug!=null&&debug.sessionId().equals(wish.sessionId())
+                                                    ? " route="+debug.route()+" core_outcome="+debug.coreOutcome()
+                                                    +" absurdity_style="+debug.absurdityStyle()
+                                                    +" absurdity_intensity="+debug.absurdityIntensity()
+                                                    +" direct_actions="+debug.directActions()
+                                                    +" agent_tools="+(debug.route()==com.ikunkk02.wishingwillow.planning.WishExecutionRoute.DIRECT_ACTION
+                                                    ?"not used":debug.toolsUsed())
+                                                    +" validation_state="+debug.verificationState() : "")+
                                             " interpretationState="+wish.interpretationState()+
                                             " planState="+wish.planState()+
                                             " planError="+wish.planError()+
-                                            " executionState="+wish.executionState()+
+                                            " execution_state="+wish.executionState()+
                                             " executionError="+wish.executionError()+
                                             " executionId="+wish.executionId()+
                                             " steps="+(wish.plan()==null?0:wish.plan().steps().size())+

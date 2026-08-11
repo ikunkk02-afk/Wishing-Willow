@@ -1,6 +1,9 @@
 package com.ikunkk02.wishingwillow.agent.core;
 
 public enum WishAgentDebugState {
+    ROUTE_SELECTED,
+    DIRECT_PLANNING_STARTED,
+    DIRECT_ACTION_RECEIVED,
     AGENT_STARTED,
     ITERATION_STARTED,
     TOOL_CALLED,

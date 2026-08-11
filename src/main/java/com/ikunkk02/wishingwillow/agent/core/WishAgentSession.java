@@ -12,6 +12,8 @@ import com.ikunkk02.wishingwillow.planning.WishContextSnapshot;
 import com.ikunkk02.wishingwillow.planning.WishEstimatedDuration;
 import com.ikunkk02.wishingwillow.planning.WishPlanDraft;
 import com.ikunkk02.wishingwillow.planning.WishPlanStep;
+import com.ikunkk02.wishingwillow.planning.WishExecutionRoute;
+import com.ikunkk02.wishingwillow.planning.direct.WishAbsurdityStyle;
 import com.ikunkk02.wishingwillow.research.KnowledgeBaseSnapshot;
 import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
 
@@ -55,6 +57,7 @@ public final class WishAgentSession {
     private int toolCallCount;
     private int revision;
     private int verifiedRevision = -1;
+    private int reviewedRevision = -1;
     private int validRevision = -1;
     private WishPlanningMode mode = WishPlanningMode.AGENT_TOOL_MODE;
     private WishVerificationState verificationState = WishVerificationState.NOT_VERIFIED;
@@ -184,6 +187,7 @@ public final class WishAgentSession {
         steps.add(step);
         revision++;
         verifiedRevision = -1;
+        reviewedRevision = -1;
         validRevision = -1;
         verificationState = WishVerificationState.NOT_VERIFIED;
     }
@@ -212,7 +216,12 @@ public final class WishAgentSession {
 
     public synchronized void markVerification(WishVerificationState state) {
         verificationState = state;
+        reviewedRevision = revision;
         verifiedRevision = state == WishVerificationState.CONTRACT_FULFILLED ? revision : -1;
+    }
+
+    public synchronized boolean requiresVerificationAfterEdit() {
+        return revision > 0 && reviewedRevision != revision;
     }
 
     public synchronized void markValid(boolean valid) { validRevision = valid ? revision : -1; }
@@ -229,6 +238,20 @@ public final class WishAgentSession {
     private WishAgentDebugSnapshot debugSnapshotLocked() {
         return new WishAgentDebugSnapshot(sessionId, mode, debugState, iterations, toolCallCount,
                 history.stream().map(ToolCallHistoryEntry::toolName).distinct().toList(),
-                lastTool, lastToolStatus, verificationState, finalizationState, fallbackReason, elapsedMs());
+                lastTool, lastToolStatus, verificationState, finalizationState, fallbackReason, elapsedMs(),
+                WishExecutionRoute.COMPLEX_AGENT, "complex_capability_or_semantic_route",
+                contract.requiredOutcome(), absurdityStyle(), interpretation.fulfillment().absurdity(), List.of());
+    }
+
+    private WishAbsurdityStyle absurdityStyle() {
+        return switch (interpretation.fulfillment().styles().get(0)) {
+            case IRONIC, BLACK_COMEDY -> WishAbsurdityStyle.IRONIC;
+            case HORROR, LONG_TERM_COST -> WishAbsurdityStyle.OMINOUS;
+            case SPATIAL_ABSURDITY, PHYSICAL_ABSURDITY -> WishAbsurdityStyle.SURREAL;
+            case QUANTITY_ABSURDITY -> WishAbsurdityStyle.OVERWHELMING;
+            case TEMPORAL_ABSURDITY -> WishAbsurdityStyle.CINEMATIC;
+            case SOCIAL_ABSURDITY -> WishAbsurdityStyle.CHAOTIC;
+            case LITERAL -> WishAbsurdityStyle.EXAGGERATED;
+        };
     }
 }

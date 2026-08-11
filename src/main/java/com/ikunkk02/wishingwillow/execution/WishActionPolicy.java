@@ -62,10 +62,10 @@ public final class WishActionPolicy {
                     WishCapability.STALKING_ENTITY, WishCapability.PERSISTENT_FOLLOWER,
                     WishCapability.MIMIC_ENTITY, WishCapability.POWERFUL_ENEMY,
                     WishCapability.ENTITY_RECREATION).contains(provided);
-            case APPLY_EFFECT -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
+            case APPLY_EFFECT, APPLY_EFFECT_CATEGORY -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
                     WishCapability.HEALING, WishCapability.DAMAGE, WishCapability.DARKNESS,
                     WishCapability.IMMORTALITY).contains(provided);
-            case REMOVE_EFFECT -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
+            case REMOVE_EFFECT, CLEAR_EFFECTS -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
                     WishCapability.DARKNESS).contains(provided);
             case TELEPORT -> Set.of(WishCapability.TELEPORT, WishCapability.DIMENSION_TRAVEL,
                     WishCapability.SPACE_TRAVEL, WishCapability.SPACECRAFT).contains(provided);
@@ -159,6 +159,12 @@ public final class WishActionPolicy {
             case DESPAWN_ENTITY -> { keys(p, Set.of("radius", "max_count")); rangeInt(p, "radius", 2, 64); rangeInt(p, "max_count", 1, 32); }
             case APPLY_EFFECT -> { keys(p, Set.of("duration_seconds", "amplifier")); rangeInt(p, "duration_seconds", 1, 3600); rangeInt(p, "amplifier", 0, 4); }
             case REMOVE_EFFECT -> keys(p, Set.of());
+            case CLEAR_EFFECTS -> keys(p, Set.of());
+            case APPLY_EFFECT_CATEGORY -> {
+                keys(p, Set.of("category", "duration_seconds", "amplifier"));
+                oneOf(p, "category", Set.of("BENEFICIAL", "HARMFUL", "NEUTRAL"));
+                rangeInt(p, "duration_seconds", 1, 3600); rangeInt(p, "amplifier", 0, 4);
+            }
             case TELEPORT -> {
                 String mode = oneOf(p, "mode", Set.of("NEARBY_SAFE", "RANDOM_SAFE", "CANDIDATE_DIMENSION"));
                 if ("CANDIDATE_DIMENSION".equals(mode)) keys(p, Set.of("mode"));

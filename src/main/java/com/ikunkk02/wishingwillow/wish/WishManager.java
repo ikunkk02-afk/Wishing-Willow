@@ -543,7 +543,10 @@ public final class WishManager {
 
     private static void beginPlanning(ServerPlayer player, UUID sessionId, WishInterpretation interpretation) {
         WishRecord record = WishSavedData.get(player.server).getBySession(sessionId);
-        if (record == null || record.planState() == WishPlanState.READY) return;
+        if (record == null || record.planState() == WishPlanState.READY || record.executionId() != null
+                || record.state() == WishState.CANCELLED) return;
+        PlanningAttempt existing = PLANNING_ATTEMPTS.get(sessionId);
+        if (existing != null) return;
         UUID attemptId = UUID.randomUUID();
         PLANNING_ATTEMPTS.put(sessionId, new PlanningAttempt(attemptId, player.getUUID()));
         WishPlanStore.updateState(player.server, sessionId, WishPlanState.MATCHING);

@@ -121,7 +121,9 @@ public final class WishPlanningOrchestrator {
                     WishAgentDebugSnapshot finished = new WishAgentDebugSnapshot(sessionId,
                             WishPlanningMode.COMPATIBILITY_JSON_MODE, finalState, started.iterations(),
                             started.toolCalls(), started.toolsUsed(), started.lastTool(), started.lastToolStatus(),
-                            started.verificationState(), finalization, reason, elapsed);
+                            started.verificationState(), finalization, reason, elapsed,
+                            started.route(), started.routeReason(), started.coreOutcome(),
+                            started.absurdityStyle(), started.absurdityIntensity(), started.directActions());
                     debug.accept(finished);
                     LOGGER.info("Compatibility planner completed session={} state={} error={} steps={} elapsedMs={}",
                             sessionId, accepted.state(), accepted.error(),
@@ -140,7 +142,12 @@ public final class WishPlanningOrchestrator {
                 prior == null ? List.of() : prior.toolsUsed(), prior == null ? "" : prior.lastTool(),
                 prior == null ? "" : prior.lastToolStatus(),
                 prior == null ? WishVerificationState.NOT_VERIFIED : prior.verificationState(),
-                finalization, reason, prior == null ? 0L : prior.elapsedMs());
+                finalization, reason, prior == null ? 0L : prior.elapsedMs(),
+                WishExecutionRoute.COMPLEX_AGENT,
+                prior == null ? "complex_agent_route" : prior.routeReason(),
+                prior == null ? "" : prior.coreOutcome(),
+                prior == null ? com.ikunkk02.wishingwillow.planning.direct.WishAbsurdityStyle.NONE : prior.absurdityStyle(),
+                prior == null ? 0 : prior.absurdityIntensity(), List.of());
     }
 
     private static WishPlanningOutcome cancelled(UUID sessionId) {

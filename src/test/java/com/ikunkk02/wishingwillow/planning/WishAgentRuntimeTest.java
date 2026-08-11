@@ -46,7 +46,7 @@ class WishAgentRuntimeTest {
         WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
         assertEquals(5, runtime.registry().visible(session).size());
         assertEquals(13, runtime.registry().all().stream().filter(tool -> tool.descriptor().category() == WishToolCategory.DISCOVERY).count());
-        assertEquals(22, runtime.registry().all().stream().filter(tool -> tool.descriptor().category() == WishToolCategory.PLANNING).count());
+        assertEquals(23, runtime.registry().all().stream().filter(tool -> tool.descriptor().category() == WishToolCategory.PLANNING).count());
         assertEquals(3, runtime.registry().all().stream().filter(tool -> tool.descriptor().category() == WishToolCategory.VERIFICATION).count());
         assertTrue(runtime.registry().searchable(session).isEmpty());
         runtime.registry().find("activate_skill").executor().execute(session, new JsonObject());
@@ -77,8 +77,11 @@ class WishAgentRuntimeTest {
         WishAgentSession incomplete = session(buffInterpretation(), platform);
         JsonObject one = effectArgs("minecraft:speed");
         runtime.registry().find("plan_apply_status_effects").executor().execute(incomplete, one);
-        assertEquals(ToolStatus.POLICY_REJECTED,
-                runtime.registry().find("verify_wish_contract").executor().execute(incomplete, new JsonObject()).status());
+        ToolResult missing = runtime.registry().find("verify_wish_contract").executor()
+                .execute(incomplete, new JsonObject());
+        assertEquals(ToolStatus.POLICY_REJECTED, missing.status());
+        assertTrue(missing.data().getAsJsonArray("missing_requirements").size() > 0);
+        assertTrue(missing.data().has("repair_hint"));
 
         WishAgentSession complete = session(buffInterpretation(), platform);
         JsonObject all = effectArgs("minecraft:speed", "modded:moon_blessing");
@@ -102,7 +105,65 @@ class WishAgentRuntimeTest {
         WishAgentSession session = session(worldInterpretation(), new FakePlatform());
         JsonObject args = new JsonObject(); args.addProperty("value", "NIGHT");
         assertEquals(ToolStatus.SUCCESS, runtime.registry().find("plan_change_time").executor().execute(session, args).status());
+        assertEquals(ToolStatus.SUCCESS, runtime.registry().find("verify_wish_contract").executor().execute(session, new JsonObject()).status());
         assertEquals(ToolStatus.SUCCESS, runtime.registry().find("validate_draft_plan").executor().execute(session, new JsonObject()).status());
+    }
+
+    @Test void categoryEffectToolAvoidsRegistryEnumeration() {
+        WishAgentToolRuntime runtime = new WishAgentToolRuntime();
+        WishAgentSession session = session(buffInterpretation(), new FakePlatform());
+        JsonObject args = new JsonObject(); args.addProperty("category", "BENEFICIAL");
+        args.addProperty("duration_seconds", 600); args.addProperty("amplifier", 1);
+        ToolResult planned = runtime.registry().find("plan_apply_effect_category").executor().execute(session, args);
+        assertEquals(ToolStatus.SUCCESS, planned.status());
+        assertEquals(1, session.steps().size());
+        assertEquals(WishActionType.APPLY_EFFECT_CATEGORY, session.steps().get(0).action());
+        assertEquals(ToolStatus.SUCCESS,
+                runtime.registry().find("verify_wish_contract").executor().execute(session, new JsonObject()).status());
+    }
+
+    @Test void duplicateSearchIsBlockedAndPlanEditForcesVerificationBeforeDiscovery() {
+        java.util.concurrent.atomic.AtomicInteger turn = new java.util.concurrent.atomic.AtomicInteger();
+        ChatModel model = model(request -> {
+            ToolExecutionRequest call = switch (turn.getAndIncrement()) {
+                case 0 -> call("activate_skill", "{\"why\":\"load SOP\"}");
+                case 1 -> call("search_minecraft_tools", "{\"query\":\"give items registry\",\"limit\":12,\"why\":\"find item planner\"}");
+                case 2 -> call("search_minecraft_tools", "{\"query\":\"give items registry\",\"limit\":4,\"why\":\"repeat semantic\"}");
+                case 3 -> call("plan_give_items", "{\"resource_id\":\"minecraft:diamond_block\",\"count\":100,\"why\":\"fulfill quantity\"}");
+                case 4 -> call("query_registry", "{\"registry\":\"ITEM\",\"query\":\"diamond\",\"why\":\"unnecessary requery\"}");
+                case 5 -> call("verify_wish_contract", "{\"why\":\"verify edited draft\"}");
+                case 6 -> call("validate_draft_plan", "{\"why\":\"validate final revision\"}");
+                default -> call("finalize_wish_plan", "{\"why\":\"finalize now\"}");
+            };
+            return ChatResponse.builder().aiMessage(AiMessage.from("", List.of(call))).build();
+        });
+        WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
+        var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
+        assertNotNull(run.result().draft());
+        assertTrue(session.history().stream().anyMatch(entry -> entry.code().equals("DUPLICATE_TOOL_CALL")));
+        assertTrue(session.history().stream().anyMatch(entry -> entry.code().equals("PLAN_EDIT_REQUIRES_VERIFICATION")));
+        assertEquals("fulfill quantity", session.history().stream()
+                .filter(entry -> entry.toolName().equals("plan_give_items")).findFirst().orElseThrow().why());
+    }
+
+    @Test void identicalRegistryQueryCannotLoopIndefinitely() {
+        java.util.concurrent.atomic.AtomicInteger turn = new java.util.concurrent.atomic.AtomicInteger();
+        ChatModel model = model(request -> {
+            ToolExecutionRequest call = switch (turn.getAndIncrement()) {
+                case 0 -> call("activate_skill", "{}");
+                case 1 -> call("search_minecraft_tools", "{\"query\":\"query registry\",\"limit\":12}");
+                default -> call("query_registry", "{\"registry\":\"ITEM\",\"query\":\"diamond\",\"namespace\":\"minecraft\",\"limit\":20,\"cursor\":\"\"}");
+            };
+            return ChatResponse.builder().aiMessage(AiMessage.from("", List.of(call))).build();
+        });
+        WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
+        var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
+        assertNull(run.result().draft());
+        assertEquals(WishAgentFallbackReason.DUPLICATE_TOOL_LOOP, run.debug().fallbackReason());
+        assertTrue(session.iterations() < WishAgentSession.MAX_ITERATIONS);
+        assertEquals(1, session.history().stream()
+                .filter(entry -> entry.toolName().equals("query_registry"))
+                .filter(entry -> !entry.code().equals("DUPLICATE_TOOL_CALL")).count());
     }
 
     @Test void toolResultEnforcesTheSixtyFourKibLimit() {

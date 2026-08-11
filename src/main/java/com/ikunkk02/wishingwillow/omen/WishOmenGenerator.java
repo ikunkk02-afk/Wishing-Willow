@@ -123,7 +123,7 @@ public final class WishOmenGenerator {
             case CHANGE_TIME -> WishOmenCategory.DARKNESS;
             case CHANGE_WEATHER, LIGHTNING -> WishOmenCategory.WEATHER;
             case MODIFY_HEALTH, REMOVE_EFFECT -> WishOmenCategory.DAMAGE;
-            case APPLY_EFFECT, MODIFY_ATTRIBUTE -> WishOmenCategory.POWER;
+            case APPLY_EFFECT, APPLY_EFFECT_CATEGORY, CLEAR_EFFECTS, MODIFY_ATTRIBUTE -> WishOmenCategory.POWER;
             case CHANGE_REPUTATION -> WishOmenCategory.REPUTATION;
             case FOLLOW_PLAYER, CHANGE_MOB_TARGET, SPAWN_ENTITY -> WishOmenCategory.HOSTILE;
             case SPAWN_PARTICLE -> WishOmenCategory.HALLUCINATION;

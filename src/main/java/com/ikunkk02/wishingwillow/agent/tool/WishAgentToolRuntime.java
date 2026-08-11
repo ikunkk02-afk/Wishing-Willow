@@ -6,6 +6,7 @@ import com.google.gson.JsonObject;
 import com.ikunkk02.wishingwillow.agent.core.WishAgentSession;
 import com.ikunkk02.wishingwillow.agent.core.WishFinalizationState;
 import com.ikunkk02.wishingwillow.agent.core.WishVerificationState;
+import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.agent.platform.StatusEffectCategory;
 import com.ikunkk02.wishingwillow.agent.skill.WishAgentSkillLoader;
 import com.ikunkk02.wishingwillow.agent.skill.WishAgentSkillManager;
@@ -54,6 +55,8 @@ public final class WishAgentToolRuntime {
         add("activate_skill", "Activate fulfill-minecraft-wish-with-tools before discovery or planning.",
                 WishToolCategory.CONTROL, true, false, (s, a) -> {
                     String content = skillManager.activate(s, str(a, "name", WishAgentSkillLoader.WISH_SKILL));
+                    WishingWillow.LOGGER.info("Agent skill activated session={} coreOutcome={}",
+                            s.sessionId(), s.contract().requiredOutcome());
                     JsonObject data = new JsonObject(); data.addProperty("skill", content);
                     return ToolResult.success("SKILL_ACTIVATED", "Minecraft wish tool skill activated.", 1,
                             List.of(WishAgentSkillLoader.WISH_SKILL), data, "");
@@ -128,6 +131,15 @@ public final class WishAgentToolRuntime {
                         capability(a, WishCapability.REMOVE_ITEM), WishTargetType.PLAYER, countParameters(a, 1, 4096)));
         add("plan_apply_status_effects", "Apply a complete list of verified effects as one logical batch and one step per effect.",
                 WishToolCategory.PLANNING, false, false, this::planEffects);
+        add("plan_apply_effect_category", "Apply one live Registry effect category without enumerating IDs.",
+                WishToolCategory.PLANNING, false, false, (s, a) -> {
+                    JsonObject parameters = new JsonObject();
+                    parameters.addProperty("category", str(a, "category", "BENEFICIAL"));
+                    parameters.addProperty("duration_seconds", integer(a, "duration_seconds", 600));
+                    parameters.addProperty("amplifier", integer(a, "amplifier", 0));
+                    return planBuiltinStep(s, a, WishActionType.APPLY_EFFECT_CATEGORY,
+                            WishCapability.POWER_BUFF, WishTargetType.PLAYER, parameters);
+                });
         add("plan_remove_status_effects", "Plan removal of one verified effect.", WishToolCategory.PLANNING, false, false,
                 (s, a) -> planRegistry(s, a, RegistryEntryType.EFFECT, WishActionType.REMOVE_EFFECT,
                         capability(a, WishCapability.POWER_DEBUFF), WishTargetType.PLAYER, new JsonObject()));
@@ -248,11 +260,30 @@ public final class WishAgentToolRuntime {
         session.markVerification(state);
         ToolStatus status = validation.state() == WishContractValidationState.CONTRACT_FULFILLED
                 ? ToolStatus.SUCCESS : ToolStatus.POLICY_REJECTED;
+        JsonObject data = new JsonObject();
+        JsonArray missing = new JsonArray(); JsonArray invalid = new JsonArray();
+        if (validation.state() == WishContractValidationState.CONTRACT_NOT_FULFILLED) {
+            missing.add(validation.code());
+        } else if (validation.state() == WishContractValidationState.AI_REVIEW_REQUIRED) {
+            invalid.add(validation.code());
+        }
+        data.add("missing_requirements", missing); data.add("invalid_requirements", invalid);
+        String hint = validation.state() == WishContractValidationState.CONTRACT_NOT_FULFILLED
+                ? "Repair only " + validation.code() + "; do not restart discovery."
+                : validation.state() == WishContractValidationState.AI_REVIEW_REQUIRED
+                ? "Use the independent semantic review result; do not change proven requirements."
+                : "Proceed directly to validate_draft_plan.";
+        data.addProperty("repair_hint", hint);
         return new ToolResult(status, validation.code(), validation.code(), validation.promisedQuantity(),
-                List.of(), List.of(), "Repair the draft and verify the new revision.", new JsonObject(), "");
+                List.of(), List.of(), hint, data, "");
     }
 
     private ToolResult validateDraft(WishAgentSession session, JsonObject args) {
+        if (session.verificationState() != WishVerificationState.CONTRACT_FULFILLED) {
+            return ToolResult.invalid("CONTRACT_NOT_VERIFIED",
+                    "The current revision has not passed contract verification.",
+                    "Call verify_wish_contract, repair only named gaps, then validate.");
+        }
         try {
             WishPlanValidator.parseAndValidate(WishPlanJson.toAiJson(session.draft()), session.interpretation(),
                     session.catalog(), environment(session), session.executionSettingsSnapshot());
@@ -319,6 +350,8 @@ public final class WishAgentToolRuntime {
     private void add(String name, String description, WishToolCategory category, boolean always,
                      boolean readOnly, WishTool executor) {
         JsonObject schema = schemaFor(name);
+        stringProperty(schema.getAsJsonObject("properties"), "why",
+                "Short reason this exact tool is the next necessary operation");
         schema.addProperty("additionalProperties", true);
         registry.register(new RegisteredWishTool(new WishToolDescriptor(name, description, schema, category,
                 always || ALWAYS.contains(name), readOnly, EnumSet.noneOf(WishCapability.class), Set.of(), Set.of()), executor));
@@ -435,6 +468,7 @@ public final class WishAgentToolRuntime {
             case "inspect_mod_feature" -> { stringProperty(properties, "mod_id", "mod id"); stringProperty(properties, "feature", "feature name"); }
             case "plan_give_items", "plan_remove_items" -> { stringProperty(properties, "resource_id", "verified item ID"); intProperty(properties, "count"); stringProperty(properties, "capability", "WishCapability enum"); }
             case "plan_apply_status_effects" -> { arrayProperty(properties, "effect_ids"); intProperty(properties, "duration_seconds"); intProperty(properties, "amplifier"); stringProperty(properties, "capability", "POWER_BUFF or another allowed capability"); }
+            case "plan_apply_effect_category" -> { stringProperty(properties, "category", "BENEFICIAL|HARMFUL|NEUTRAL"); intProperty(properties, "duration_seconds"); intProperty(properties, "amplifier"); stringProperty(properties, "capability", "POWER_BUFF or another allowed capability"); }
             case "plan_remove_status_effects" -> stringProperty(properties, "resource_id", "verified effect ID");
             case "plan_spawn_entities", "plan_despawn_entities", "plan_play_sound", "plan_spawn_particles",
                     "plan_place_blocks", "plan_replace_blocks", "plan_target_player", "plan_follow_player", "plan_avoid_player" -> {

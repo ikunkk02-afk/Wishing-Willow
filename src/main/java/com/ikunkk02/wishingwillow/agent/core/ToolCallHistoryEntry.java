@@ -7,5 +7,15 @@ public record ToolCallHistoryEntry(
         String toolName,
         String normalizedArguments,
         ToolStatus status,
-        String code
-) { }
+        String code,
+        String why
+) {
+    public ToolCallHistoryEntry {
+        why = why == null || why.isBlank() ? "not_provided" : why.strip();
+    }
+
+    public ToolCallHistoryEntry(int iteration, String toolName, String normalizedArguments,
+                                ToolStatus status, String code) {
+        this(iteration, toolName, normalizedArguments, status, code, "not_provided");
+    }
+}

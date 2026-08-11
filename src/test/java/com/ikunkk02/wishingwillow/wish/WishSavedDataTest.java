@@ -61,7 +61,7 @@ class WishSavedDataTest {
     }
 
     @Test
-    void returnsLatestDisconnectedPlanningForReconnectResume() {
+    void resumesOnlyTheNewestFreshDisconnectedPlanningSession() {
         UUID player = UUID.randomUUID();
         UUID older = UUID.randomUUID();
         UUID latest = UUID.randomUUID();
@@ -70,10 +70,28 @@ class WishSavedDataTest {
                 .withPlanning(WishPlanState.FAILED, WishPlanError.DISCONNECTED, null));
         data.update(record(latest, player, 200L, InterpretationState.SUCCESS)
                 .withPlanning(WishPlanState.FAILED, WishPlanError.DISCONNECTED, null));
-        data.update(record(UUID.randomUUID(), player, 300L, InterpretationState.SUCCESS)
-                .withPlanning(WishPlanState.FAILED, WishPlanError.INVALID_PARAMETER, null));
 
-        assertEquals(latest, data.getLatestResumablePlanning(player).sessionId());
+        assertEquals(latest, data.getLatestResumablePlanning(player, 300L).sessionId());
+
+        data.update(record(UUID.randomUUID(), player, 400L, InterpretationState.SUCCESS)
+                .withPlanning(WishPlanState.FAILED, WishPlanError.INVALID_PARAMETER, null));
+        assertEquals(null, data.getLatestResumablePlanning(player, 500L));
+    }
+
+    @Test
+    void expiredOrAlreadyExecutedPlanningNeverResumes() {
+        UUID player = UUID.randomUUID();
+        WishSavedData expired = new WishSavedData();
+        expired.update(record(UUID.randomUUID(), player, 100L, InterpretationState.SUCCESS)
+                .withPlanning(WishPlanState.FAILED, WishPlanError.DISCONNECTED, null));
+        assertEquals(null, expired.getLatestResumablePlanning(player,
+                101L + WishSavedData.PLANNING_RESUME_EXPIRY_MILLIS + 1));
+
+        WishSavedData executed = new WishSavedData();
+        executed.update(record(UUID.randomUUID(), player, 200L, InterpretationState.SUCCESS)
+                .withPlanning(WishPlanState.FAILED, WishPlanError.DISCONNECTED, null)
+                .withExecution(UUID.randomUUID(), WishExecutionState.FAILED));
+        assertEquals(null, executed.getLatestResumablePlanning(player, 300L));
     }
 
     private static WishRecord record(UUID session, UUID player, long submittedAt, InterpretationState state) {

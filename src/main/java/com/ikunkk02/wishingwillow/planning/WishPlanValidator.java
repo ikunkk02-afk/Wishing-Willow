@@ -233,10 +233,10 @@ public final class WishPlanValidator {
             case DESPAWN_ENTITY -> Set.of(WishCapability.SPAWN_ENTITY, WishCapability.HOSTILE_ENTITY,
                     WishCapability.FRIENDLY_ENTITY, WishCapability.STALKING_ENTITY,
                     WishCapability.PERSISTENT_FOLLOWER, WishCapability.MIMIC_ENTITY).contains(capability);
-            case APPLY_EFFECT -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
+            case APPLY_EFFECT, APPLY_EFFECT_CATEGORY -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
                     WishCapability.HEALING, WishCapability.DAMAGE, WishCapability.DARKNESS,
                     WishCapability.IMMORTALITY).contains(capability);
-            case REMOVE_EFFECT -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
+            case REMOVE_EFFECT, CLEAR_EFFECTS -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
                     WishCapability.DARKNESS).contains(capability);
             case TELEPORT -> Set.of(WishCapability.TELEPORT, WishCapability.DIMENSION_TRAVEL,
                     WishCapability.SPACE_TRAVEL, WishCapability.SPACECRAFT).contains(capability);
@@ -310,6 +310,8 @@ public final class WishPlanValidator {
             case DESPAWN_ENTITY -> { keys(p, Set.of("radius", "max_count"), Set.of("radius", "max_count")); rangeInt(p,"radius",2,64); rangeInt(p,"max_count",1,32); }
             case APPLY_EFFECT -> { keys(p, Set.of("duration_seconds", "amplifier"), Set.of("duration_seconds", "amplifier")); rangeInt(p,"duration_seconds",1,3600); rangeInt(p,"amplifier",0,4); }
             case REMOVE_EFFECT -> keys(p, Set.of(), Set.of());
+            case CLEAR_EFFECTS -> keys(p, Set.of(), Set.of());
+            case APPLY_EFFECT_CATEGORY -> { keys(p, Set.of("category","duration_seconds","amplifier"), Set.of("category","duration_seconds","amplifier")); oneOf(p,"category",Set.of("BENEFICIAL","HARMFUL","NEUTRAL")); rangeInt(p,"duration_seconds",1,3600); rangeInt(p,"amplifier",0,4); }
             case TELEPORT -> { keys(p, Set.of("mode","distance_min","distance_max"), Set.of("mode")); String mode=oneOf(p,"mode",Set.of("NEARBY_SAFE","RANDOM_SAFE","CANDIDATE_DIMENSION")); if (!mode.equals("CANDIDATE_DIMENSION")) { keys(p,Set.of("mode","distance_min","distance_max"),Set.of("mode","distance_min","distance_max")); distance(p,4096); } else if (candidate.registryResource()==null || candidate.registryResource().type()!=RegistryEntryType.DIMENSION) throw invalid(WishPlanError.INVALID_ACTION); }
             case CHANGE_TIME -> { keys(p,Set.of("value"),Set.of("value")); oneOf(p,"value",Set.of("DAY","NIGHT","DAWN","DUSK")); }
             case CHANGE_WEATHER -> { keys(p,Set.of("weather","duration_seconds"),Set.of("weather","duration_seconds")); oneOf(p,"weather",Set.of("CLEAR","RAIN","THUNDER")); rangeInt(p,"duration_seconds",30,3600); }

@@ -18,6 +18,10 @@ public final class WishContractCapabilityDeriver {
         Set<WishCapability> capabilities = new LinkedHashSet<>(interpretation.requiredCapabilities());
         if (interpretation.schemaVersion() < 2) return List.copyOf(capabilities);
         capabilities.addAll(contractCapabilities(interpretation.contract().type()));
+        // Presentation capabilities are optional implementation details. They may make a fulfilled wish
+        // theatrical, but are never counted as fulfillment of the immutable contract.
+        capabilities.add(WishCapability.VISUAL_EVENT);
+        capabilities.add(WishCapability.SOUND_EVENT);
         return List.copyOf(capabilities);
     }
 

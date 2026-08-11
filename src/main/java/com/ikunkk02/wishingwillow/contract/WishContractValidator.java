@@ -105,6 +105,9 @@ public final class WishContractValidator {
                                                               PlanningEnvironment environment) {
         String metric = contract.semantic(WishConstraintKind.STATE_METRIC).orElse("");
         if (metric.equals("all_positive_status_effects")) {
+            boolean categoryAction = steps.stream().anyMatch(step -> step.action() == WishActionType.APPLY_EFFECT_CATEGORY
+                    && "BENEFICIAL".equals(string(step.parameters(), "category")));
+            if (categoryAction) return fulfilled("ALL_POSITIVE_STATUS_EFFECTS_CATEGORY_PROVEN", 0);
             if (environment != null && !environment.beneficialStatusEffectIds().isEmpty()) {
                 java.util.Set<String> planned = steps.stream()
                         .filter(step -> step.action() == WishActionType.APPLY_EFFECT
@@ -126,6 +129,11 @@ public final class WishContractValidator {
         }
         if (metric.equals("movement_speed") || metric.equals("speed")) {
             for (WishPlanStep step : steps) {
+                if (step.action() == WishActionType.APPLY_EFFECT && step.candidateReference() != null
+                        && step.candidateReference().registryResource() != null
+                        && "minecraft:speed".equals(step.candidateReference().registryResource().id())) {
+                    return fulfilled("MOVEMENT_SPEED_EFFECT_PROVEN", 0);
+                }
                 if (step.action() == WishActionType.MODIFY_ATTRIBUTE
                         && "MOVEMENT_SPEED".equals(string(step.parameters(), "attribute"))
                         && number(step.parameters(), "amount", 0) > 0) {
@@ -135,7 +143,9 @@ public final class WishContractValidator {
             return rejected("MOVEMENT_SPEED_INCREASE_MISSING", 0);
         }
         boolean positive = steps.stream().anyMatch(step -> step.action() == WishActionType.MODIFY_ATTRIBUTE
-                && number(step.parameters(), "amount", 0) > 0);
+                && number(step.parameters(), "amount", 0) > 0)
+                || steps.stream().anyMatch(step -> step.action() == WishActionType.APPLY_EFFECT
+                || step.action() == WishActionType.APPLY_EFFECT_CATEGORY);
         return positive ? fulfilled("PLAYER_STATE_CHANGE_PROVEN", 0) : review("PLAYER_STATE_SEMANTIC_REVIEW", 0);
     }
 
@@ -157,7 +167,13 @@ public final class WishContractValidator {
     private static WishContractValidation validateWorldState(List<WishPlanStep> steps) {
         boolean world = steps.stream().anyMatch(step -> step.action() == WishActionType.CHANGE_TIME
                 || step.action() == WishActionType.CHANGE_WEATHER || step.action() == WishActionType.PLACE_BLOCK_PATTERN
-                || step.action() == WishActionType.CREATE_STRUCTURE);
+                || step.action() == WishActionType.REPLACE_BLOCK_AREA
+                || step.action() == WishActionType.CREATE_STRUCTURE
+                || step.action() == WishActionType.SPAWN_ENTITY
+                || step.action() == WishActionType.DESPAWN_ENTITY
+                || step.action() == WishActionType.LIGHTNING
+                || step.action() == WishActionType.EXPLOSION
+                || step.action() == WishActionType.START_PREDEFINED_EVENT);
         return world ? fulfilled("WORLD_STATE_CHANGE_PROVEN", 0) : review("WORLD_STATE_SEMANTIC_REVIEW", 0);
     }
 

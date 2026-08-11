@@ -52,6 +52,25 @@ final class StandardWishActionExecutors {
     static WishActionExecutor despawnEntity(){return executor(c->{EntityType<?> expected=ForgeRegistries.ENTITY_TYPES.getValue(id(c));int max=i(c.step().parameters(),"max_count"),removed=0;for(UUID uuid:c.execution().allEntities()){Entity entity=c.level().getEntity(uuid);if(entity!=null&&entity.getType()==expected&&entity.distanceToSqr(c.player())<=Math.pow(i(c.step().parameters(),"radius"),2)&&removed<max){entity.discard();removed++;}}return WishActionResult.success(removed);});}
     static WishActionExecutor applyEffect(){return executor(c->{MobEffect effect=ForgeRegistries.MOB_EFFECTS.getValue(id(c));if(effect==null)return WishActionResult.stale("EFFECT_NOT_FOUND");boolean ok=c.player().addEffect(new MobEffectInstance(effect,i(c.step().parameters(),"duration_seconds")*20,i(c.step().parameters(),"amplifier")));return ok?WishActionResult.success(1):WishActionResult.failed("EFFECT_REJECTED");});}
     static WishActionExecutor removeEffect(){return executor(c->{MobEffect effect=ForgeRegistries.MOB_EFFECTS.getValue(id(c));if(effect==null)return WishActionResult.stale("EFFECT_NOT_FOUND");return WishActionResult.success(c.player().removeEffect(effect)?1:0);});}
+    static WishActionExecutor clearEffects(){return executor(c->{int before=c.player().getActiveEffects().size();c.player().removeAllEffects();return WishActionResult.success(before);});}
+    static WishActionExecutor applyEffectCategory(){return executor(c->{
+        MobEffectCategory category=switch(c.step().parameters().get("category").getAsString()){
+            case "BENEFICIAL"->MobEffectCategory.BENEFICIAL;case "HARMFUL"->MobEffectCategory.HARMFUL;default->MobEffectCategory.NEUTRAL;};
+        int duration=i(c.step().parameters(),"duration_seconds"),amplifier=i(c.step().parameters(),"amplifier"),applied=0;
+        for(MobEffect effect:List.copyOf(ForgeRegistries.MOB_EFFECTS.getValues())){
+            if(effect.getCategory()!=category)continue;
+            try{
+                if(effect.isInstantenous()){
+                    effect.applyInstantenousEffect(c.player(),c.player(),c.player(),amplifier,1.0);applied++;
+                }else if(c.player().addEffect(new MobEffectInstance(effect,duration*20,amplifier))
+                        ||c.player().hasEffect(effect))applied++;
+            }catch(Throwable error){
+                WishingWillow.LOGGER.warn("Category effect skipped category={} id={} error={}",category,
+                        ForgeRegistries.MOB_EFFECTS.getKey(effect),error.getClass().getSimpleName());
+            }
+        }
+        return applied>0?WishActionResult.success(applied):WishActionResult.failed("NO_EFFECTS_IN_CATEGORY");
+    });}
     static WishActionExecutor teleport(){return executor(c->{ServerPlayer player=c.player();JsonObject p=c.step().parameters();String mode=p.get("mode").getAsString();ServerLevel target=c.level();Vec3 pos;if(mode.equals("CANDIDATE_DIMENSION")){if(!WishExecutionConfig.CROSS_DIMENSION_TELEPORT.get())return WishActionResult.failed("CROSS_DIMENSION_DISABLED");ResourceLocation dimension=id(c);target=player.server.getLevel(ResourceKey.create(Registries.DIMENSION,dimension));if(target==null)return WishActionResult.stale("DIMENSION_NOT_FOUND");BlockPos spawn=target.getSharedSpawnPos();target.getChunk(spawn);pos=SafeSpawnPositionFinder.findPlayer(target,Vec3.atCenterOf(spawn),2,32,c.execution().executionId().getMostSignificantBits());}else pos=SafeSpawnPositionFinder.findPlayer(target,player.position(),i(p,"distance_min"),i(p,"distance_max"),c.execution().executionId().getMostSignificantBits());if(pos==null)return WishActionResult.failed("NO_SAFE_TELEPORT_POSITION");player.teleportTo(target,pos.x,pos.y,pos.z,player.getYRot(),player.getXRot());return WishActionResult.success(1);});}
     static WishActionExecutor changeTime(){return executor(c->{long day=c.level().getDayTime()/24000L*24000L;long value=switch(c.step().parameters().get("value").getAsString()){case "DAY"->1000;case "NIGHT"->13000;case "DAWN"->0;default->12000;};c.level().setDayTime(day+value);return WishActionResult.success(1);});}
     static WishActionExecutor changeWeather(){return executor(c->{String weather=c.step().parameters().get("weather").getAsString();int ticks=i(c.step().parameters(),"duration_seconds")*20;c.level().setWeatherParameters(weather.equals("CLEAR")?ticks:0,weather.equals("CLEAR")?0:ticks,!weather.equals("CLEAR"),weather.equals("THUNDER"));return WishActionResult.success(1);});}

@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class WishSavedData extends SavedData {
+    public static final long PLANNING_RESUME_EXPIRY_MILLIS = 5 * 60 * 1000L;
     private static final String DATA_NAME = "wishing_willow_wishes";
     private final Map<UUID, WishRecord> wishesBySession = new HashMap<>();
 
@@ -98,15 +99,22 @@ public final class WishSavedData extends SavedData {
 
     @Nullable
     public WishRecord getLatestResumablePlanning(UUID playerId) {
-        return wishesBySession.values().stream()
-                .filter(record -> record.playerId().equals(playerId))
-                .filter(record -> record.interpretationState() == InterpretationState.SUCCESS
-                        && record.interpretation() != null)
-                .filter(record -> record.planState() == WishPlanState.FAILED
-                        && record.planError() == WishPlanError.DISCONNECTED
-                        && record.plan() == null && record.executionId() == null)
-                .max(Comparator.comparingLong(WishRecord::submittedAtEpochMillis))
-                .orElse(null);
+        return getLatestResumablePlanning(playerId, System.currentTimeMillis());
+    }
+
+    @Nullable
+    WishRecord getLatestResumablePlanning(UUID playerId, long nowEpochMillis) {
+        WishRecord latest = getLatest(playerId);
+        if (latest == null || latest.state() != WishState.FINISHED
+                || latest.interpretationState() != InterpretationState.SUCCESS
+                || latest.interpretation() == null
+                || latest.planState() != WishPlanState.FAILED
+                || latest.planError() != WishPlanError.DISCONNECTED
+                || latest.plan() != null || latest.executionId() != null) return null;
+        long lastActivity = Math.max(latest.submittedAtEpochMillis(),
+                latest.interpretationUpdatedAtEpochMillis());
+        long age = Math.max(0L, nowEpochMillis - lastActivity);
+        return age <= PLANNING_RESUME_EXPIRY_MILLIS ? latest : null;
     }
 
     public void failPendingForPlayer(UUID playerId) {

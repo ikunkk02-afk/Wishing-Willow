@@ -15,6 +15,7 @@ public final class WishActionRegistry {
         map.put(WishActionType.GIVE_ITEM,StandardWishActionExecutors.giveItem());map.put(WishActionType.REMOVE_ITEM,StandardWishActionExecutors.removeItem());
         map.put(WishActionType.SPAWN_ENTITY,StandardWishActionExecutors.spawnEntity());map.put(WishActionType.DESPAWN_ENTITY,StandardWishActionExecutors.despawnEntity());
         map.put(WishActionType.APPLY_EFFECT,StandardWishActionExecutors.applyEffect());map.put(WishActionType.REMOVE_EFFECT,StandardWishActionExecutors.removeEffect());
+        map.put(WishActionType.CLEAR_EFFECTS,StandardWishActionExecutors.clearEffects());map.put(WishActionType.APPLY_EFFECT_CATEGORY,StandardWishActionExecutors.applyEffectCategory());
         map.put(WishActionType.TELEPORT,StandardWishActionExecutors.teleport());map.put(WishActionType.CHANGE_TIME,StandardWishActionExecutors.changeTime());
         map.put(WishActionType.CHANGE_WEATHER,StandardWishActionExecutors.changeWeather());map.put(WishActionType.PLAY_SOUND,StandardWishActionExecutors.playSound());
         map.put(WishActionType.SPAWN_PARTICLE,StandardWishActionExecutors.spawnParticle());map.put(WishActionType.LIGHTNING,StandardWishActionExecutors.lightning());

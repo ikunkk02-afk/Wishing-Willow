@@ -51,12 +51,18 @@ class WishContractValidatorTest {
                 WishContractValidator.validate(wish, List.of(speed)).state());
     }
 
-    @Test void allBuffsRequireTheExactWhitelistedToolAndRejectDecoration() {
+    @Test void allBuffsAreDeterministicForTheCategoryActionAndRejectDecoration() {
         WishInterpretation wish = allPositiveEffectsWish();
         WishPlanStep sound = eventStep("minecraft:ambient.cave", WishActionType.PLAY_SOUND,
                 WishCapability.SOUND_EVENT, CandidateSourceKind.VANILLA_REGISTRY);
         assertEquals(WishContractValidationState.CONTRACT_NOT_FULFILLED,
                 WishContractValidator.validate(wish, List.of(sound)).state());
+
+        WishPlanStep category = step(0, WishActionType.APPLY_EFFECT_CATEGORY, WishCapability.POWER_BUFF,
+                null, null, "{\"category\":\"BENEFICIAL\",\"duration_seconds\":600,\"amplifier\":1}");
+        WishContractValidation deterministic = WishContractValidator.validate(wish, List.of(category));
+        assertEquals(WishContractValidationState.CONTRACT_FULFILLED, deterministic.state());
+        assertEquals("ALL_POSITIVE_STATUS_EFFECTS_CATEGORY_PROVEN", deterministic.code());
 
         WishPlanStep exact = eventStep(PredefinedWishEventRegistry.ALL_POSITIVE_EFFECTS,
                 WishActionType.START_PREDEFINED_EVENT, WishCapability.POWER_BUFF,

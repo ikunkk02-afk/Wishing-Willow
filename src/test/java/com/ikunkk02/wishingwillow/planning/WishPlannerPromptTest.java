@@ -47,10 +47,12 @@ class WishPlannerPromptTest {
     }
 
     @Test void bundledSkillTeachesValidatedGameToolCalls(){
-        assertTrue(WishGameToolSkill.TEXT.contains("A plan step is a tool call."));
-        assertTrue(WishGameToolSkill.TEXT.contains("START_PREDEFINED_EVENT"));
-        assertTrue(WishGameToolSkill.TEXT.contains("wishing_willow:all_positive_effects"));
-        assertTrue(WishGameToolSkill.TEXT.contains("Never bypass the Action Registry"));
+        assertTrue(WishGameToolSkill.TEXT.contains("FULFILL FIRST. THEN DISTORT."));
+        assertTrue(WishGameToolSkill.TEXT.contains("try `DIRECT_ACTION` first"));
+        assertTrue(WishGameToolSkill.TEXT.contains("`plan_apply_effect_category` with `BENEFICIAL`"));
+        assertTrue(WishGameToolSkill.TEXT.contains("AFTER a planning tool changes the draft, call `verify_wish_contract` next"));
+        assertTrue(WishGameToolSkill.TEXT.contains("Call identical `query_registry` arguments at most once"));
+        assertTrue(WishGameToolSkill.TEXT.contains("server Action Registry"));
         assertTrue(WishPlannerPrompt.SYSTEM_PROMPT.contains(WishGameToolSkill.TEXT));
     }
 }
