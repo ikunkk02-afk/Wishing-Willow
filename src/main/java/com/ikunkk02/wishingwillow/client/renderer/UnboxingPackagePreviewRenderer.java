@@ -98,7 +98,7 @@ final class UnboxingPackagePreviewRenderer {
         // Keep the extracted willow in front of the carton faces. The preview
         // carton spans roughly z=-0.11..0.11, so a positive offset prevents
         // the branch from being depth-tested behind the printed sleeve.
-        pose.translate(0.0F, -0.015F, 0.18F);
+        pose.translate(0.0F, -0.070F, 0.18F);
         pose.scale(0.43F, 0.43F, 0.43F);
         minecraft.getItemRenderer().renderStatic(
                 player,
