@@ -25,6 +25,8 @@ public final class WishingWillowPrompt {
             2. Express every machine-checkable promise as a hard_constraint. Use CUSTOM_SEMANTIC only when no structured kind fits.
             3. For resources use RESOURCE_KIND, RESOURCE_SEMANTIC, MINIMUM_QUANTITY, REAL_RESOURCE and PLAYER_ACCESSIBLE.
                semantic is a normalized English concept such as diamond_block, never a registry ID.
+               When wording requires a physical delivery method, add DELIVERY_SEMANTIC with a normalized semantic such
+               as fall_from_sky, rain_from_sky, drop_from_above, spawn_around_player, or spawn_below_player.
             4. For speed/state wishes use STATE_METRIC and STATE_DIRECTION. For structures require STRUCTURE_EXISTS.
                For company require COMPANION_EXISTS and PERSISTENCE. For social wishes describe target and positive direction.
             5. Select one to three fulfillment styles. absurdity describes how physically/socially/spatially strange the

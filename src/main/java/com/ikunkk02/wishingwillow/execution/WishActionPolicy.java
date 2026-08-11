@@ -46,7 +46,7 @@ public final class WishActionPolicy {
             case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
             case PLAY_SOUND -> RegistryEntryType.SOUND;
             case SPAWN_PARTICLE -> RegistryEntryType.PARTICLE;
-            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN -> RegistryEntryType.BLOCK;
+            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER -> RegistryEntryType.BLOCK;
             default -> null;
         };
     }
@@ -77,6 +77,10 @@ public final class WishActionPolicy {
             case EXPLOSION -> provided == WishCapability.EXPLOSION;
             case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN -> provided == WishCapability.BLOCK_CHANGE
                     || provided == WishCapability.STRUCTURE;
+            case FALLING_BLOCK_SHOWER -> provided == WishCapability.GIVE_ITEM
+                    || provided == WishCapability.INVENTORY_CHANGE
+                    || provided == WishCapability.BLOCK_CHANGE
+                    || provided == WishCapability.WORLD_EVENT;
             case CREATE_STRUCTURE -> provided == WishCapability.STRUCTURE;
             case MODIFY_HEALTH -> Set.of(WishCapability.HEALING, WishCapability.DAMAGE,
                     WishCapability.IMMORTALITY, WishCapability.POWER_BUFF,
@@ -193,6 +197,15 @@ public final class WishActionPolicy {
                 keys(p, Set.of("pattern", "count"));
                 oneOf(p, "pattern", Set.of("ENCLOSURE", "PILLAR", "ROOM"));
                 rangeInt(p, "count", 1, 2048);
+            }
+            case FALLING_BLOCK_SHOWER -> {
+                keys(p, Set.of("count", "spawn_height", "radius", "interval_ticks", "landing_mode", "spread"));
+                rangeInt(p, "count", 1, com.ikunkk02.wishingwillow.planning.WishPlanBudget.MAX_FALLING_BLOCKS);
+                rangeInt(p, "spawn_height", 8, 64);
+                rangeInt(p, "radius", 1, 32);
+                rangeInt(p, "interval_ticks", 1, 20);
+                oneOf(p, "landing_mode", Set.of("PLACE", "DROP_ITEM", "PLACE_OR_DROP", "DELIVER_TO_PLAYER"));
+                oneOf(p, "spread", Set.of("RANDOM"));
             }
             case CREATE_STRUCTURE -> {
                 keys(p, Set.of("template"));

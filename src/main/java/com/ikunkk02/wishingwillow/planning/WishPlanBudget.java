@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.Set;
 
 public final class WishPlanBudget {
+    public static final int MAX_FALLING_BLOCKS = 256;
+    public static final int MAX_FALLING_BLOCKS_PER_TICK = 4;
+    public static final int MAX_ACTIVE_FALLING_BLOCKS = 128;
     private WishPlanBudget() { }
 
     public static int maxSteps(int severity) {
@@ -50,6 +53,8 @@ public final class WishPlanBudget {
             case CHANGE_BLOCK -> 1;
             case REPLACE_BLOCK_AREA -> Math.max(1, (int) Math.ceil(integer(parameters, "max_blocks", 1) / 128.0));
             case PLACE_BLOCK_PATTERN -> Math.max(1, (int) Math.ceil(integer(parameters, "count", 1) / 128.0));
+            case FALLING_BLOCK_SHOWER -> Math.max(1,
+                    (int) Math.ceil(integer(parameters, "count", 1) / 128.0));
             case CREATE_STRUCTURE -> 4;
             case MODIFY_HEALTH -> {
                 double delta = decimal(parameters, "delta", 0);

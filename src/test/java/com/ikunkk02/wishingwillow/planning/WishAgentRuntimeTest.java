@@ -46,7 +46,7 @@ class WishAgentRuntimeTest {
         WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
         assertEquals(5, runtime.registry().visible(session).size());
         assertEquals(13, runtime.registry().all().stream().filter(tool -> tool.descriptor().category() == WishToolCategory.DISCOVERY).count());
-        assertEquals(23, runtime.registry().all().stream().filter(tool -> tool.descriptor().category() == WishToolCategory.PLANNING).count());
+        assertEquals(24, runtime.registry().all().stream().filter(tool -> tool.descriptor().category() == WishToolCategory.PLANNING).count());
         assertEquals(3, runtime.registry().all().stream().filter(tool -> tool.descriptor().category() == WishToolCategory.VERIFICATION).count());
         assertTrue(runtime.registry().searchable(session).isEmpty());
         runtime.registry().find("activate_skill").executor().execute(session, new JsonObject());
@@ -321,6 +321,20 @@ class WishAgentRuntimeTest {
         return interpretation(new WishContract(WishContractType.CHANGE_WORLD_STATE, "Make it night", List.of(
                 new WishHardConstraint(WishConstraintKind.STATE_METRIC, WishConstraintOperator.EQUALS,
                         "time", 0, 0, true))), WishCapability.CHANGE_TIME);
+    }
+
+    @Test void planningToolsExposePhysicalDeliverySemanticsInsteadOfNameGuessing() {
+        WishAgentToolRuntime runtime = new WishAgentToolRuntime();
+        WishToolDescriptor place = runtime.registry().find("plan_place_blocks").descriptor();
+        WishToolDescriptor falling = runtime.registry().find("plan_falling_block_shower").descriptor();
+        assertTrue(place.unsupportedSemantics().contains("physical_fall"));
+        assertTrue(place.supportsSemantics().contains("static_place"));
+        assertTrue(falling.supportsSemantics().containsAll(Set.of(
+                "fall_from_above", "physical_block_fall", "block_rain", "gravity_delivery")));
+        WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
+        runtime.registry().find("activate_skill").executor().execute(session, new JsonObject());
+        assertEquals("plan_falling_block_shower",
+                runtime.search().search(session, new ToolSearchQuery("gravity_delivery", 4)).tools().get(0).name());
     }
 
     private static WishInterpretation interpretation(WishContract contract, WishCapability capability) {

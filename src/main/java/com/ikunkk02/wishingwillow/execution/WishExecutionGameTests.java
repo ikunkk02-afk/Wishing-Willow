@@ -7,13 +7,19 @@ import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.ai.WishDelivery;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishTone;
+import com.ikunkk02.wishingwillow.ai.WishFulfillment;
+import com.ikunkk02.wishingwillow.ai.WishFulfillmentMode;
+import com.ikunkk02.wishingwillow.ai.FulfillmentStyle;
 import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
 import com.ikunkk02.wishingwillow.ai.AiExecutionMode;
 import com.ikunkk02.wishingwillow.ai.AiProviderType;
 import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
+import com.ikunkk02.wishingwillow.contract.*;
+import com.ikunkk02.wishingwillow.network.packet.SubmitWishPlanPacket;
 import com.ikunkk02.wishingwillow.planning.*;
 import com.ikunkk02.wishingwillow.research.FeatureType;
+import com.ikunkk02.wishingwillow.research.KnowledgeLevel;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 import com.ikunkk02.wishingwillow.research.VerifiedRegistryResource;
 import net.minecraft.core.BlockPos;
@@ -26,10 +32,12 @@ import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.RegisterGameTestsEvent;
 import net.minecraftforge.gametest.GameTestHolder;
 import net.minecraftforge.gametest.PrefixGameTestTemplate;
@@ -78,6 +86,83 @@ public final class WishExecutionGameTests {
 
     @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=180)
     public static void exactHundredGoldBlocksSpatialFulfillment(GameTestHelper helper){var player=serverPlayer(helper);place(player,helper.absolutePos(new BlockPos(1,4,1)));prepareFloor(helper);WishActionResult result=execute(helper,player,WishActionType.PLACE_BLOCK_PATTERN,WishCapability.BLOCK_CHANGE,WishTargetType.PLAYER,RegistryEntryType.BLOCK,"minecraft:gold_block","{\"pattern\":\"ROOM\",\"count\":100}");long count=BlockPos.betweenClosedStream(player.blockPosition().offset(-4,-4,-4),player.blockPosition().offset(4,6,4)).filter(pos->helper.getLevel().getBlockState(pos).is(Blocks.GOLD_BLOCK)).count();if(!result.successful()||result.affected()!=100||count!=100){helper.fail("Expected exactly 100 gold blocks, result="+result+" count="+count);return;}helper.succeed();}
+
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=300)
+    public static void hundredDiamondBlocksPhysicallyFallAndReachPlayer(GameTestHelper helper){
+        ServerPlayer player=serverPlayer(helper);place(player,helper.absolutePos(new BlockPos(1,4,1)));prepareFloor(helper);
+        UUID execution=UUID.randomUUID(),planId=UUID.randomUUID(),session=UUID.randomUUID();
+        VerifiedRegistryResource resource=new VerifiedRegistryResource(RegistryEntryType.BLOCK,"minecraft:diamond_block");
+        CandidateReference candidate=new CandidateReference("candidate-001",WishCapability.GIVE_ITEM,WishCapability.GIVE_ITEM,
+                MatchType.EXACT,CandidateSourceKind.VANILLA_REGISTRY,"minecraft","1.20.1","minecraft:diamond_block",
+                FeatureType.BLOCK,resource,100,20);
+        WishPlanStep step=new WishPlanStep(0,WishStepTiming.IMMEDIATE,0,WishTriggerType.NONE,
+                WishActionType.FALLING_BLOCK_SHOWER,WishCapability.GIVE_ITEM,"candidate-001",WishTargetType.PLAYER,
+                JsonParser.parseString("{\"count\":100,\"spawn_height\":12,\"radius\":3,\"interval_ticks\":1,\"landing_mode\":\"DELIVER_TO_PLAYER\",\"spread\":\"RANDOM\"}").getAsJsonObject(),
+                "GameTest physical delivery",candidate);
+        WishPlan plan=new WishPlan(planId,session,1,"Diamond block rain",WishDelivery.IMMEDIATE,60,
+                WishEstimatedDuration.SHORT,List.of(step),Set.of("minecraft"),Set.of("minecraft:diamond_block"),Set.of(),
+                helper.getLevel().getGameTime(),0,"VERIFIED","","","");
+        WishExecutionRecord record=new WishExecutionRecord(execution,planId,session,player.getUUID(),1,helper.getLevel().getGameTime());
+        WishExecutionContext context=new WishExecutionContext(helper.getLevel(),player,plan,step,candidate,record);
+        var executor=WishActionRegistry.defaults().get(WishActionType.FALLING_BLOCK_SHOWER);
+        boolean[] finished={false},sawPhysicalEntity={false};
+        helper.onEachTick(()->{
+            if(finished[0])return;
+            AABB area=new AABB(player.blockPosition()).inflate(16,32,16);
+            if(!helper.getLevel().getEntitiesOfClass(FallingBlockEntity.class,area).isEmpty())sawPhysicalEntity[0]=true;
+            WishActionResult result=executor.execute(context);
+            if(result.status()==WishActionResult.Status.RETRY)return;
+            finished[0]=true;
+            int delivered=player.getInventory().countItem(Blocks.DIAMOND_BLOCK.asItem());
+            if(!result.successful()||result.affected()!=100||delivered!=100||!sawPhysicalEntity[0]){
+                helper.fail("Falling delivery failed result="+result+" inventory="+delivered+" sawEntity="+sawPhysicalEntity[0]);return;
+            }
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=180)
+    public static void fallingSemanticSubmissionStoresAndAccepts(GameTestHelper helper){
+        var server=helper.getLevel().getServer();UUID session=UUID.randomUUID(),owner=UUID.randomUUID();
+        WishContract contract=new WishContract(WishContractType.OBTAIN_RESOURCE,
+                "The player obtains 100 real diamond blocks that fell from the sky",List.of(
+                new WishHardConstraint(WishConstraintKind.RESOURCE_SEMANTIC,WishConstraintOperator.EQUALS,"diamond_block",0,0,true),
+                new WishHardConstraint(WishConstraintKind.MINIMUM_QUANTITY,WishConstraintOperator.AT_LEAST,"",100,0,true),
+                new WishHardConstraint(WishConstraintKind.REAL_RESOURCE,WishConstraintOperator.REQUIRED,"",0,0,true),
+                new WishHardConstraint(WishConstraintKind.PLAYER_ACCESSIBLE,WishConstraintOperator.REQUIRED,"",0,0,true),
+                new WishHardConstraint(WishConstraintKind.DELIVERY_SEMANTIC,WishConstraintOperator.EQUALS,"fall_from_sky",0,0,true)));
+        WishInterpretation interpretation=new WishInterpretation(2,"diamond_block_rain",contract.requiredOutcome(),contract,
+                new WishFulfillment(WishFulfillmentMode.ABSURD,"Physical diamond block rain",
+                        List.of(FulfillmentStyle.PHYSICAL_ABSURDITY),90),"Vanilla FallingBlockEntity composition",
+                WishTone.ABSURD,60,WishDelivery.IMMEDIATE,List.of(WishCapability.GIVE_ITEM));
+        VerifiedRegistryResource resource=new VerifiedRegistryResource(RegistryEntryType.BLOCK,"minecraft:diamond_block");
+        CapabilityCandidate candidate=new CapabilityCandidate("candidate-001",WishCapability.GIVE_ITEM,WishCapability.GIVE_ITEM,
+                MatchType.EXACT,CandidateSourceKind.VANILLA_REGISTRY,"minecraft","Minecraft","1.20.1",
+                "minecraft:diamond_block",FeatureType.BLOCK,resource,"falling block recipe",KnowledgeLevel.VERIFIED,
+                1,1,0,100,20,100);
+        WishPlanStep step=new WishPlanStep(0,WishStepTiming.IMMEDIATE,0,WishTriggerType.NONE,
+                WishActionType.FALLING_BLOCK_SHOWER,WishCapability.GIVE_ITEM,candidate.candidateId(),WishTargetType.PLAYER,
+                JsonParser.parseString("{\"count\":100,\"spawn_height\":28,\"radius\":10,\"interval_ticks\":2,\"landing_mode\":\"DELIVER_TO_PLAYER\",\"spread\":\"RANDOM\"}").getAsJsonObject(),
+                "GameTest semantic recipe",candidate.reference());
+        WishPlanDraft draft=new WishPlanDraft(2,"Diamond block rain",WishDelivery.IMMEDIATE,60,
+                WishEstimatedDuration.SHORT,List.of(step));
+        CapabilityCatalog catalog=CapabilityCatalog.create(List.of(new CapabilityMatchSet(WishCapability.GIVE_ITEM,
+                MatchType.EXACT,List.of(candidate))),List.of(candidate),"VERIFIED","", "runtime");
+        WishRecord wish=new WishRecord(session,owner,"让100个钻石块从天而降",helper.getLevel().dimension().location(),
+                helper.getLevel().getGameTime(),System.currentTimeMillis(),WishState.FINISHED,InterpretationState.SUCCESS,
+                AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,AiProviderType.CUSTOM,"gametest",
+                System.currentTimeMillis(),interpretation);
+        WishSavedData.get(server).update(wish);
+        SubmitWishPlanPacket packet=SubmitWishPlanPacket.fromResult(session,UUID.randomUUID(),WishPlanResult.success(draft),catalog);
+        WishPlanState stored=WishPlanStore.accept(server,session,UUID.randomUUID(),interpretation,packet.draftJson(),packet.catalog());
+        WishRecord acceptedWish=WishSavedData.get(server).getBySession(session);
+        WishExecutionAcceptResult accepted=WishExecutionManager.acceptStored(server,acceptedWish);
+        if(stored!=WishPlanState.READY||!accepted.accepted()){
+            helper.fail("Semantic submission pipeline failed state="+stored+" accept="+accepted);return;
+        }
+        WishExecutionManager.cancel(server,accepted.executionId());
+        helper.succeed();
+    }
 
     @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=180)
     public static void speedCompanionReputationAndHouseAreReal(GameTestHelper helper){var player=serverPlayer(helper);place(player,helper.absolutePos(new BlockPos(1,4,1)));prepareFloor(helper);double before=player.getAttributeValue(Attributes.MOVEMENT_SPEED);WishActionResult speed=execute(helper,player,WishActionType.MODIFY_ATTRIBUTE,WishCapability.PLAYER_ATTRIBUTE,WishTargetType.PLAYER,null,null,"{\"attribute\":\"MOVEMENT_SPEED\",\"operation\":\"MULTIPLY\",\"amount\":1,\"duration_seconds\":3600}");if(!speed.successful()||player.getAttributeValue(Attributes.MOVEMENT_SPEED)<=before){helper.fail("Speed contract did not increase movement speed");return;}WishActionResult companion=execute(helper,player,WishActionType.SPAWN_ENTITY,WishCapability.PERSISTENT_FOLLOWER,WishTargetType.PLAYER,RegistryEntryType.ENTITY,"minecraft:wolf","{\"count\":1,\"distance_min\":2,\"distance_max\":4}");if(!companion.successful()||companion.affected()!=1){helper.fail("Persistent companion did not spawn");return;}Villager villager=EntityType.VILLAGER.create(helper.getLevel());if(villager==null){helper.fail("Villager creation failed");return;}villager.moveTo(player.position().add(2,0,0));helper.getLevel().addFreshEntity(villager);WishActionResult relation=execute(helper,player,WishActionType.CHANGE_REPUTATION,WishCapability.REPUTATION,WishTargetType.NEARBY_ENTITIES,null,null,"{\"delta\":100,\"radius\":64}");if(!relation.successful()||villager.getPlayerReputation(player)<=0){helper.fail("Villager relation was not positive");return;}WishActionResult house=execute(helper,player,WishActionType.CREATE_STRUCTURE,WishCapability.STRUCTURE,WishTargetType.PLAYER,null,null,"{\"template\":\"SIMPLE_HOUSE\"}");long planks=BlockPos.betweenClosedStream(player.blockPosition().offset(-4,-2,-4),player.blockPosition().offset(4,5,4)).filter(pos->helper.getLevel().getBlockState(pos).is(Blocks.OAK_PLANKS)).count();if(!house.successful()||planks<100){helper.fail("Simple house did not materially exist: "+planks);return;}helper.succeed();}

@@ -248,6 +248,10 @@ public final class WishPlanValidator {
             case EXPLOSION -> capability == WishCapability.EXPLOSION;
             case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN -> capability == WishCapability.BLOCK_CHANGE
                     || capability == WishCapability.STRUCTURE;
+            case FALLING_BLOCK_SHOWER -> capability == WishCapability.GIVE_ITEM
+                    || capability == WishCapability.INVENTORY_CHANGE
+                    || capability == WishCapability.BLOCK_CHANGE
+                    || capability == WishCapability.WORLD_EVENT;
             case CREATE_STRUCTURE -> capability == WishCapability.STRUCTURE;
             case MODIFY_HEALTH -> Set.of(WishCapability.HEALING, WishCapability.DAMAGE,
                     WishCapability.IMMORTALITY, WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF).contains(capability);
@@ -272,7 +276,7 @@ public final class WishPlanValidator {
             case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
             case PLAY_SOUND -> RegistryEntryType.SOUND;
             case SPAWN_PARTICLE -> RegistryEntryType.PARTICLE;
-            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN -> RegistryEntryType.BLOCK;
+            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER -> RegistryEntryType.BLOCK;
             default -> null;
         };
     }
@@ -322,6 +326,15 @@ public final class WishPlanValidator {
             case CHANGE_BLOCK -> { keys(p,Set.of("distance_min","distance_max"),Set.of("distance_min","distance_max")); distance(p,64); }
             case REPLACE_BLOCK_AREA -> { keys(p,Set.of("radius","max_blocks"),Set.of("radius","max_blocks")); rangeInt(p,"radius",1,16); rangeInt(p,"max_blocks",1,2048); if(severity<41) throw invalid(WishPlanError.BUDGET_EXCEEDED); }
             case PLACE_BLOCK_PATTERN -> { keys(p,Set.of("pattern","count"),Set.of("pattern","count")); oneOf(p,"pattern",Set.of("ENCLOSURE","PILLAR","ROOM")); rangeInt(p,"count",1,2048); }
+            case FALLING_BLOCK_SHOWER -> {
+                keys(p, Set.of("count","spawn_height","radius","interval_ticks","landing_mode","spread"),
+                        Set.of("count","spawn_height","radius","interval_ticks","landing_mode","spread"));
+                rangeInt(p,"count",1,WishPlanBudget.MAX_FALLING_BLOCKS);
+                rangeInt(p,"spawn_height",8,64); rangeInt(p,"radius",1,32);
+                rangeInt(p,"interval_ticks",1,20);
+                oneOf(p,"landing_mode",Set.of("PLACE","DROP_ITEM","PLACE_OR_DROP","DELIVER_TO_PLAYER"));
+                oneOf(p,"spread",Set.of("RANDOM"));
+            }
             case CREATE_STRUCTURE -> { keys(p,Set.of("template"),Set.of("template")); oneOf(p,"template",Set.of("SIMPLE_HOUSE")); }
             case MODIFY_HEALTH -> { keys(p,Set.of("delta","allow_lethal"),Set.of("delta","allow_lethal")); range(p,"delta",-40,40); if(bool(p,"allow_lethal")&&severity<81) throw invalid(WishPlanError.BUDGET_EXCEEDED); }
             case MODIFY_HUNGER -> { keys(p,Set.of("delta"),Set.of("delta")); rangeInt(p,"delta",-20,20); }

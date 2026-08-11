@@ -67,6 +67,8 @@ public final class WishAgentSession {
     private String lastTool = "";
     private String lastToolStatus = "";
     private boolean skillActivated;
+    private int semanticVerificationRejections;
+    private int semanticRepairDiscoveries;
 
     public WishAgentSession(UUID sessionId, String originalWish, WishInterpretation interpretation,
                             WishContextSnapshot context, RegistrySnapshot registrySnapshot,
@@ -115,6 +117,7 @@ public final class WishAgentSession {
     public synchronized WishFinalizationState finalizationState() { return finalizationState; }
     public synchronized WishAgentFallbackReason fallbackReason() { return fallbackReason; }
     public synchronized boolean skillActivated() { return skillActivated; }
+    public synchronized int semanticVerificationRejections() { return semanticVerificationRejections; }
     public synchronized List<ToolCallHistoryEntry> history() { return List.copyOf(history); }
     public synchronized Set<String> discoveredTools() { return Set.copyOf(discoveredTools); }
     public boolean cancelled() { return cancelled.getAsBoolean(); }
@@ -218,6 +221,16 @@ public final class WishAgentSession {
         verificationState = state;
         reviewedRevision = revision;
         verifiedRevision = state == WishVerificationState.CONTRACT_FULFILLED ? revision : -1;
+    }
+
+    public synchronized int markSemanticVerificationRejected() {
+        return ++semanticVerificationRejections;
+    }
+
+    public synchronized boolean reserveSemanticRepairDiscovery() {
+        if (semanticVerificationRejections == 0 || semanticRepairDiscoveries >= 1) return false;
+        semanticRepairDiscoveries++;
+        return true;
     }
 
     public synchronized boolean requiresVerificationAfterEdit() {

@@ -196,7 +196,8 @@ public final class WishInterpretationValidator {
                                            int quantity, double amount, boolean required) {
         if (quantity < 0 || !Double.isFinite(amount)) throw invalid("CONSTRAINT_NUMBER");
         boolean semanticKind = switch (kind) {
-            case RESOURCE_KIND, RESOURCE_SEMANTIC, STATE_METRIC, TARGET_SEMANTIC, TARGET_SCOPE, PERSISTENCE -> true;
+            case RESOURCE_KIND, RESOURCE_SEMANTIC, DELIVERY_SEMANTIC, STATE_METRIC,
+                    TARGET_SEMANTIC, TARGET_SCOPE, PERSISTENCE -> true;
             default -> false;
         };
         if (semanticKind && !SEMANTIC_PATTERN.matcher(semantic).matches()) throw invalid("CONSTRAINT_SEMANTIC");

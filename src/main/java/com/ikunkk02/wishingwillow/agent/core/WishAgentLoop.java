@@ -112,6 +112,10 @@ public final class WishAgentLoop {
                         return failure(session, WishPlanError.AI_REQUEST_FAILED, WishFinalizationState.BUDGET_EXHAUSTED,
                                 WishAgentFallbackReason.TOOL_BUDGET_EXHAUSTED);
                     }
+                    if ("UNSUPPORTED_SEMANTIC".equals(result.code())) {
+                        return failure(session, WishPlanError.UNSUPPORTED_ACTION,
+                                WishFinalizationState.REJECTED, WishAgentFallbackReason.UNSUPPORTED_SEMANTIC);
+                    }
                     consecutiveDuplicateCalls = "DUPLICATE_TOOL_CALL".equals(result.code())
                             ? consecutiveDuplicateCalls + 1 : 0;
                     if (consecutiveDuplicateCalls >= MAX_CONSECUTIVE_TOOL_ERRORS) {
@@ -204,6 +208,15 @@ public final class WishAgentLoop {
             record(session, call.name(), normalized, result, why);
             return result;
         }
+        if (registered.descriptor().category() == com.ikunkk02.wishingwillow.agent.tool.WishToolCategory.DISCOVERY
+                && session.semanticVerificationRejections() > 0
+                && !session.reserveSemanticRepairDiscovery()) {
+            ToolResult result = ToolResult.failed("UNSUPPORTED_SEMANTIC",
+                    "Only one discovery attempt is allowed after a semantic verification rejection.",
+                    "Stop searching aliases and return UNSUPPORTED_SEMANTIC.");
+            record(session, call.name(), normalized, result, why);
+            return result;
+        }
         ToolResult result;
         try { result = registered.executor().execute(session, arguments); }
         catch (IllegalArgumentException exception) {
@@ -219,7 +232,11 @@ public final class WishAgentLoop {
         return runtime.registry().visible(session).stream().map(tool -> {
             JsonObject value = new JsonObject();
             value.addProperty("name", tool.descriptor().name());
-            value.addProperty("description", tool.descriptor().description());
+            String metadata = tool.descriptor().supportsSemantics().isEmpty()
+                    && tool.descriptor().unsupportedSemantics().isEmpty() ? ""
+                    : " supports_semantics=" + tool.descriptor().supportsSemantics()
+                    + "; does_not_support=" + tool.descriptor().unsupportedSemantics() + ".";
+            value.addProperty("description", tool.descriptor().description() + metadata);
             value.add("parameters", tool.descriptor().parameters().deepCopy());
             return ToolSpecification.fromJson(value.toString());
         }).toList();

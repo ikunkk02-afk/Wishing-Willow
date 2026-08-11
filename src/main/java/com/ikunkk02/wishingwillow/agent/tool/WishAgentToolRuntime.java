@@ -174,8 +174,15 @@ public final class WishAgentToolRuntime {
                 a -> distanceCountParameters(a));
         planBuiltin("plan_explosion", WishActionType.EXPLOSION, WishCapability.EXPLOSION, WishTargetType.AREA,
                 a -> explosionParameters(a));
-        planResource("plan_place_blocks", RegistryEntryType.BLOCK, WishActionType.PLACE_BLOCK_PATTERN, WishCapability.BLOCK_CHANGE, WishTargetType.AREA,
-                a -> patternParameters(a));
+        planResourceWithSemantics("plan_place_blocks", RegistryEntryType.BLOCK,
+                WishActionType.PLACE_BLOCK_PATTERN, WishCapability.BLOCK_CHANGE, WishTargetType.AREA,
+                WishAgentToolRuntime::patternParameters, Set.of("static_place", "pattern_place", "replace"),
+                Set.of("physical_fall", "gravity_delivery", "block_rain"));
+        planResourceWithSemantics("plan_falling_block_shower", RegistryEntryType.BLOCK,
+                WishActionType.FALLING_BLOCK_SHOWER, WishCapability.GIVE_ITEM, WishTargetType.PLAYER,
+                WishAgentToolRuntime::fallingBlockParameters,
+                Set.of("fall_from_above", "physical_block_fall", "block_rain", "gravity_delivery"),
+                Set.of("static_place", "entity_rain", "projectile_rain"));
         planResource("plan_replace_blocks", RegistryEntryType.BLOCK, WishActionType.REPLACE_BLOCK_AREA, WishCapability.BLOCK_CHANGE, WishTargetType.AREA,
                 a -> values(a, "radius", 4, "max_blocks", 128));
         planBuiltin("plan_create_structure", WishActionType.CREATE_STRUCTURE, WishCapability.STRUCTURE, WishTargetType.AREA,
@@ -252,6 +259,14 @@ public final class WishAgentToolRuntime {
             return ok("HASH_BOUND_SEMANTIC_REVIEW_FULFILLED",
                     "Independent reviewer accepted the exact contract and draft hashes.", 1, List.of());
         }
+        boolean missingSemantic = validation.state() == WishContractValidationState.AI_REVIEW_REQUIRED
+                || validation.code().contains("SEMANTIC") || validation.code().contains("PHYSICAL_FALL");
+        if (missingSemantic && session.markSemanticVerificationRejected() >= 2) {
+            session.markVerification(WishVerificationState.NOT_FULFILLED);
+            return ToolResult.failed("UNSUPPORTED_SEMANTIC",
+                    "The one allowed semantic repair still cannot express this delivery requirement.",
+                    "Stop searching synonyms and return UNSUPPORTED_SEMANTIC.");
+        }
         WishVerificationState state = switch (validation.state()) {
             case CONTRACT_FULFILLED -> WishVerificationState.CONTRACT_FULFILLED;
             case CONTRACT_NOT_FULFILLED -> WishVerificationState.NOT_FULFILLED;
@@ -321,6 +336,14 @@ public final class WishAgentToolRuntime {
                 false, false, (s, a) -> planRegistry(s, a, type, action, capability(a, fallback), target, mapper.map(a)));
     }
 
+    private void planResourceWithSemantics(String name, RegistryEntryType type, WishActionType action,
+                                           WishCapability fallback, WishTargetType target, ArgsMapper mapper,
+                                           Set<String> supports, Set<String> unsupported) {
+        add(name, "Plan " + action + " using a verified registry resource.", WishToolCategory.PLANNING,
+                false, false, supports, unsupported,
+                (s, a) -> planRegistry(s, a, type, action, capability(a, fallback), target, mapper.map(a)));
+    }
+
     private void planBuiltin(String name, WishActionType action, WishCapability fallback,
                              WishTargetType target, ArgsMapper mapper) {
         add(name, "Plan " + action + " using a built-in server-authoritative action.", WishToolCategory.PLANNING,
@@ -349,12 +372,18 @@ public final class WishAgentToolRuntime {
 
     private void add(String name, String description, WishToolCategory category, boolean always,
                      boolean readOnly, WishTool executor) {
+        add(name, description, category, always, readOnly, Set.of(), Set.of(), executor);
+    }
+
+    private void add(String name, String description, WishToolCategory category, boolean always,
+                     boolean readOnly, Set<String> supports, Set<String> unsupported, WishTool executor) {
         JsonObject schema = schemaFor(name);
         stringProperty(schema.getAsJsonObject("properties"), "why",
                 "Short reason this exact tool is the next necessary operation");
         schema.addProperty("additionalProperties", true);
         registry.register(new RegisteredWishTool(new WishToolDescriptor(name, description, schema, category,
-                always || ALWAYS.contains(name), readOnly, EnumSet.noneOf(WishCapability.class), Set.of(), Set.of()), executor));
+                always || ALWAYS.contains(name), readOnly, EnumSet.noneOf(WishCapability.class), Set.of(), Set.of(),
+                supports, unsupported), executor));
     }
 
     private static WishPlanStep step(WishAgentSession session, WishActionType action, WishCapability capability,
@@ -432,6 +461,7 @@ public final class WishAgentToolRuntime {
     private static JsonObject distanceCountParameters(JsonObject a) { JsonObject v=new JsonObject(); v.addProperty("count",integer(a,"count",1)); v.addProperty("distance_min",integer(a,"distance_min",8)); v.addProperty("distance_max",integer(a,"distance_max",24)); return v; }
     private static JsonObject explosionParameters(JsonObject a) { JsonObject v=distanceCountParameters(a); v.remove("count"); v.addProperty("power",a.has("power")?a.get("power").getAsDouble():2); v.addProperty("destroy_blocks",a.has("destroy_blocks")&&a.get("destroy_blocks").getAsBoolean()); return v; }
     private static JsonObject patternParameters(JsonObject a) { JsonObject v=stringValue(a,"pattern","ENCLOSURE"); v.addProperty("count",integer(a,"count",64)); return v; }
+    private static JsonObject fallingBlockParameters(JsonObject a) { JsonObject v=new JsonObject(); v.addProperty("count",integer(a,"count",1)); v.addProperty("spawn_height",integer(a,"spawn_height",28)); v.addProperty("radius",integer(a,"radius",10)); v.addProperty("interval_ticks",integer(a,"interval_ticks",2)); v.addProperty("landing_mode",str(a,"landing_mode","DELIVER_TO_PLAYER")); v.addProperty("spread",str(a,"spread","RANDOM")); return v; }
     private static JsonObject behaviorParameters(JsonObject a) { JsonObject v=values(a,"radius",16,"max_entities",4); v.addProperty("duration_seconds",integer(a,"duration_seconds",600)); return v; }
     private static JsonObject targetParameters(JsonObject a) { JsonObject v=values(a,"radius",16,"max_entities",4); v.addProperty("disposition",str(a,"disposition","PLAYER")); return v; }
     private static JsonObject copy(JsonObject source, String... names) {
@@ -471,18 +501,18 @@ public final class WishAgentToolRuntime {
             case "plan_apply_effect_category" -> { stringProperty(properties, "category", "BENEFICIAL|HARMFUL|NEUTRAL"); intProperty(properties, "duration_seconds"); intProperty(properties, "amplifier"); stringProperty(properties, "capability", "POWER_BUFF or another allowed capability"); }
             case "plan_remove_status_effects" -> stringProperty(properties, "resource_id", "verified effect ID");
             case "plan_spawn_entities", "plan_despawn_entities", "plan_play_sound", "plan_spawn_particles",
-                    "plan_place_blocks", "plan_replace_blocks", "plan_target_player", "plan_follow_player", "plan_avoid_player" -> {
+                    "plan_place_blocks", "plan_falling_block_shower", "plan_replace_blocks", "plan_target_player", "plan_follow_player", "plan_avoid_player" -> {
                 stringProperty(properties, "resource_id", "verified registry ID"); stringProperty(properties, "capability", "WishCapability enum");
             }
             default -> stringProperty(properties, "capability", "WishCapability enum when contract-derived override is needed");
         }
         if (name.startsWith("plan_")) {
             for (String field : List.of("mode", "dimension", "value", "weather", "attribute", "operation",
-                    "pattern", "template", "disposition", "feature")) {
+                    "pattern", "template", "disposition", "feature", "landing_mode", "spread")) {
                 if (!properties.has(field)) stringProperty(properties, field, "action parameter");
             }
             for (String field : List.of("count", "duration_seconds", "amplifier", "distance_min", "distance_max",
-                    "radius", "max_entities", "max_blocks", "intensity", "delta")) {
+                    "radius", "max_entities", "max_blocks", "intensity", "delta", "spawn_height", "interval_ticks")) {
                 if (!properties.has(field)) intProperty(properties, field);
             }
             for (String field : List.of("amount", "volume", "pitch", "power")) {

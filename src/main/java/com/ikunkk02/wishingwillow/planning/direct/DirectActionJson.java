@@ -30,7 +30,8 @@ final class DirectActionJson {
             WishActionType.SPAWN_ENTITY, WishActionType.DESPAWN_ENTITY,
             WishActionType.TELEPORT, WishActionType.CHANGE_TIME, WishActionType.CHANGE_WEATHER,
             WishActionType.LIGHTNING, WishActionType.EXPLOSION,
-            WishActionType.PLACE_BLOCK_PATTERN, WishActionType.REPLACE_BLOCK_AREA,
+            WishActionType.PLACE_BLOCK_PATTERN, WishActionType.FALLING_BLOCK_SHOWER,
+            WishActionType.REPLACE_BLOCK_AREA,
             WishActionType.PLAY_SOUND, WishActionType.SPAWN_PARTICLE,
             WishActionType.MODIFY_ATTRIBUTE, WishActionType.CHANGE_REPUTATION,
             WishActionType.START_PREDEFINED_EVENT
@@ -43,7 +44,7 @@ final class DirectActionJson {
             "distance_min", "distance_max", "mode", "value", "weather", "volume", "pitch",
             "distance", "power", "destroy_blocks", "max_blocks", "pattern", "attribute",
             "operation", "amount", "max_entities", "delta", "intensity", "template",
-            "disposition"
+            "disposition", "spawn_height", "interval_ticks", "landing_mode", "spread"
     );
     private static final Gson GSON = new Gson();
 
@@ -104,6 +105,14 @@ final class DirectActionJson {
                 with an empty actions array. A formatting problem is never a reason to choose COMPLEX_AGENT.
 
                 Put every action required to make the core outcome true in actions. Then add 1-3 optional modifiers.
+                Complex language does not mean COMPLEX_AGENT. First decompose OBJECT, QUANTITY, ORIGIN, MOTION,
+                DELIVERY, and FINAL OUTCOME, then compose known Minecraft primitives. FALLING_BLOCK_SHOWER is the
+                controlled primitive for real blocks physically falling under gravity from above the player. Use it
+                for fall_from_sky, rain_from_sky, drop_from_above, block_rain, and gravity_delivery semantics.
+                If the player must obtain the blocks, use landing_mode DELIVER_TO_PLAYER. This still creates every
+                real FallingBlockEntity and only guarantees the corresponding BlockItem after its physical landing.
+                Never substitute GIVE_ITEM plus particles for a requested physical fall. SPAWN_ENTITY does not prove
+                entity rain; if no matching controlled action exists, return COMPLEX_AGENT/unsupported.
                 Prefer particles, sounds, and theatrical presentation. Never replace the requested item, state,
                 entity, weather, time, or destination with a joke. Never invent a registry ID.
                 APPLY_EFFECT_CATEGORY with category BENEFICIAL represents every beneficial effect in the live server
@@ -166,6 +175,8 @@ final class DirectActionJson {
                      "attribute":{"type":"string"},"operation":{"type":"string"},"amount":{"type":"number"},
                      "max_entities":{"type":"integer"},"delta":{"type":"integer"},
                      "intensity":{"type":"integer"},"template":{"type":"string"},"disposition":{"type":"string"}
+                     ,"spawn_height":{"type":"integer"},"interval_ticks":{"type":"integer"},
+                     "landing_mode":{"type":"string"},"spread":{"type":"string"}
                    }}
                  }}
                 """).getAsJsonObject();

@@ -12,6 +12,7 @@ import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
 import com.ikunkk02.wishingwillow.execution.WishActionPolicy;
 import com.ikunkk02.wishingwillow.planning.*;
+import com.ikunkk02.wishingwillow.planning.semantic.WishSemanticRecipeRegistry;
 import com.ikunkk02.wishingwillow.research.FeatureType;
 import com.ikunkk02.wishingwillow.research.KnowledgeLevel;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
@@ -48,6 +49,9 @@ public final class DirectActionPlanCompiler {
         CandidateBuilder candidates = new CandidateBuilder(initialCatalog, registry, interpretation);
         List<WishPlanStep> coreSteps = new ArrayList<>();
         for (DirectWishAction action : direct.actions()) {
+            if (action.type() == WishActionType.FALLING_BLOCK_SHOWER) {
+                WishingWillow.LOGGER.info("Semantic recipe selected recipe=FALLING_BLOCK_SHOWER");
+            }
             coreSteps.addAll(compileAction(action, coreSteps.size(), candidates, interpretation, true));
         }
         WishPlanDraft coreDraft = draft(direct.summary(), interpretation, coreSteps);
@@ -140,6 +144,34 @@ public final class DirectActionPlanCompiler {
             }
             return result;
         }
+        if (direct.type() == WishActionType.FALLING_BLOCK_SHOWER) {
+            if (direct.target() != DirectWishTarget.SELF && direct.target() != DirectWishTarget.AREA) {
+                throw invalid(WishPlanError.INVALID_PARAMETER);
+            }
+            if (!parameters.keySet().equals(Set.of("count", "spawn_height", "radius",
+                    "interval_ticks", "landing_mode", "spread"))) {
+                throw invalid(WishPlanError.INVALID_PARAMETER);
+            }
+            int count = exactInteger(parameters, "count");
+            int height = exactInteger(parameters, "spawn_height");
+            int radius = exactInteger(parameters, "radius");
+            int interval = exactInteger(parameters, "interval_ticks");
+            String landing = string(parameters, "landing_mode");
+            String spread = string(parameters, "spread");
+            if (count < 1 || count > WishPlanBudget.MAX_FALLING_BLOCKS
+                    || height < 8 || height > 64 || radius < 1 || radius > 32
+                    || interval < 1 || interval > 20
+                    || !Set.of("PLACE", "DROP_ITEM", "PLACE_OR_DROP", "DELIVER_TO_PLAYER").contains(landing)
+                    || !"RANDOM".equals(spread)) {
+                throw invalid(WishPlanError.INVALID_PARAMETER);
+            }
+            if (WishSemanticRecipeRegistry.resolve(interpretation).isPresent()
+                    && !WishSemanticRecipeRegistry.proves(interpretation, direct.type())) {
+                throw invalid(WishPlanError.UNSUPPORTED_ACTION);
+            }
+            WishingWillow.LOGGER.info("Direct action compiled type=FALLING_BLOCK_SHOWER resource={} count={}",
+                    resource, count);
+        }
         return List.of(step(firstIndex, timing, direct.type(), capability, candidate,
                 target, parameters, reason, ""));
     }
@@ -163,7 +195,7 @@ public final class DirectActionPlanCompiler {
             case GIVE_ITEM, REMOVE_ITEM -> RegistryEntryType.ITEM;
             case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
             case SPAWN_ENTITY, DESPAWN_ENTITY -> RegistryEntryType.ENTITY;
-            case PLACE_BLOCK_PATTERN, REPLACE_BLOCK_AREA -> RegistryEntryType.BLOCK;
+            case PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER, REPLACE_BLOCK_AREA -> RegistryEntryType.BLOCK;
             case PLAY_SOUND -> RegistryEntryType.SOUND;
             case SPAWN_PARTICLE -> RegistryEntryType.PARTICLE;
             case TELEPORT -> "CANDIDATE_DIMENSION".equals(string(action.parameters(), "mode"))

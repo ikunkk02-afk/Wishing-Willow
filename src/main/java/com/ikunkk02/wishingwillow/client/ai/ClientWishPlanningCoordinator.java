@@ -18,6 +18,7 @@ import com.ikunkk02.wishingwillow.planning.*;
 import com.ikunkk02.wishingwillow.planning.direct.DirectActionPlanningResult;
 import com.ikunkk02.wishingwillow.planning.direct.DirectWishActionPlanner;
 import com.ikunkk02.wishingwillow.planning.direct.WishAbsurdityStyle;
+import com.ikunkk02.wishingwillow.planning.semantic.WishSemanticRecipeRegistry;
 import com.ikunkk02.wishingwillow.research.KnowledgeBaseSnapshot;
 import com.ikunkk02.wishingwillow.research.ModResearchManager;
 import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
@@ -59,6 +60,9 @@ public final class ClientWishPlanningCoordinator {
         cancelPrevious(previous, packet);
         AiConfig config = AiConfigManager.getInstance().get();
         WishRouteDecision route = ROUTER.select(packet.originalWish(), packet.interpretation());
+        LOGGER.info("Wish semantic analysis core={} deliverySemantic={}",
+                packet.interpretation().contract().requiredOutcome(),
+                WishSemanticRecipeRegistry.deliverySemantic(packet.interpretation()));
         LOGGER.info("Wish route selected session={} route={} reason={}",
                 packet.sessionId(), route.route(), route.reason());
         LOGGER.info("Wish planning started session={} attempt={} mode={} generation={}",
@@ -254,6 +258,7 @@ public final class ClientWishPlanningCoordinator {
             }
             ModNetworking.sendToServer(SubmitWishPlanPacket.fromResult(packet.sessionId(),
                     packet.attemptId(), result, outcome.catalog()));
+            LOGGER.info("SubmitWishPlanPacket sent session={} attempt={}", packet.sessionId(), packet.attemptId());
         });
     }
 

@@ -32,6 +32,9 @@ public final class WishSafetyPolicy {
         }
         boolean destructive = step.action() == WishActionType.CHANGE_BLOCK
                 || step.action() == WishActionType.REPLACE_BLOCK_AREA
+                || step.action() == WishActionType.FALLING_BLOCK_SHOWER
+                && ("PLACE".equals(step.parameters().get("landing_mode").getAsString())
+                || "PLACE_OR_DROP".equals(step.parameters().get("landing_mode").getAsString()))
                 || step.action() == WishActionType.EXPLOSION
                 && step.parameters().has("destroy_blocks")
                 && step.parameters().get("destroy_blocks").getAsBoolean();
@@ -39,7 +42,10 @@ public final class WishSafetyPolicy {
             return WishPolicyDecision.reject(WishExecutionAcceptError.DESTRUCTIVE_SEVERITY_DISABLED,
                     "severity=" + severity + " maximum=" + settings.maximumDestructiveSeverity());
         }
-        if (step.action() == WishActionType.CHANGE_BLOCK || step.action() == WishActionType.REPLACE_BLOCK_AREA) {
+        if (step.action() == WishActionType.CHANGE_BLOCK || step.action() == WishActionType.REPLACE_BLOCK_AREA
+                || step.action() == WishActionType.FALLING_BLOCK_SHOWER
+                && ("PLACE".equals(step.parameters().get("landing_mode").getAsString())
+                || "PLACE_OR_DROP".equals(step.parameters().get("landing_mode").getAsString()))) {
             if (!settings.blockModification()) {
                 return WishPolicyDecision.reject(WishExecutionAcceptError.BLOCK_MODIFICATION_DISABLED,
                         "Block modification is disabled by server settings");

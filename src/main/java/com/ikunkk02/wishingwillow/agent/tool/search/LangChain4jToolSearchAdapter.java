@@ -45,7 +45,9 @@ public final class LangChain4jToolSearchAdapter implements WishingWillowToolSear
     public List<ToolSpecification> langChainSpecifications(WishAgentSession session) {
         return registry.visible(session).stream().map(tool -> ToolSpecification.builder()
                 .name(tool.descriptor().name())
-                .description(tool.descriptor().description())
+                .description(tool.descriptor().description() + " supports_semantics="
+                        + tool.descriptor().supportsSemantics() + "; does_not_support="
+                        + tool.descriptor().unsupportedSemantics())
                 // The project-owned Gson schema remains authoritative for the
                 // existing provider adapter. This view is only for LC4J search.
                 .parameters(JsonObjectSchema.builder().build())
@@ -55,7 +57,9 @@ public final class LangChain4jToolSearchAdapter implements WishingWillowToolSear
     private static int score(WishToolDescriptor descriptor, Set<String> terms) {
         String name = descriptor.name().toLowerCase(Locale.ROOT);
         String haystack = (descriptor.description() + " " + descriptor.capabilities() + " "
-                + descriptor.contractTypes() + " " + descriptor.featureTypes()).toLowerCase(Locale.ROOT);
+                + descriptor.contractTypes() + " " + descriptor.featureTypes() + " "
+                + descriptor.supportsSemantics() + " " + descriptor.unsupportedSemantics())
+                .toLowerCase(Locale.ROOT);
         int score = 0;
         for (String term : terms) {
             if (name.contains(term)) score += 4;

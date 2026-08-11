@@ -1,31 +1,18 @@
 package com.ikunkk02.wishingwillow.planning;
 
 import com.ikunkk02.wishingwillow.ai.WishCapability;
-import com.ikunkk02.wishingwillow.ai.WishDelivery;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
-import com.ikunkk02.wishingwillow.contract.WishContractType;
+import com.ikunkk02.wishingwillow.planning.semantic.WishSemanticRecipeRegistry;
 
 import java.util.Locale;
 import java.util.Set;
 
-/** Chooses the cheap path unless the interpretation positively requires research or custom semantics. */
+/** Gives the controlled Action DSL first refusal; the Agent is reserved for genuinely unknown capabilities. */
 public final class WishActionRouter {
-    private static final Set<WishCapability> COMPLEX_CAPABILITIES = Set.of(
-            WishCapability.STALKING_ENTITY,
-            WishCapability.PERSISTENT_FOLLOWER,
-            WishCapability.MIMIC_ENTITY,
-            WishCapability.MOB_BEHAVIOR,
+    private static final Set<WishCapability> UNKNOWN_EXTERNAL_CAPABILITIES = Set.of(
             WishCapability.MEMORY_RELATED_EVENT,
-            WishCapability.ENTITY_RECREATION,
-            WishCapability.IMITATION,
-            WishCapability.POWERFUL_ENEMY,
             WishCapability.SPACECRAFT,
             WishCapability.SPACE_TRAVEL
-    );
-    private static final Set<WishContractType> SEMANTIC_CONTRACTS = Set.of(
-            WishContractType.KNOWLEDGE,
-            WishContractType.RESURRECTION,
-            WishContractType.OTHER
     );
     private static final Set<String> EXPLICIT_MOD_RESEARCH = Set.of(
             "mod-specific", "mod specific", "special api", "special behavior", "unknown mod",
@@ -39,26 +26,22 @@ public final class WishActionRouter {
         if (interpretation == null || interpretation.schemaVersion() < 2) {
             return complex("legacy_or_missing_contract");
         }
-        if (interpretation.contract().requiresAiReview()
-                || SEMANTIC_CONTRACTS.contains(interpretation.contract().type())) {
-            return complex("contract_requires_semantic_research");
-        }
-        if (interpretation.delivery() == WishDelivery.CONDITIONAL
-                || interpretation.delivery() == WishDelivery.PROGRESSIVE) {
-            return complex("delivery_requires_multi_step_agent_timing");
-        }
-        for (WishCapability capability : interpretation.requiredCapabilities()) {
-            if (COMPLEX_CAPABILITIES.contains(capability)) {
-                return complex("complex_capability=" + capability.name());
-            }
-        }
         String normalized = (originalWish == null ? "" : originalWish).toLowerCase(Locale.ROOT)
                 .replaceAll("\\s+", " ");
         if (EXPLICIT_MOD_RESEARCH.stream().anyMatch(normalized::contains)) {
             return complex("explicit_mod_research_or_special_behavior");
         }
+        for (WishCapability capability : interpretation.requiredCapabilities()) {
+            if (UNKNOWN_EXTERNAL_CAPABILITIES.contains(capability)) {
+                return complex("unknown_external_capability=" + capability.name());
+            }
+        }
+        if (WishSemanticRecipeRegistry.resolve(interpretation).isPresent()) {
+            return new WishRouteDecision(WishExecutionRoute.DIRECT_ACTION,
+                    "semantic_expressible_by_vanilla_primitives");
+        }
         return new WishRouteDecision(WishExecutionRoute.DIRECT_ACTION,
-                "contract_expressible_by_allowlisted_actions");
+                "direct_action_first_refusal");
     }
 
     private static WishRouteDecision complex(String reason) {

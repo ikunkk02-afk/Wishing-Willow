@@ -9,9 +9,13 @@ import com.ikunkk02.wishingwillow.planning.WishPlanStep;
 import com.ikunkk02.wishingwillow.planning.PlanningEnvironment;
 import com.ikunkk02.wishingwillow.execution.WishExecutionRecord;
 import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
+import com.ikunkk02.wishingwillow.WishingWillow;
+import com.ikunkk02.wishingwillow.planning.WishTargetType;
+import com.ikunkk02.wishingwillow.planning.semantic.WishSemanticRecipeRegistry;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** Proves that a legal-looking plan actually grants the non-negotiable outcome. */
 public final class WishContractValidator {
@@ -34,6 +38,15 @@ public final class WishContractValidator {
                                                   PlanningEnvironment environment) {
         if (interpretation.schemaVersion() < 2) return fulfilled("LEGACY_SCHEMA", 0);
         WishContract contract = interpretation.contract();
+        String structuredDelivery = contract.semantic(WishConstraintKind.DELIVERY_SEMANTIC).orElse("");
+        var structuredRecipe = WishSemanticRecipeRegistry.resolve(interpretation);
+        if (!structuredDelivery.isBlank() && structuredRecipe.isEmpty()) {
+            return review("UNSUPPORTED_DELIVERY_SEMANTIC", 0);
+        }
+        if (structuredRecipe.isPresent()
+                && steps.stream().noneMatch(step -> step.action() == structuredRecipe.get().action())) {
+            return rejected("DELIVERY_SEMANTIC_NOT_IMPLEMENTED", 0);
+        }
         WishContractValidation machine = switch (contract.type()) {
             case OBTAIN_RESOURCE -> validateResource(contract, steps);
             case CREATE_STRUCTURE -> requireAction(steps, WishActionType.CREATE_STRUCTURE, "STRUCTURE_MISSING");
@@ -46,7 +59,14 @@ public final class WishContractValidator {
             case KNOWLEDGE, RESURRECTION, OTHER -> review("SEMANTIC_REVIEW_REQUIRED", 0);
         };
         if (machine.state() == WishContractValidationState.CONTRACT_NOT_FULFILLED) return machine;
-        return contract.requiresAiReview() ? review("CUSTOM_SEMANTIC_REVIEW", machine.promisedQuantity()) : machine;
+        boolean recipeProof = WishSemanticRecipeRegistry.resolve(interpretation)
+                .map(recipe -> steps.stream().anyMatch(step -> step.action() == recipe.action()))
+                .orElse(false);
+        if (recipeProof) {
+            WishingWillow.LOGGER.info("Contract deterministic proof state=CONTRACT_FULFILLED proof=falling_block_delivery");
+        }
+        return contract.requiresAiReview() && !recipeProof
+                ? review("CUSTOM_SEMANTIC_REVIEW", machine.promisedQuantity()) : machine;
     }
 
     /** Reconciles machine-verifiable promises against persisted executor affected counts. */
@@ -79,18 +99,36 @@ public final class WishContractValidator {
         for (WishPlanStep step : steps) {
             if (!isResourceGrant(step.action()) || !resourceMatches(step, semantic)) continue;
             promised += switch (step.action()) {
-                case GIVE_ITEM, PLACE_BLOCK_PATTERN -> integer(step.parameters(), "count", 0);
+                case GIVE_ITEM, PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER -> integer(step.parameters(), "count", 0);
                 case CHANGE_BLOCK -> 1;
                 default -> 0;
             };
         }
-        return promised >= minimum ? fulfilled("RESOURCE_QUANTITY_PROVEN", promised)
-                : rejected("RESOURCE_QUANTITY_SHORT", promised);
+        if (promised < minimum) return rejected("RESOURCE_QUANTITY_SHORT", promised);
+        String delivery = contract.semantic(WishConstraintKind.DELIVERY_SEMANTIC).orElse("");
+        if (!delivery.isBlank()) {
+            boolean physicalFall = steps.stream().anyMatch(step -> step.action() == WishActionType.FALLING_BLOCK_SHOWER
+                    && resourceMatches(step, semantic) && integer(step.parameters(), "count", 0) >= minimum
+                    && (step.target() == WishTargetType.PLAYER || step.target() == WishTargetType.AREA));
+            if (!physicalFall) return rejected("PHYSICAL_FALL_DELIVERY_MISSING", promised);
+        }
+        if (contract.requires(WishConstraintKind.PLAYER_ACCESSIBLE)) {
+            boolean accessible = steps.stream().anyMatch(step -> step.action() == WishActionType.GIVE_ITEM
+                    && resourceMatches(step, semantic))
+                    || steps.stream().anyMatch(step -> (step.action() == WishActionType.CHANGE_BLOCK
+                    || step.action() == WishActionType.PLACE_BLOCK_PATTERN) && resourceMatches(step, semantic))
+                    || steps.stream().anyMatch(step ->
+                    step.action() == WishActionType.FALLING_BLOCK_SHOWER && resourceMatches(step, semantic)
+                            && Set.of("DROP_ITEM", "PLACE_OR_DROP", "DELIVER_TO_PLAYER")
+                            .contains(string(step.parameters(), "landing_mode")));
+            if (!accessible) return rejected("PLAYER_ACCESSIBLE_DELIVERY_MISSING", promised);
+        }
+        return fulfilled(delivery.isBlank() ? "RESOURCE_QUANTITY_PROVEN" : "FALLING_BLOCK_DELIVERY_PROVEN", promised);
     }
 
     private static boolean isResourceGrant(WishActionType type) {
         return type == WishActionType.GIVE_ITEM || type == WishActionType.CHANGE_BLOCK
-                || type == WishActionType.PLACE_BLOCK_PATTERN;
+                || type == WishActionType.PLACE_BLOCK_PATTERN || type == WishActionType.FALLING_BLOCK_SHOWER;
     }
 
     private static boolean resourceMatches(WishPlanStep step, String semantic) {
