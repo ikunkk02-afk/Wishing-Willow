@@ -12,13 +12,19 @@ import java.util.List;
 import com.google.gson.JsonObject;
 
 public final class AiService {
-    private static final AiService INSTANCE = new AiService();
+    private static final AiService INSTANCE = new AiService(true);
 
     private final ScheduledExecutorService executor;
     private final HttpClient httpClient;
     private final ConcurrentHashMap<String, ToolCallingSupport> toolSupport = new ConcurrentHashMap<>();
+    private final boolean persistedSupportEnabled;
 
     public AiService() {
+        this(false);
+    }
+
+    private AiService(boolean persistedSupportEnabled) {
+        this.persistedSupportEnabled = persistedSupportEnabled;
         AtomicInteger sequence = new AtomicInteger();
         ThreadFactory threadFactory = runnable -> {
             Thread thread = new Thread(runnable, "wishing-willow-ai-" + sequence.incrementAndGet());
@@ -59,23 +65,8 @@ public final class AiService {
             if (response.assistantContent() == null || response.assistantContent().isBlank()) {
                 return CompletableFuture.completedFuture(AiConnectionResult.failure(AiErrorCategory.MALFORMED_RESPONSE, 200));
             }
-            JsonObject properties = new JsonObject();
-            JsonObject value = new JsonObject(); value.addProperty("type", "string"); value.addProperty("const", "OK");
-            properties.add("value", value);
-            JsonObject schema = new JsonObject(); schema.addProperty("type", "object"); schema.add("properties", properties);
-            com.google.gson.JsonArray required = new com.google.gson.JsonArray(); required.add("value");
-            schema.add("required", required); schema.addProperty("additionalProperties", false);
-            return provider.completeTools(new AiToolRequest(
-                    List.of(AiConversationMessage.text("system", "Call the provided safe probe tool exactly once."),
-                            AiConversationMessage.text("user", "Call wishing_willow_tool_probe with value OK.")),
-                    List.of(new AiToolDefinition("wishing_willow_tool_probe", "Safe tool-calling capability probe.", schema)), 64))
-                    .handle((probe, probeFailure) -> {
-                        boolean supported = probeFailure == null && probe != null && probe.toolCalls().stream()
-                                .anyMatch(call -> call.name().equals("wishing_willow_tool_probe"));
-                        ToolCallingSupport status = supported ? ToolCallingSupport.SUPPORTED : ToolCallingSupport.UNSUPPORTED;
-                        toolSupport.put(key(config), status);
-                        return AiConnectionResult.successful(status);
-                    });
+            return probeToolCallingSupport(config, provider)
+                    .thenApply(AiConnectionResult::successful);
         }).exceptionally(throwable -> {
             AiRequestException failure = throwable == null
                     ? new AiRequestException(AiErrorCategory.MALFORMED_RESPONSE, 200, false)
@@ -85,7 +76,57 @@ public final class AiService {
     }
 
     public ToolCallingSupport toolCallingSupport(AiConfig config) {
-        return toolSupport.getOrDefault(key(config), ToolCallingSupport.UNKNOWN);
+        ToolCallingSupport cached = toolSupport.get(key(config));
+        if (cached != null) return cached;
+        ToolCallingSupport persisted = persistedSupportEnabled
+                ? AiConfigManager.getInstance().toolCallingSupport(config) : ToolCallingSupport.UNKNOWN;
+        if (persisted != ToolCallingSupport.UNKNOWN) toolSupport.put(key(config), persisted);
+        return persisted;
+    }
+
+    public CompletableFuture<ToolCallingSupport> probeToolCallingSupport(AiConfig config) {
+        ToolCallingSupport cached = toolCallingSupport(config);
+        if (cached != ToolCallingSupport.UNKNOWN) return CompletableFuture.completedFuture(cached);
+        if (!config.isConfigured()) return CompletableFuture.completedFuture(ToolCallingSupport.UNKNOWN);
+        return probeToolCallingSupport(config, provider(config));
+    }
+
+    private CompletableFuture<ToolCallingSupport> probeToolCallingSupport(AiConfig config, AiProvider provider) {
+        JsonObject properties = new JsonObject();
+        JsonObject value = new JsonObject(); value.addProperty("type", "string"); value.addProperty("const", "OK");
+        properties.add("value", value);
+        JsonObject schema = new JsonObject(); schema.addProperty("type", "object"); schema.add("properties", properties);
+        com.google.gson.JsonArray required = new com.google.gson.JsonArray(); required.add("value");
+        schema.add("required", required); schema.addProperty("additionalProperties", false);
+        return provider.completeTools(new AiToolRequest(
+                        List.of(AiConversationMessage.text("system", "Call the provided safe probe tool exactly once."),
+                                AiConversationMessage.text("user", "Call wishing_willow_tool_probe with value OK.")),
+                        List.of(new AiToolDefinition("wishing_willow_tool_probe",
+                                "Safe tool-calling capability probe.", schema)), 64))
+                .orTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                .handle((probe, probeFailure) -> {
+                    ToolCallingSupport status;
+                    if (probeFailure == null && probe != null && probe.toolCalls().stream()
+                            .anyMatch(call -> call.name().equals("wishing_willow_tool_probe"))) {
+                        status = ToolCallingSupport.SUPPORTED;
+                    } else if (probeFailure == null && probe != null) {
+                        status = ToolCallingSupport.UNSUPPORTED;
+                    } else {
+                        AiRequestException failure = unwrap(probeFailure);
+                        status = failure.category() == AiErrorCategory.UNSUPPORTED_FEATURE
+                                ? ToolCallingSupport.UNSUPPORTED : ToolCallingSupport.UNKNOWN;
+                    }
+                    recordToolCallingSupport(config, status);
+                    return status;
+                });
+    }
+
+    public void recordToolCallingSupport(AiConfig config, ToolCallingSupport status) {
+        if (config == null || status == null || status == ToolCallingSupport.UNKNOWN) return;
+        toolSupport.put(key(config), status);
+        if (persistedSupportEnabled) {
+            AiConfigManager.getInstance().updateToolCallingSupport(config, status);
+        }
     }
 
     public void clearToolCallingSupportCache() { toolSupport.clear(); }

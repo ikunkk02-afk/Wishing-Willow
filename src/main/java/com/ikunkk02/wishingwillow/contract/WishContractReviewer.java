@@ -8,15 +8,25 @@ import com.ikunkk02.wishingwillow.planning.WishPlanJson;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 
 /** A second, isolated semantic pass. Hash echoing prevents a review from being reused for another contract or plan. */
 public final class WishContractReviewer {
+    public static final Duration REVIEW_TIMEOUT = Duration.ofSeconds(20);
     private static final Set<String> FIELDS = Set.of("contract_hash", "plan_hash", "verdict", "reason");
     private WishContractReviewer() {}
 
     public static CompletableFuture<WishContractReview> review(AiProvider provider,
                                                                WishInterpretation interpretation,
                                                                WishPlanDraft plan) {
+        return review(provider, interpretation, plan, REVIEW_TIMEOUT);
+    }
+
+    public static CompletableFuture<WishContractReview> review(AiProvider provider,
+                                                               WishInterpretation interpretation,
+                                                               WishPlanDraft plan,
+                                                               Duration timeout) {
         String contractHash = WishContractHasher.contractHash(interpretation);
         String planHash = WishContractHasher.planHash(plan);
         JsonObject input = new JsonObject();
@@ -30,7 +40,9 @@ public final class WishContractReviewer {
                 never substitutes for fulfillment. Echo both hashes exactly. Return only the JSON object.
                 """, "<UNTRUSTED_CONTRACT_REVIEW_JSON>\n" + input + "\n</UNTRUSTED_CONTRACT_REVIEW_JSON>",
                 500, AiOutputMode.JSON_SCHEMA, schema());
-        return provider.complete(request).thenApply(response -> parse(response.assistantContent(), contractHash, planHash));
+        return provider.complete(request)
+                .orTimeout(Math.max(1L, timeout.toMillis()), TimeUnit.MILLISECONDS)
+                .thenApply(response -> parse(response.assistantContent(), contractHash, planHash));
     }
 
     public static WishContractReview parse(String raw, String contractHash, String planHash) {

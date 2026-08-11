@@ -24,10 +24,14 @@ public final class WishExecutionCommands {
                             var debug = WishAgentDebugStore.latest(player.getUUID());
                             if (debug == null) { context.getSource().sendFailure(Component.literal("No agent debug record found.")); return 0; }
                             context.getSource().sendSuccess(() -> Component.literal("session=" + debug.sessionId()
-                                    + " mode=" + debug.mode() + " iterations=" + debug.iterations()
+                                    + " mode=" + debug.mode() + " state=" + debug.state()
+                                    + " iterations=" + debug.iterations()
                                     + " toolCalls=" + debug.toolCalls() + " toolsUsed=" + debug.toolsUsed()
+                                    + " lastTool=" + debug.lastTool() + " lastToolStatus=" + debug.lastToolStatus()
                                     + " verificationState=" + debug.verificationState()
-                                    + " finalizationState=" + debug.finalizationState()), false);
+                                    + " finalizationState=" + debug.finalizationState()
+                                    + " fallback=" + debug.fallbackReason()
+                                    + " elapsedMs=" + debug.elapsedMs()), false);
                             return 1;
                         })))
                 .then(Commands.literal("wish")
@@ -35,6 +39,7 @@ public final class WishExecutionCommands {
                             var player=context.getSource().getPlayerOrException();
                             WishRecord wish=WishSavedData.get(context.getSource().getServer()).getLatest(player.getUUID());
                             if(wish==null){context.getSource().sendFailure(Component.literal("No wish record found."));return 0;}
+                            var debug=WishAgentDebugStore.latest(player.getUUID());
                             context.getSource().sendSuccess(()->Component.literal(
                                     "session="+wish.sessionId()+
                                             " interpretationState="+wish.interpretationState()+
@@ -42,7 +47,11 @@ public final class WishExecutionCommands {
                                             " planError="+wish.planError()+
                                             " executionState="+wish.executionState()+
                                             " executionError="+wish.executionError()+
-                                            " executionId="+wish.executionId()),false);
+                                            " executionId="+wish.executionId()+
+                                            " steps="+(wish.plan()==null?0:wish.plan().steps().size())+
+                                            (debug!=null&&debug.sessionId().equals(wish.sessionId())
+                                                    ? " planningMode="+debug.mode()+" planningDebugState="+debug.state()
+                                                    +" fallback="+debug.fallbackReason()+" elapsedMs="+debug.elapsedMs() : "")),false);
                             return 1;
                         })))
                 .then(Commands.literal("pipeline").requires(source->source.hasPermission(2))

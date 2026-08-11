@@ -5,6 +5,8 @@ import com.google.gson.JsonObject;
 import com.ikunkk02.wishingwillow.agent.core.WishAgentSession;
 import com.ikunkk02.wishingwillow.agent.core.WishAgentLoop;
 import com.ikunkk02.wishingwillow.agent.core.WishFinalizationState;
+import com.ikunkk02.wishingwillow.agent.core.WishAgentFallbackReason;
+import com.ikunkk02.wishingwillow.agent.ai.WishingWillowChatModelAdapter;
 import com.ikunkk02.wishingwillow.agent.platform.MinecraftToolPlatform;
 import com.ikunkk02.wishingwillow.agent.platform.StatusEffectCategory;
 import com.ikunkk02.wishingwillow.agent.skill.WishAgentSkillLoader;
@@ -111,16 +113,80 @@ class WishAgentRuntimeTest {
         assertTrue(serialized.contains("RESULT_TOO_LARGE"));
     }
 
-    @Test void unknownAndThirdDuplicateToolCallsFailClosedWithinBudgets() {
+    @Test void repeatedUnknownToolsFailFastWithinBudgets() {
         ChatModel model = model(request -> ChatResponse.builder().aiMessage(AiMessage.from("",
                 List.of(ToolExecutionRequest.builder().id("same").name("invented_shell_tool").arguments("{\"x\":1}").build()))).build());
         WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
         var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
         assertNull(run.result().draft());
         assertTrue(session.history().stream().anyMatch(entry -> entry.code().equals("UNKNOWN_TOOL")));
-        assertTrue(session.history().stream().anyMatch(entry -> entry.code().equals("DUPLICATE_TOOL_CALL")));
-        assertEquals(WishAgentSession.MAX_ITERATIONS, session.iterations());
+        assertEquals(WishAgentFallbackReason.UNKNOWN_TOOL_LOOP, run.debug().fallbackReason());
+        assertTrue(session.iterations() < WishAgentSession.MAX_ITERATIONS);
         assertTrue(session.toolCallCount() <= WishAgentSession.MAX_TOTAL_TOOL_CALLS);
+    }
+
+    @Test void supportedAgentFinalizesWithToolsWithoutFallback() {
+        java.util.concurrent.atomic.AtomicInteger turn = new java.util.concurrent.atomic.AtomicInteger();
+        ChatModel model = model(request -> {
+            int value = turn.getAndIncrement();
+            ToolExecutionRequest call = switch (value) {
+                case 0 -> call("activate_skill", "{}");
+                case 1 -> call("search_minecraft_tools", "{\"query\":\"plan give items\",\"limit\":12}");
+                case 2 -> call("plan_give_items", "{\"resource_id\":\"minecraft:diamond_block\",\"count\":100}");
+                case 3 -> call("verify_wish_contract", "{}");
+                case 4 -> call("validate_draft_plan", "{}");
+                default -> call("finalize_wish_plan", "{}");
+            };
+            return ChatResponse.builder().aiMessage(AiMessage.from("", List.of(call))).build();
+        });
+        WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
+        var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
+        assertNotNull(run.result().draft());
+        assertEquals(WishFinalizationState.SUCCESS, run.debug().finalizationState());
+        assertEquals(WishAgentFallbackReason.NONE, run.debug().fallbackReason());
+        assertEquals(6, session.iterations());
+    }
+
+    @Test void twoProseOnlyResponsesTriggerJsonFallbackSignal() {
+        ChatModel model = model(request -> ChatResponse.builder().aiMessage(AiMessage.from("I am planning it.")).build());
+        WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
+        var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
+        assertNull(run.result().draft());
+        assertEquals(2, session.iterations());
+        assertEquals(WishAgentFallbackReason.MODEL_RETURNED_NO_TOOL_CALL, run.debug().fallbackReason());
+    }
+
+    @Test void repeatedMalformedToolArgumentsDoNotCrashAndTriggerFallback() {
+        ChatModel model = model(request -> ChatResponse.builder().aiMessage(AiMessage.from("", List.of(
+                call("plan_give_items", "{not-json")))).build());
+        WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
+        var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
+        assertNull(run.result().draft());
+        assertEquals(WishAgentFallbackReason.INVALID_TOOL_ARGUMENTS, run.debug().fallbackReason());
+        assertEquals(2, session.history().size());
+    }
+
+    @Test void agentModelRequestHasItsOwnTimeout() {
+        AiProvider hanging = new AiProvider() {
+            @Override public AiProviderType type() { return AiProviderType.CUSTOM; }
+            @Override public java.util.concurrent.CompletableFuture<AiResponse> complete(AiRequest request) {
+                return new java.util.concurrent.CompletableFuture<>();
+            }
+            @Override public java.util.concurrent.CompletableFuture<AiToolResponse> completeTools(AiToolRequest request) {
+                return new java.util.concurrent.CompletableFuture<>();
+            }
+            @Override public java.util.concurrent.CompletableFuture<AiModelListResult> listModels() {
+                return java.util.concurrent.CompletableFuture.completedFuture(AiModelListResult.success(List.of()));
+            }
+        };
+        WishAgentSession session = session(resourceInterpretation(), new FakePlatform());
+        ChatModel model = new WishingWillowChatModelAdapter(hanging, 256, java.time.Duration.ofMillis(30),
+                () -> session.remainingDuration().toMillis(), session::cancelled);
+        long started = System.nanoTime();
+        var run = new WishAgentLoop(model, new WishAgentToolRuntime()).run(session);
+        assertNull(run.result().draft());
+        assertEquals(WishAgentFallbackReason.AI_REQUEST_TIMEOUT, run.debug().fallbackReason());
+        assertTrue(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 1000);
     }
 
     @Test void cancellationStopsBeforeAnyModelOrToolCall() {
@@ -151,6 +217,10 @@ class WishAgentRuntimeTest {
 
     private static ChatModel model(java.util.function.Function<ChatRequest, ChatResponse> function) {
         return new ChatModel() { @Override public ChatResponse doChat(ChatRequest request) { return function.apply(request); } };
+    }
+
+    private static ToolExecutionRequest call(String name, String arguments) {
+        return ToolExecutionRequest.builder().id(UUID.randomUUID().toString()).name(name).arguments(arguments).build();
     }
 
     private static WishAgentSession session(WishInterpretation interpretation, MinecraftToolPlatform platform) {

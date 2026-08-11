@@ -19,6 +19,7 @@ import com.ikunkk02.wishingwillow.network.packet.WishOmenPacket;
 import com.ikunkk02.wishingwillow.network.packet.TradeRevealDiscoveryPacket;
 import com.ikunkk02.wishingwillow.network.packet.TradeRevealMusicPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishAgentDebugPacket;
+import com.ikunkk02.wishingwillow.network.packet.CancelWishPlanningPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkDirection;
@@ -27,7 +28,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetworking {
-    private static final String PROTOCOL_VERSION = "10";
+    private static final String PROTOCOL_VERSION = "11";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(WishingWillow.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
@@ -103,6 +104,9 @@ public final class ModNetworking {
         CHANNEL.messageBuilder(TradeRevealMusicPacket.class,id++,NetworkDirection.PLAY_TO_CLIENT)
                 .encoder(TradeRevealMusicPacket::encode).decoder(TradeRevealMusicPacket::decode)
                 .consumerMainThread(TradeRevealMusicPacket::handle).add();
+        CHANNEL.messageBuilder(CancelWishPlanningPacket.class,id++,NetworkDirection.PLAY_TO_SERVER)
+                .encoder(CancelWishPlanningPacket::encode).decoder(CancelWishPlanningPacket::decode)
+                .consumerMainThread(CancelWishPlanningPacket::handle).add();
         CHANNEL.messageBuilder(WishAgentDebugPacket.class,id,NetworkDirection.PLAY_TO_SERVER)
                 .encoder(WishAgentDebugPacket::encode).decoder(WishAgentDebugPacket::decode)
                 .consumerMainThread(WishAgentDebugPacket::handle).add();

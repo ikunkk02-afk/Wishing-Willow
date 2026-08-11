@@ -1,34 +1,20 @@
 package com.ikunkk02.wishingwillow.client.ai;
 
 import com.ikunkk02.wishingwillow.WishingWillow;
-import com.ikunkk02.wishingwillow.ai.AiConfig;
-import com.ikunkk02.wishingwillow.ai.AiConfigManager;
-import com.ikunkk02.wishingwillow.ai.AiService;
-import com.ikunkk02.wishingwillow.ai.ToolCallingSupport;
+import com.ikunkk02.wishingwillow.ai.*;
 import com.ikunkk02.wishingwillow.agent.ai.WishingWillowChatModelAdapter;
-import com.ikunkk02.wishingwillow.agent.core.WishAgentLoop;
-import com.ikunkk02.wishingwillow.agent.core.WishAgentSession;
-import com.ikunkk02.wishingwillow.agent.core.WishAgentDebugSnapshot;
-import com.ikunkk02.wishingwillow.agent.core.WishFinalizationState;
-import com.ikunkk02.wishingwillow.agent.core.WishPlanningMode;
-import com.ikunkk02.wishingwillow.agent.core.WishVerificationState;
+import com.ikunkk02.wishingwillow.agent.core.*;
 import com.ikunkk02.wishingwillow.agent.tool.WishAgentToolRuntime;
 import com.ikunkk02.wishingwillow.client.agent.ForgeMinecraftToolPlatform;
-import com.ikunkk02.wishingwillow.contract.WishContractReviewer;
 import com.ikunkk02.wishingwillow.contract.WishContractReviewVerdict;
+import com.ikunkk02.wishingwillow.contract.WishContractReviewer;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.SubmitWishPlanPacket;
+import com.ikunkk02.wishingwillow.network.packet.CancelWishPlanningPacket;
+import com.ikunkk02.wishingwillow.network.packet.WishAgentDebugPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningProgressPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
-import com.ikunkk02.wishingwillow.network.packet.WishAgentDebugPacket;
-import com.ikunkk02.wishingwillow.planning.CapabilityCatalog;
-import com.ikunkk02.wishingwillow.planning.CapabilityMatcher;
-import com.ikunkk02.wishingwillow.planning.RegistrySnapshotEnvironment;
-import com.ikunkk02.wishingwillow.planning.WishPlanError;
-import com.ikunkk02.wishingwillow.planning.WishPlanJson;
-import com.ikunkk02.wishingwillow.planning.WishPlanResult;
-import com.ikunkk02.wishingwillow.planning.WishPlanState;
-import com.ikunkk02.wishingwillow.planning.WishPlanner;
+import com.ikunkk02.wishingwillow.planning.*;
 import com.ikunkk02.wishingwillow.research.KnowledgeBaseSnapshot;
 import com.ikunkk02.wishingwillow.research.ModResearchManager;
 import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
@@ -40,132 +26,229 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Mod.EventBusSubscriber(modid = WishingWillow.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientWishPlanningCoordinator {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final CapabilityMatcher MATCHER = new CapabilityMatcher();
     private static final WishPlanner PLANNER = new WishPlanner();
-    private static final ExecutorService MATCH_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "wishing-willow-matcher");
-        thread.setDaemon(true);
-        return thread;
-    });
-    private static volatile long generation;
+    private static final WishPlanningOrchestrator ORCHESTRATOR = new WishPlanningOrchestrator();
+    private static final WishPlanningGeneration GENERATION = new WishPlanningGeneration();
+    private static final AtomicReference<WishPlanningRequestPacket> ACTIVE_REQUEST = new AtomicReference<>();
+    private static final ExecutorService MATCH_EXECUTOR = Executors.newFixedThreadPool(2,
+            namedThreads("wishing-willow-matcher"));
+    private static final ExecutorService AI_EXECUTOR = Executors.newFixedThreadPool(4,
+            namedThreads("wishing-willow-agent"));
 
     private ClientWishPlanningCoordinator() { }
 
     public static void start(WishPlanningRequestPacket packet) {
-        LOGGER.info("Wish planning started session={} attempt={}", packet.sessionId(), packet.attemptId());
-        long requestGeneration = generation;
+        long planningStarted = System.nanoTime();
+        WishPlanningRequestPacket previous = ACTIVE_REQUEST.getAndSet(packet);
+        WishPlanningGeneration.Token token = GENERATION.begin(packet.sessionId());
+        cancelPrevious(previous, packet);
         AiConfig config = AiConfigManager.getInstance().get();
+        ToolCallingSupport support = AiService.getInstance().toolCallingSupport(config);
+        LOGGER.info("Wish planning started session={} attempt={} mode=AUTO toolSupport={} generation={}",
+                packet.sessionId(), packet.attemptId(), support, token.generation());
         if (!config.isConfigured() || config.providerType() != packet.providerType()
                 || !config.model().equals(packet.model())) {
-            send(packet, requestGeneration, WishPlanResult.failed(WishPlanError.AI_REQUEST_FAILED), null);
+            send(packet, token, failedOutcome(packet, WishPlanError.AI_REQUEST_FAILED), planningStarted);
             return;
         }
+
         ModResearchManager research = ModResearchManager.getInstance();
         KnowledgeBaseSnapshot knowledge = research.knowledgeBase().snapshot();
         RegistrySnapshot registry = research.registrySnapshot();
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null) {
-            send(packet, requestGeneration, WishPlanResult.failed(WishPlanError.AI_REQUEST_FAILED), null);
+            send(packet, token, failedOutcome(packet, WishPlanError.AI_REQUEST_FAILED), planningStarted);
             return;
         }
         CapabilityCatalog emptyCatalog = CapabilityCatalog.create(List.of(), List.of(),
                 knowledge.state().name(), "", registry.digest());
         ForgeMinecraftToolPlatform frozenPlatform = ForgeMinecraftToolPlatform.capture(minecraft.player,
                 packet.context(), registry, knowledge, emptyCatalog);
-        CompletableFuture.supplyAsync(() -> MATCHER.match(packet.originalWish(), packet.interpretation(),
-                        knowledge, registry, packet.executionSettings()), MATCH_EXECUTOR)
+
+        CompletableFuture<WishPlanningOutcome> planning = CompletableFuture.supplyAsync(() -> {
+                    if (token.cancelled()) throw new CancellationException("SUPERSEDED_WISH");
+                    return MATCHER.match(packet.originalWish(), packet.interpretation(), knowledge, registry,
+                            packet.executionSettings());
+                }, MATCH_EXECUTOR)
                 .thenCompose(catalog -> {
+                    if (token.cancelled()) return CompletableFuture.failedFuture(
+                            new CancellationException("SUPERSEDED_WISH"));
                     clientSend(new WishPlanningProgressPacket(packet.sessionId(), packet.attemptId(),
-                            WishPlanState.PLANNING), requestGeneration);
+                            WishPlanState.PLANNING), token);
                     ForgeMinecraftToolPlatform platform = frozenPlatform.withCatalog(catalog);
-                    if (AiService.getInstance().toolCallingSupport(config) == ToolCallingSupport.UNSUPPORTED) {
-                        return compatibility(config, packet, catalog, registry, null);
-                    }
-                    return CompletableFuture.supplyAsync(() -> {
-                        var provider = AiService.getInstance().provider(config);
-                        WishAgentSession session = new WishAgentSession(packet.sessionId(), packet.originalWish(),
-                                packet.interpretation(), packet.context(), registry, knowledge,
-                                packet.executionSettings(), catalog, platform,
-                                () -> requestGeneration != generation);
-                        WishAgentToolRuntime tools = new WishAgentToolRuntime((interpretation, draft) ->
-                                WishContractReviewer.review(provider, interpretation, draft).join().verdict()
-                                        == WishContractReviewVerdict.FULFILLED);
-                        WishAgentLoop loop = new WishAgentLoop(new WishingWillowChatModelAdapter(provider, 2048), tools);
-                        return loop.run(session);
-                    }, MATCH_EXECUTOR).thenCompose(agent -> {
-                        if (agent.result().draft() != null) {
-                            return CompletableFuture.completedFuture(new Completed(agent.result(), agent.catalog(), agent.debug()));
-                        }
-                        if (requestGeneration != generation) {
-                            return CompletableFuture.completedFuture(new Completed(agent.result(), null, agent.debug()));
-                        }
-                        return compatibility(config, packet, catalog, registry, agent.debug());
-                    });
+                    AiService service = AiService.getInstance();
+                    AiProvider provider = service.provider(config);
+                    return ORCHESTRATOR.plan(packet.sessionId(), support, catalog,
+                            () -> service.probeToolCallingSupport(config),
+                            () -> CompletableFuture.supplyAsync(() -> runAgent(packet, token, knowledge,
+                                    registry, catalog, platform, provider), AI_EXECUTOR),
+                            () -> PLANNER.plan(config, packet.originalWish(), packet.interpretation(),
+                                    packet.context(), catalog, new RegistrySnapshotEnvironment(registry),
+                            packet.executionSettings()),
+                            token::cancelled,
+                            snapshot -> clientSend(new WishAgentDebugPacket(snapshot), token))
+                            .thenApply(outcome -> {
+                                if (outcome.debug().fallbackReason()
+                                        == WishAgentFallbackReason.TOOL_CALLING_UNSUPPORTED) {
+                                    service.recordToolCallingSupport(config, ToolCallingSupport.UNSUPPORTED);
+                                }
+                                return outcome;
+                            });
                 })
-                .exceptionally(throwable -> new Completed(WishPlanResult.failed(WishPlanError.UNKNOWN), null, null))
-                .thenAccept(completed -> send(packet, requestGeneration, completed.result, completed.catalog, completed.debug));
+                .exceptionally(error -> token.cancelled()
+                        ? failedOutcome(packet, WishPlanError.AI_REQUEST_FAILED)
+                        : failedOutcome(packet, classify(error)));
+
+        CompletableFuture<Void> terminal = planning.thenAccept(outcome -> send(packet, token, outcome, planningStarted));
+        GENERATION.track(token, terminal);
     }
 
-    private static CompletableFuture<Completed> compatibility(AiConfig config, WishPlanningRequestPacket packet,
-                                                               CapabilityCatalog catalog, RegistrySnapshot registry,
-                                                               WishAgentDebugSnapshot prior) {
-        return PLANNER.plan(config, packet.originalWish(), packet.interpretation(), packet.context(), catalog,
-                        new RegistrySnapshotEnvironment(registry), packet.executionSettings())
-                .thenApply(result -> {
-                    WishAgentDebugSnapshot debug = new WishAgentDebugSnapshot(packet.sessionId(),
-                            WishPlanningMode.COMPATIBILITY_JSON_MODE,
-                            prior == null ? 0 : prior.iterations(), prior == null ? 0 : prior.toolCalls(),
-                            prior == null ? List.of() : prior.toolsUsed(),
-                            prior == null ? WishVerificationState.NOT_VERIFIED : prior.verificationState(),
-                            result.draft() == null ? WishFinalizationState.TECHNICAL_FAILURE : WishFinalizationState.SUCCESS);
-                    return new Completed(result, catalog, debug);
-                });
+    private static WishAgentRunResult runAgent(WishPlanningRequestPacket packet,
+                                               WishPlanningGeneration.Token token,
+                                               KnowledgeBaseSnapshot knowledge,
+                                               RegistrySnapshot registry,
+                                               CapabilityCatalog catalog,
+                                               ForgeMinecraftToolPlatform platform,
+                                               AiProvider provider) {
+        WishAgentSession session = new WishAgentSession(packet.sessionId(), packet.originalWish(),
+                packet.interpretation(), packet.context(), registry, knowledge, packet.executionSettings(),
+                catalog, platform, token::cancelled,
+                snapshot -> clientSend(new WishAgentDebugPacket(snapshot), token));
+        WishAgentToolRuntime tools = new WishAgentToolRuntime((interpretation, draft) ->
+                reviewContract(provider, session, interpretation, draft));
+        WishingWillowChatModelAdapter model = new WishingWillowChatModelAdapter(provider, 2048,
+                WishingWillowChatModelAdapter.DEFAULT_AGENT_REQUEST_TIMEOUT,
+                () -> session.remainingDuration().toMillis(), session::cancelled);
+        return new WishAgentLoop(model, tools).run(session);
     }
 
-    private static void send(WishPlanningRequestPacket packet, long requestGeneration,
-                             WishPlanResult result, CapabilityCatalog catalog) {
-        send(packet, requestGeneration, result, catalog, null);
+    private static boolean reviewContract(AiProvider provider, WishAgentSession session,
+                                          WishInterpretation interpretation, WishPlanDraft draft) {
+        Duration timeout = min(WishContractReviewer.REVIEW_TIMEOUT, session.remainingDuration());
+        CompletableFuture<com.ikunkk02.wishingwillow.contract.WishContractReview> review =
+                WishContractReviewer.review(provider, interpretation, draft, timeout);
+        try {
+            return review.get(Math.max(1L, timeout.toMillis()), TimeUnit.MILLISECONDS).verdict()
+                    == WishContractReviewVerdict.FULFILLED;
+        } catch (TimeoutException exception) {
+            review.cancel(true);
+            session.markFallbackReason(WishAgentFallbackReason.CONTRACT_REVIEW_TIMEOUT);
+            throw new CompletionException(exception);
+        } catch (InterruptedException exception) {
+            review.cancel(true);
+            Thread.currentThread().interrupt();
+            session.markFallbackReason(WishAgentFallbackReason.CANCELLED);
+            throw new CompletionException(exception);
+        } catch (ExecutionException exception) {
+            Throwable cause = root(exception);
+            session.markFallbackReason(cause instanceof TimeoutException
+                    ? WishAgentFallbackReason.CONTRACT_REVIEW_TIMEOUT
+                    : WishAgentFallbackReason.REVIEW_TECHNICAL_FAILURE);
+            throw new CompletionException(cause);
+        }
     }
 
-    private static void send(WishPlanningRequestPacket packet, long requestGeneration,
-                             WishPlanResult result, CapabilityCatalog catalog, WishAgentDebugSnapshot debug) {
+    private static void send(WishPlanningRequestPacket packet, WishPlanningGeneration.Token token,
+                             WishPlanningOutcome outcome, long planningStarted) {
         Minecraft minecraft = Minecraft.getInstance();
         minecraft.execute(() -> {
-            if (requestGeneration != generation || minecraft.getConnection() == null) return;
-            LOGGER.info("Wish planning completed session={} attempt={} state={} error={} steps={}",
-                    packet.sessionId(), packet.attemptId(), result.state(), result.error(),
-                    result.draft() == null ? 0 : result.draft().steps().size());
+            if (!GENERATION.isCurrent(token) || minecraft.getConnection() == null) return;
+            ACTIVE_REQUEST.compareAndSet(packet, null);
+            WishPlanResult result = outcome.result();
+            long totalElapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - planningStarted);
+            WishAgentDebugSnapshot debug = withElapsed(outcome.debug(), totalElapsed);
+            LOGGER.info("Wish planning completed session={} attempt={} mode={} state={} error={} steps={} elapsedMs={}",
+                    packet.sessionId(), packet.attemptId(), debug == null ? "UNKNOWN" : debug.mode(),
+                    result.state(), result.error(), result.draft() == null ? 0 : result.draft().steps().size(),
+                    totalElapsed);
             if (debug != null) ModNetworking.sendToServer(new WishAgentDebugPacket(debug));
-            if (result.draft() == null || catalog == null) {
-                ModNetworking.sendToServer(new SubmitWishPlanPacket(packet.sessionId(), packet.attemptId(),
-                        result.error(), result.attemptsUsed(), null, null));
+            if (result.draft() == null || outcome.catalog() == null) {
+                ModNetworking.sendToServer(SubmitWishPlanPacket.fromResult(packet.sessionId(),
+                        packet.attemptId(), result, outcome.catalog()));
                 return;
             }
             ModNetworking.sendToServer(new WishPlanningProgressPacket(packet.sessionId(), packet.attemptId(),
                     WishPlanState.VALIDATING));
-            ModNetworking.sendToServer(new SubmitWishPlanPacket(packet.sessionId(), packet.attemptId(),
-                    WishPlanError.NONE, result.attemptsUsed(), catalog, WishPlanJson.toAiJson(result.draft())));
+            ModNetworking.sendToServer(SubmitWishPlanPacket.fromResult(packet.sessionId(),
+                    packet.attemptId(), result, outcome.catalog()));
         });
     }
 
-    private static void clientSend(Object packet, long requestGeneration) {
+    private static WishAgentDebugSnapshot withElapsed(WishAgentDebugSnapshot debug, long elapsedMs) {
+        if (debug == null) return null;
+        return new WishAgentDebugSnapshot(debug.sessionId(), debug.mode(), debug.state(), debug.iterations(),
+                debug.toolCalls(), debug.toolsUsed(), debug.lastTool(), debug.lastToolStatus(),
+                debug.verificationState(), debug.finalizationState(), debug.fallbackReason(), elapsedMs);
+    }
+
+    private static void clientSend(Object packet, WishPlanningGeneration.Token token) {
         Minecraft.getInstance().execute(() -> {
-            if (requestGeneration == generation && Minecraft.getInstance().getConnection() != null) {
+            if (GENERATION.isCurrent(token) && Minecraft.getInstance().getConnection() != null) {
                 ModNetworking.sendToServer(packet);
             }
         });
     }
 
-    @SubscribeEvent
-    public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) { generation++; }
+    private static void cancelPrevious(WishPlanningRequestPacket previous, WishPlanningRequestPacket replacement) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (previous == null || previous.attemptId().equals(replacement.attemptId())
+                || minecraft.getConnection() == null) return;
+        LOGGER.info("Wish planning cancelled session={} attempt={} reason=SUPERSEDED replacementSession={}",
+                previous.sessionId(), previous.attemptId(), replacement.sessionId());
+        ModNetworking.sendToServer(new WishAgentDebugPacket(new WishAgentDebugSnapshot(previous.sessionId(),
+                WishPlanningMode.AGENT_TOOL_MODE, WishAgentDebugState.CANCELLED, 0, 0, List.of(), "", "",
+                WishVerificationState.NOT_VERIFIED, WishFinalizationState.CANCELLED,
+                WishAgentFallbackReason.CANCELLED, 0L)));
+        ModNetworking.sendToServer(new CancelWishPlanningPacket(previous.sessionId(), previous.attemptId()));
+    }
 
-    private record Completed(WishPlanResult result, CapabilityCatalog catalog, WishAgentDebugSnapshot debug) { }
+    private static WishPlanningOutcome failedOutcome(WishPlanningRequestPacket packet, WishPlanError error) {
+        WishAgentDebugSnapshot debug = new WishAgentDebugSnapshot(packet.sessionId(), WishPlanningMode.COMPATIBILITY_JSON_MODE,
+                WishAgentDebugState.FAILED, 0, 0, List.of(), "", "", WishVerificationState.NOT_VERIFIED,
+                WishFinalizationState.TECHNICAL_FAILURE, WishAgentFallbackReason.AGENT_TECHNICAL_FAILURE, 0L);
+        return new WishPlanningOutcome(WishPlanResult.failed(error), null, debug);
+    }
+
+    private static WishPlanError classify(Throwable error) {
+        Throwable cause = root(error);
+        return cause instanceof TimeoutException
+                || cause instanceof AiRequestException request && request.category() == AiErrorCategory.TIMEOUT
+                ? WishPlanError.AI_TIMEOUT : WishPlanError.UNKNOWN;
+    }
+
+    private static Throwable root(Throwable error) {
+        Throwable current = error;
+        while (current != null && (current instanceof CompletionException || current instanceof ExecutionException)
+                && current.getCause() != null) current = current.getCause();
+        return current;
+    }
+
+    private static Duration min(Duration left, Duration right) {
+        return left.compareTo(right) <= 0 ? left : right;
+    }
+
+    private static ThreadFactory namedThreads(String prefix) {
+        AtomicInteger sequence = new AtomicInteger();
+        return runnable -> {
+            Thread thread = new Thread(runnable, prefix + "-" + sequence.incrementAndGet());
+            thread.setDaemon(true);
+            return thread;
+        };
+    }
+
+    @SubscribeEvent
+    public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        ACTIVE_REQUEST.set(null);
+        GENERATION.cancelAll();
+    }
 }

@@ -213,6 +213,7 @@
   "screen.wishing_willow.execution.safe_mode_warning_1": "Block modification and destructive explosions may not execute.",
   "screen.wishing_willow.execution.safe_mode_warning_2": "High-power explosions are limited; normal wishes remain enabled.",
   "message.wishing_willow.technical_failure": "The wish encountered a technical failure. Check the log and try again.",
+  "message.wishing_willow.planning_failed": "Your wish was understood, but its execution plan could not be completed.",
   "omen.wishing_willow.capability.stalking.1": "You could swear there is one more set of footsteps behind you.",
   "omen.wishing_willow.capability.stalking.2": "Something nearby seems to have stopped moving.",
   "omen.wishing_willow.capability.stalking.3": "For a moment, you feel watched.",

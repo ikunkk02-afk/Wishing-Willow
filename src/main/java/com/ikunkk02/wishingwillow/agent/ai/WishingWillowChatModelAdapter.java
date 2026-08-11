@@ -8,6 +8,8 @@ import com.ikunkk02.wishingwillow.ai.AiToolCall;
 import com.ikunkk02.wishingwillow.ai.AiToolDefinition;
 import com.ikunkk02.wishingwillow.ai.AiToolRequest;
 import com.ikunkk02.wishingwillow.ai.AiToolResponse;
+import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
+import com.ikunkk02.wishingwillow.ai.AiRequestException;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.data.message.AiMessage;
@@ -22,33 +24,65 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.time.Duration;
+import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 
 /** LangChain4j model facade backed exclusively by Wishing Willow's existing provider. */
 public final class WishingWillowChatModelAdapter implements ChatModel {
+    public static final Duration DEFAULT_AGENT_REQUEST_TIMEOUT = Duration.ofSeconds(30);
     private final AiProvider provider;
     private final int defaultMaxTokens;
+    private final Duration requestTimeout;
+    private final LongSupplier remainingMillis;
+    private final BooleanSupplier cancelled;
     private final AtomicLong generatedCallIds = new AtomicLong();
 
     public WishingWillowChatModelAdapter(AiProvider provider, int defaultMaxTokens) {
+        this(provider, defaultMaxTokens, DEFAULT_AGENT_REQUEST_TIMEOUT,
+                DEFAULT_AGENT_REQUEST_TIMEOUT::toMillis, () -> false);
+    }
+
+    public WishingWillowChatModelAdapter(AiProvider provider, int defaultMaxTokens,
+                                         Duration requestTimeout, LongSupplier remainingMillis,
+                                         BooleanSupplier cancelled) {
         this.provider = java.util.Objects.requireNonNull(provider);
         this.defaultMaxTokens = Math.max(128, defaultMaxTokens);
+        this.requestTimeout = java.util.Objects.requireNonNull(requestTimeout);
+        this.remainingMillis = java.util.Objects.requireNonNull(remainingMillis);
+        this.cancelled = cancelled == null ? () -> false : cancelled;
     }
 
     @Override
     public ChatResponse doChat(ChatRequest request) {
+        java.util.concurrent.CompletableFuture<AiToolResponse> pending = null;
         try {
-            AiToolResponse response = provider.completeTools(new AiToolRequest(
+            if (cancelled.getAsBoolean()) throw new java.util.concurrent.CancellationException("AGENT_CANCELLED");
+            pending = provider.completeTools(new AiToolRequest(
                     request.messages().stream().map(this::message).toList(),
                     request.toolSpecifications().stream().map(this::tool).toList(),
                     request.maxOutputTokens() == null ? defaultMaxTokens : request.maxOutputTokens()
-            )).join();
+            ));
+            long timeoutMillis = Math.max(1L, Math.min(requestTimeout.toMillis(), remainingMillis.getAsLong()));
+            AiToolResponse response = pending.get(timeoutMillis, TimeUnit.MILLISECONDS);
+            if (cancelled.getAsBoolean()) throw new java.util.concurrent.CancellationException("AGENT_CANCELLED");
             List<ToolExecutionRequest> calls = response.toolCalls().stream().map(call ->
                     ToolExecutionRequest.builder().id(safeId(call.id())).name(call.name())
                             .arguments(call.argumentsJson()).build()).toList();
             return ChatResponse.builder().aiMessage(AiMessage.from(response.assistantContent(), calls)).build();
-        } catch (CompletionException exception) {
-            throw exception;
+        } catch (TimeoutException exception) {
+            if (pending != null) pending.cancel(true);
+            throw new CompletionException(new AiRequestException(AiErrorCategory.TIMEOUT, exception));
+        } catch (InterruptedException exception) {
+            if (pending != null) pending.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new CompletionException(new AiRequestException(AiErrorCategory.TIMEOUT, exception));
+        } catch (ExecutionException exception) {
+            throw new CompletionException(exception.getCause() == null ? exception : exception.getCause());
         } catch (RuntimeException exception) {
             throw new CompletionException(exception);
         }

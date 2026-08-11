@@ -39,3 +39,14 @@ It sends only public mod metadata, the mod file name and SHA-512, public project
 research services and the configured AI provider. It never sends local paths, player or server identifiers, world seeds,
 credentials, chat, or save files. The optional CurseForge API key is stored only in
 `.minecraft/config/wishing_willow/research-client.json`; it is never logged, cached with knowledge, or sent to AI.
+
+## Wish planning diagnostics
+
+Agent tool planning is an optional enhancement over the compatibility JSON planner. Unknown or unsupported tool-call
+capability, Agent timeouts, malformed tool responses, repeated tool errors, and contract-review technical failures fall
+back to the JSON planner automatically. A new wish cancels the previous client planning token, and late responses from
+the cancelled wish are ignored.
+
+Use `/wishingwillow agent latest` to inspect the live Agent iteration/tool/fallback state, or
+`/wishingwillow wish latest` to inspect the latest wish from interpretation through execution. Neither command prints
+API keys, authorization headers, or the full local AI configuration.

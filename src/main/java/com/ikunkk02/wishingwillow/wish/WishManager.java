@@ -27,6 +27,7 @@ import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
 import com.ikunkk02.wishingwillow.network.packet.WishOmenPacket;
+import com.ikunkk02.wishingwillow.agent.core.WishAgentDebugStore;
 import com.ikunkk02.wishingwillow.omen.WishOmenGenerator;
 import com.ikunkk02.wishingwillow.registry.ModItems;
 import net.minecraft.server.MinecraftServer;
@@ -38,6 +39,7 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
@@ -247,6 +249,18 @@ public final class WishManager {
         WishPlanStore.updateState(player.server, sessionId, state);
     }
 
+    public static void handlePlanningCancellation(ServerPlayer player, UUID sessionId, UUID attemptId) {
+        PlanningAttempt attempt = PLANNING_ATTEMPTS.get(sessionId);
+        if (attempt == null || !attempt.attemptId.equals(attemptId)
+                || !attempt.playerId.equals(player.getUUID())) return;
+        PLANNING_ATTEMPTS.remove(sessionId);
+        WishPlanStore.fail(player.server, sessionId, WishPlanError.AI_REQUEST_FAILED);
+        WishPipelineAudit.failure(sessionId, "PLANNING", "CANCELLED_SUPERSEDED",
+                "newer wish planning request replaced this attempt");
+        WishingWillow.LOGGER.info("Wish planning cancelled session={} attempt={} reason=SUPERSEDED",
+                sessionId, attemptId);
+    }
+
     public static void handlePlanSubmission(ServerPlayer player, UUID sessionId, UUID attemptId,
                                             WishPlanError error, int attemptsUsed,
                                             @Nullable CapabilityCatalog catalog,
@@ -265,13 +279,13 @@ public final class WishManager {
             if (error == WishPlanError.NO_CANDIDATES || error == WishPlanError.UNSATISFIED_CAPABILITIES) {
                 WishPlanStore.partial(player.server, sessionId, WishPlanError.UNSATISFIED_CAPABILITIES);
                 WishPipelineAudit.failure(sessionId, "PLANNING", WishPlanError.UNSATISFIED_CAPABILITIES.name(), "no executable primary capability");
-                player.sendSystemMessage(Component.translatable("message.wishing_willow.technical_failure"));
+                sendPlanningFailure(player, sessionId);
                 return;
             }
             WishPlanError acceptedError=error == WishPlanError.NONE ? WishPlanError.UNKNOWN : error;
             WishPlanStore.fail(player.server, sessionId, acceptedError);
             WishPipelineAudit.failure(sessionId, "PLANNING", acceptedError.name(), "planner returned no plan");
-            player.sendSystemMessage(Component.translatable("message.wishing_willow.technical_failure"));
+            sendPlanningFailure(player, sessionId);
             return;
         }
         try {
@@ -294,7 +308,7 @@ public final class WishManager {
             WishPlanError acceptedError=planError(exception);
             WishPlanStore.fail(player.server, sessionId, acceptedError);
             WishPipelineAudit.failure(sessionId,"SERVER_PLAN_VALIDATION",acceptedError.name(),exception.getMessage());
-            player.sendSystemMessage(Component.translatable("message.wishing_willow.technical_failure"));
+            sendPlanningFailure(player, sessionId);
         }
     }
 
@@ -595,6 +609,18 @@ public final class WishManager {
         ModNetworking.sendToPlayer(player, new WishOmenPacket(WishOmenGenerator.generate(
                 sessionId, finalRecord.interpretation(), finalRecord.plan()
         )));
+    }
+
+    private static void sendPlanningFailure(ServerPlayer player, UUID sessionId) {
+        player.sendSystemMessage(Component.translatable("message.wishing_willow.planning_failed"));
+        if (!FMLEnvironment.production) {
+            var debug = WishAgentDebugStore.latest(player.getUUID());
+            if (debug != null && debug.sessionId().equals(sessionId)) {
+                player.sendSystemMessage(Component.literal("Planning diagnostics: mode=" + debug.mode()
+                        + " state=" + debug.state() + " fallback=" + debug.fallbackReason()
+                        + " finalization=" + debug.finalizationState()));
+            }
+        }
     }
 
     private static boolean fallbackEligible(WishExecutionAcceptError error){

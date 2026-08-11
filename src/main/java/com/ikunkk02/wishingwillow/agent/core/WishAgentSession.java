@@ -26,13 +26,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
 /** Mutable state of one agent invocation; all frozen inputs are immutable snapshots. */
 public final class WishAgentSession {
-    public static final int MAX_ITERATIONS = 16;
-    public static final int MAX_TOTAL_TOOL_CALLS = 48;
+    public static final int MAX_ITERATIONS = 8;
+    public static final int MAX_TOTAL_TOOL_CALLS = 20;
     public static final int MAX_RAW_STEPS = 512;
-    public static final Duration MAX_DURATION = Duration.ofMinutes(5);
+    public static final Duration MAX_DURATION = Duration.ofSeconds(60);
 
     private final UUID sessionId;
     private final String originalWish;
@@ -44,6 +45,7 @@ public final class WishAgentSession {
     private final ExecutionSettingsSnapshot executionSettingsSnapshot;
     private final MinecraftToolPlatform platform;
     private final BooleanSupplier cancelled;
+    private final Consumer<WishAgentDebugSnapshot> debugListener;
     private final Instant startedAt = Instant.now();
     private final List<WishPlanStep> steps = new ArrayList<>();
     private final Map<String, CapabilityCandidate> candidates = new LinkedHashMap<>();
@@ -57,14 +59,28 @@ public final class WishAgentSession {
     private WishPlanningMode mode = WishPlanningMode.AGENT_TOOL_MODE;
     private WishVerificationState verificationState = WishVerificationState.NOT_VERIFIED;
     private WishFinalizationState finalizationState = WishFinalizationState.NOT_ATTEMPTED;
+    private WishAgentDebugState debugState = WishAgentDebugState.AGENT_STARTED;
+    private WishAgentFallbackReason fallbackReason = WishAgentFallbackReason.NONE;
+    private String lastTool = "";
+    private String lastToolStatus = "";
     private boolean skillActivated;
 
     public WishAgentSession(UUID sessionId, String originalWish, WishInterpretation interpretation,
                             WishContextSnapshot context, RegistrySnapshot registrySnapshot,
                             KnowledgeBaseSnapshot knowledgeBaseSnapshot,
                             ExecutionSettingsSnapshot executionSettingsSnapshot,
+                             CapabilityCatalog initialCatalog, MinecraftToolPlatform platform,
+                             BooleanSupplier cancelled) {
+        this(sessionId, originalWish, interpretation, context, registrySnapshot, knowledgeBaseSnapshot,
+                executionSettingsSnapshot, initialCatalog, platform, cancelled, ignored -> { });
+    }
+
+    public WishAgentSession(UUID sessionId, String originalWish, WishInterpretation interpretation,
+                            WishContextSnapshot context, RegistrySnapshot registrySnapshot,
+                            KnowledgeBaseSnapshot knowledgeBaseSnapshot,
+                            ExecutionSettingsSnapshot executionSettingsSnapshot,
                             CapabilityCatalog initialCatalog, MinecraftToolPlatform platform,
-                            BooleanSupplier cancelled) {
+                            BooleanSupplier cancelled, Consumer<WishAgentDebugSnapshot> debugListener) {
         this.sessionId = java.util.Objects.requireNonNull(sessionId);
         this.originalWish = java.util.Objects.requireNonNullElse(originalWish, "");
         this.interpretation = java.util.Objects.requireNonNull(interpretation);
@@ -75,6 +91,7 @@ public final class WishAgentSession {
         this.executionSettingsSnapshot = java.util.Objects.requireNonNull(executionSettingsSnapshot);
         this.platform = java.util.Objects.requireNonNull(platform);
         this.cancelled = cancelled == null ? () -> false : cancelled;
+        this.debugListener = debugListener == null ? ignored -> { } : debugListener;
         if (initialCatalog != null) initialCatalog.candidates().forEach(this::addCandidate);
     }
 
@@ -93,11 +110,17 @@ public final class WishAgentSession {
     public synchronized WishPlanningMode mode() { return mode; }
     public synchronized WishVerificationState verificationState() { return verificationState; }
     public synchronized WishFinalizationState finalizationState() { return finalizationState; }
+    public synchronized WishAgentFallbackReason fallbackReason() { return fallbackReason; }
     public synchronized boolean skillActivated() { return skillActivated; }
     public synchronized List<ToolCallHistoryEntry> history() { return List.copyOf(history); }
     public synchronized Set<String> discoveredTools() { return Set.copyOf(discoveredTools); }
     public boolean cancelled() { return cancelled.getAsBoolean(); }
     public boolean timedOut() { return Duration.between(startedAt, Instant.now()).compareTo(MAX_DURATION) > 0; }
+    public Duration remainingDuration() {
+        Duration remaining = MAX_DURATION.minus(Duration.between(startedAt, Instant.now()));
+        return remaining.isNegative() || remaining.isZero() ? Duration.ofMillis(1) : remaining;
+    }
+    public long elapsedMs() { return Math.max(0L, Duration.between(startedAt, Instant.now()).toMillis()); }
 
     public synchronized boolean beginIteration() {
         if (iterations >= MAX_ITERATIONS || cancelled() || timedOut()) return false;
@@ -114,7 +137,29 @@ public final class WishAgentSession {
     public synchronized void activateSkill() { skillActivated = true; }
     public synchronized void setMode(WishPlanningMode value) { mode = value; }
     public synchronized void discover(String tool) { if (tool != null && !tool.isBlank()) discoveredTools.add(tool); }
-    public synchronized void record(ToolCallHistoryEntry entry) { history.add(entry); }
+    public synchronized void record(ToolCallHistoryEntry entry) {
+        history.add(entry);
+        lastTool = entry.toolName();
+        lastToolStatus = entry.status().name() + "/" + entry.code();
+    }
+
+    public synchronized void markToolCalled(String tool) {
+        lastTool = tool == null ? "" : tool;
+        lastToolStatus = "RUNNING";
+    }
+
+    public synchronized void markFallbackReason(WishAgentFallbackReason reason) {
+        if (reason != null && reason != WishAgentFallbackReason.NONE) fallbackReason = reason;
+    }
+
+    public void publish(WishAgentDebugState state) {
+        WishAgentDebugSnapshot snapshot;
+        synchronized (this) {
+            debugState = java.util.Objects.requireNonNull(state);
+            snapshot = debugSnapshotLocked();
+        }
+        debugListener.accept(snapshot);
+    }
 
     public synchronized CapabilityCandidate candidate(String candidateId) { return candidates.get(candidateId); }
     public synchronized List<CapabilityCandidate> candidates() { return List.copyOf(candidates.values()); }
@@ -178,8 +223,12 @@ public final class WishAgentSession {
     public synchronized void markFinalization(WishFinalizationState state) { finalizationState = state; }
 
     public synchronized WishAgentDebugSnapshot debugSnapshot() {
-        return new WishAgentDebugSnapshot(sessionId, mode, iterations, toolCallCount,
+        return debugSnapshotLocked();
+    }
+
+    private WishAgentDebugSnapshot debugSnapshotLocked() {
+        return new WishAgentDebugSnapshot(sessionId, mode, debugState, iterations, toolCallCount,
                 history.stream().map(ToolCallHistoryEntry::toolName).distinct().toList(),
-                verificationState, finalizationState);
+                lastTool, lastToolStatus, verificationState, finalizationState, fallbackReason, elapsedMs());
     }
 }
