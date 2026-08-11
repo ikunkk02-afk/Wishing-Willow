@@ -7,9 +7,14 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import java.util.Locale;
+
 public final class MusicSettingsScreen extends Screen {
     private final Screen parent;
-    public MusicSettingsScreen(Screen parent) { super(Component.literal("Wishing Willow Experience")); this.parent = parent; }
+    public MusicSettingsScreen(Screen parent) {
+        super(Component.translatable("screen.wishing_willow.music.title"));
+        this.parent = parent;
+    }
 
     @Override protected void init() {
         int width = Math.min(280, this.width - 24), x = (this.width - width) / 2, y = Math.max(28, this.height / 2 - 76);
@@ -29,22 +34,31 @@ public final class MusicSettingsScreen extends Screen {
             WishingWillowClientConfig.MUSIC_VOLUME.set(next); if (next == 0) WishingWillowMusicController.clear();
             save(); button.setMessage(volumeLabel());
         }, x, y + 52, width, 20));
-        addRenderableWidget(RetroButton.create(toggleLabel("Trade reveal music", WishingWillowClientConfig.TRADE_REVEAL_MUSIC.get()), button -> {
+        addRenderableWidget(RetroButton.create(toggleLabel("trade", WishingWillowClientConfig.TRADE_REVEAL_MUSIC.get()), button -> {
             WishingWillowClientConfig.TRADE_REVEAL_MUSIC.set(!WishingWillowClientConfig.TRADE_REVEAL_MUSIC.get());
-            save(); button.setMessage(toggleLabel("Trade reveal music", WishingWillowClientConfig.TRADE_REVEAL_MUSIC.get()));
+            save(); button.setMessage(toggleLabel("trade", WishingWillowClientConfig.TRADE_REVEAL_MUSIC.get()));
         }, x, y + 78, width, 20));
-        addRenderableWidget(RetroButton.create(toggleLabel("Wish sequence music", WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get()), button -> {
+        addRenderableWidget(RetroButton.create(toggleLabel("wish", WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get()), button -> {
             WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.set(!WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get());
             if (!WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get()) WishingWillowMusicController.clear();
-            save(); button.setMessage(toggleLabel("Wish sequence music", WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get()));
+            save(); button.setMessage(toggleLabel("wish", WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get()));
         }, x, y + 104, width, 20));
         addRenderableWidget(RetroButton.create(Component.translatable("gui.done"), button -> onClose(), x, y + 136, width, 20));
     }
 
-    private static Component modeLabel() { return Component.literal("Wish Fulfillment Mode: " + WishingWillowClientConfig.FULFILLMENT_MODE.get()); }
-    private static Component masterLabel() { return toggleLabel("Cinematic soundtrack", WishingWillowClientConfig.CINEMATIC_MUSIC.get()); }
-    private static Component volumeLabel() { return Component.literal("Music volume: " + WishingWillowClientConfig.MUSIC_VOLUME.get() + "%"); }
-    private static Component toggleLabel(String name, boolean value) { return Component.literal(name + ": " + (value ? "ON" : "OFF")); }
+    private static Component modeLabel() {
+        String mode = WishingWillowClientConfig.FULFILLMENT_MODE.get().name().toLowerCase(Locale.ROOT);
+        return Component.translatable("screen.wishing_willow.music.mode",
+                Component.translatable("screen.wishing_willow.music.mode." + mode));
+    }
+    private static Component masterLabel() { return toggleLabel("cinematic", WishingWillowClientConfig.CINEMATIC_MUSIC.get()); }
+    private static Component volumeLabel() {
+        return Component.translatable("screen.wishing_willow.music.volume", WishingWillowClientConfig.MUSIC_VOLUME.get());
+    }
+    private static Component toggleLabel(String name, boolean value) {
+        return Component.translatable("screen.wishing_willow.music." + name,
+                Component.translatable("screen.wishing_willow.music." + (value ? "on" : "off")));
+    }
     private static void save() { WishingWillowClientConfig.SPEC.save(); }
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         RetroUiTheme.drawBackdrop(graphics); RetroUiTheme.drawHeader(graphics, font, title, width / 2, 10);

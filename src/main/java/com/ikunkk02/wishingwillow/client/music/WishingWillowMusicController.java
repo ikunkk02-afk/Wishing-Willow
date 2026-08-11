@@ -17,6 +17,7 @@ public final class WishingWillowMusicController {
     public static final WishMusicCueConfig CUES = WishMusicCueConfig.UNALIGNED;
     private static FadingMusicSoundInstance active;
     private static int activeTicks;
+    private static boolean activeObserved;
 
     private WishingWillowMusicController() {}
     public static WishMusicState state() { return MACHINE.state(); }
@@ -36,9 +37,20 @@ public final class WishingWillowMusicController {
         WishMusicSettingsSnapshot settings = new WishMusicSettingsSnapshot(
                 WishingWillowClientConfig.CINEMATIC_MUSIC.get(), WishingWillowClientConfig.MUSIC_VOLUME.get(),
                 WishingWillowClientConfig.TRADE_REVEAL_MUSIC.get(), WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get());
-        if (!settings.canPlay(scene, minecraft.options.getSoundSourceVolume(SoundSource.MUSIC))) return;
+        float minecraftMusicVolume = minecraft.options.getSoundSourceVolume(SoundSource.MUSIC);
+        if (!settings.canPlay(scene, minecraftMusicVolume)) {
+            WishingWillow.LOGGER.info("Cinematic music skipped: scene={}, enabled={}, configuredVolume={}%, minecraftMusicVolume={}",
+                    scene, settings.enabled(), settings.volumePercent(), minecraftMusicVolume);
+            return;
+        }
         WishMusicStateMachine.Action action = MACHINE.start(scene);
         if (action == WishMusicStateMachine.Action.NONE) return;
+        if (action == WishMusicStateMachine.Action.CONTINUE && active != null && !active.isStopped()) {
+            active.continueFromCurrentPosition(20);
+            WishingWillow.LOGGER.info("Cinematic music continued without restart: scene={}, event={}",
+                    scene, active.getLocation());
+            return;
+        }
         if (active != null) minecraft.getSoundManager().stop(active);
         minecraft.getMusicManager().stopPlaying();
         active = new FadingMusicSoundInstance(scene == WishMusicScene.WISH_SEQUENCE
@@ -46,7 +58,10 @@ public final class WishingWillowMusicController {
                 WishingWillowClientConfig.MUSIC_VOLUME.get() / 100.0F,
                 scene == WishMusicScene.WISH_SEQUENCE, 40);
         activeTicks = 0;
+        activeObserved = false;
         minecraft.getSoundManager().play(active);
+        WishingWillow.LOGGER.info("Cinematic music requested: scene={}, event={}, configuredVolume={}%, minecraftMusicVolume={}",
+                scene, active.getLocation(), settings.volumePercent(), minecraftMusicVolume);
     }
 
     @SubscribeEvent public static void onTick(TickEvent.ClientTickEvent event) {
@@ -55,13 +70,27 @@ public final class WishingWillowMusicController {
         if (minecraft.player == null || minecraft.level == null || minecraft.player.isDeadOrDying()) {
             clear(); return;
         }
-        if (active != null) activeTicks++;
+        boolean soundActive = false;
+        if (active != null) {
+            activeTicks++;
+            soundActive = minecraft.getSoundManager().isActive(active);
+            if (soundActive && !activeObserved) {
+                WishingWillow.LOGGER.info("Cinematic music source active: scene={}, event={}",
+                        MACHINE.scene(), active.getLocation());
+            }
+            activeObserved |= soundActive;
+        }
         if (MACHINE.tick() == WishMusicStateMachine.Action.BEGIN_FADE && active != null) {
             active.fadeOut(MACHINE.fadeTicks());
         }
         if (active != null && (active.isStopped()
-                || activeTicks > 2 && !minecraft.getSoundManager().isActive(active))) {
-            active = null; MACHINE.stopped(); activeTicks = 0;
+                || activeObserved && !soundActive
+                || !activeObserved && activeTicks > 200)) {
+            if (!activeObserved && activeTicks > 200) {
+                WishingWillow.LOGGER.warn("Cinematic music source did not become active within 10 seconds: event={}",
+                        active.getLocation());
+            }
+            active = null; MACHINE.stopped(); activeTicks = 0; activeObserved = false;
         }
     }
 
@@ -69,6 +98,6 @@ public final class WishingWillowMusicController {
 
     public static void clear() {
         if (active != null) Minecraft.getInstance().getSoundManager().stop(active);
-        active = null; activeTicks = 0; MACHINE.stopped();
+        active = null; activeTicks = 0; activeObserved = false; MACHINE.stopped();
     }
 }

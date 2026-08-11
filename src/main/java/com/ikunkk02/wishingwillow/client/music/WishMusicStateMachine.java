@@ -2,7 +2,7 @@ package com.ikunkk02.wishingwillow.client.music;
 
 /** Pure state machine used by the client controller and unit tests. */
 public final class WishMusicStateMachine {
-    public enum Action { NONE, START, REPLACE, BEGIN_FADE, STOP }
+    public enum Action { NONE, START, CONTINUE, REPLACE, BEGIN_FADE, STOP }
     private WishMusicState state = WishMusicState.NONE;
     private WishMusicScene scene;
     private int holdTicks;
@@ -15,7 +15,9 @@ public final class WishMusicStateMachine {
     public Action start(WishMusicScene requested) {
         if (scene == requested && state != WishMusicState.NONE) return Action.NONE;
         if (scene == WishMusicScene.WISH_SEQUENCE && requested == WishMusicScene.TRADE_REVEAL) return Action.NONE;
-        Action action = scene == null ? Action.START : Action.REPLACE;
+        boolean seamlessUpgrade = scene == WishMusicScene.TRADE_REVEAL
+                && requested == WishMusicScene.WISH_SEQUENCE;
+        Action action = seamlessUpgrade ? Action.CONTINUE : scene == null ? Action.START : Action.REPLACE;
         scene = requested;
         state = requested == WishMusicScene.WISH_SEQUENCE ? WishMusicState.WISH_SEQUENCE : WishMusicState.TRADE_REVEAL;
         holdTicks = fadeTicks = 0;

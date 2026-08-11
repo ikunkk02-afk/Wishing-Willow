@@ -45,7 +45,13 @@ public final class RetroUiTheme {
     public static void drawHeader(GuiGraphics graphics, Font font, Component title, int centerX, int y) {
         int width = font.width(title);
         graphics.fill(centerX - width / 2 - 12, y - 3, centerX + width / 2 + 12, y + 11, OXBLOOD);
-        graphics.drawCenteredString(font, title, centerX, y, CREAM);
+        drawCenteredText(graphics, font, title, centerX, y, CREAM);
+    }
+
+    /** Draws crisp pixel text without Minecraft's default one-pixel drop shadow. */
+    public static void drawCenteredText(GuiGraphics graphics, Font font, Component text,
+                                        int centerX, int y, int color) {
+        graphics.drawString(font, text, centerX - font.width(text) / 2, y, color, false);
     }
 
     public static void drawStatusBadge(GuiGraphics graphics, Font font, Component text,
@@ -63,8 +69,8 @@ public final class RetroUiTheme {
                                       int x, int y, int width) {
         graphics.fill(x, y, x + width, y + 28, 0xFFE7D2A4);
         graphics.renderOutline(x, y, width, 28, STATUS_WARN);
-        graphics.drawCenteredString(font, line1, x + width / 2, y + 5, OXBLOOD_DARK);
-        graphics.drawCenteredString(font, line2, x + width / 2, y + 16, MUTED_INK);
+        drawCenteredText(graphics, font, line1, x + width / 2, y + 5, OXBLOOD_DARK);
+        drawCenteredText(graphics, font, line2, x + width / 2, y + 16, MUTED_INK);
     }
 
     private static void drawStar(GuiGraphics graphics, int x, int y) {

@@ -29,7 +29,7 @@ public final class WishingWillowSettingsScreen extends Screen {
                 Component.translatable("screen.wishing_willow.settings.knowledge"),
                 Component.translatable("screen.wishing_willow.settings.research"),
                 Component.translatable("screen.wishing_willow.settings.execution"),
-                Component.literal("Wish & Cinematic Music")
+                Component.translatable("screen.wishing_willow.settings.music")
         };
         net.minecraft.client.gui.components.Button.OnPress[] actions = new net.minecraft.client.gui.components.Button.OnPress[]{
                 button -> minecraft.setScreen(new AiSettingsScreen(this)),

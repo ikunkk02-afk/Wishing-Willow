@@ -31,7 +31,7 @@ public final class RetroButton extends Button {
                     RetroUiTheme.OXBLOOD);
         }
         int textColor = active ? RetroUiTheme.INK : 0xFF786F5E;
-        graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(),
+        RetroUiTheme.drawCenteredText(graphics, Minecraft.getInstance().font, getMessage(),
                 getX() + width / 2, getY() + (height - 8) / 2 + yOffset, textColor);
     }
 
