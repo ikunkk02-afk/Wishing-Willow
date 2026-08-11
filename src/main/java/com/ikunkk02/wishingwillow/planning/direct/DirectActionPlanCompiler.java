@@ -8,6 +8,8 @@ import com.ikunkk02.wishingwillow.ai.WishFulfillmentMode;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.contract.WishContractValidationState;
 import com.ikunkk02.wishingwillow.contract.WishContractValidator;
+import com.ikunkk02.wishingwillow.contract.WishConstraintKind;
+import com.ikunkk02.wishingwillow.contract.WishContractType;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
 import com.ikunkk02.wishingwillow.execution.WishActionPolicy;
@@ -20,6 +22,7 @@ import com.ikunkk02.wishingwillow.research.VerifiedRegistryResource;
 import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
 import net.minecraft.resources.ResourceLocation;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
@@ -146,25 +149,37 @@ public final class DirectActionPlanCompiler {
         }
         if (direct.type() == WishActionType.FALLING_BLOCK_SHOWER) {
             if (direct.target() != DirectWishTarget.SELF && direct.target() != DirectWishTarget.AREA) {
-                throw invalid(WishPlanError.INVALID_PARAMETER);
+                throw invalid(WishPlanError.INVALID_PARAMETER,
+                        "falling_block_shower.target_must_be_self_or_area");
             }
-            if (!parameters.keySet().equals(Set.of("count", "spawn_height", "radius",
-                    "interval_ticks", "landing_mode", "spread"))) {
-                throw invalid(WishPlanError.INVALID_PARAMETER);
+            Set<String> allowed = Set.of("count", "spawn_height", "radius", "interval_ticks",
+                    "landing_mode", "spread");
+            if (!allowed.containsAll(parameters.keySet())) {
+                throw invalid(WishPlanError.INVALID_PARAMETER,
+                        "falling_block_shower.unexpected_parameters="
+                                + parameters.keySet().stream().filter(key -> !allowed.contains(key)).toList());
             }
-            int count = exactInteger(parameters, "count");
-            int height = exactInteger(parameters, "spawn_height");
-            int radius = exactInteger(parameters, "radius");
-            int interval = exactInteger(parameters, "interval_ticks");
-            String landing = string(parameters, "landing_mode");
-            String spread = string(parameters, "spread");
-            if (count < 1 || count > WishPlanBudget.MAX_FALLING_BLOCKS
-                    || height < 8 || height > 64 || radius < 1 || radius > 32
-                    || interval < 1 || interval > 20
-                    || !Set.of("PLACE", "DROP_ITEM", "PLACE_OR_DROP", "DELIVER_TO_PLAYER").contains(landing)
-                    || !"RANDOM".equals(spread)) {
-                throw invalid(WishPlanError.INVALID_PARAMETER);
+            int count = integralNumber(parameters, "count", -1);
+            int minimum = interpretation.contract().quantity(WishConstraintKind.MINIMUM_QUANTITY).orElse(1);
+            count = Math.max(count, minimum);
+            if (count < 1) {
+                throw invalid(WishPlanError.INVALID_PARAMETER,
+                        "falling_block_shower.count_must_be_a_positive_integer");
             }
+            if (count > WishPlanBudget.MAX_FALLING_BLOCKS) {
+                throw invalid(WishPlanError.BUDGET_EXCEEDED,
+                        "falling_block_shower.count_exceeds_" + WishPlanBudget.MAX_FALLING_BLOCKS);
+            }
+            int height = clamp(integralNumber(parameters, "spawn_height", 28), 8, 64);
+            int radius = clamp(integralNumber(parameters, "radius", 10), 1, 32);
+            int interval = clamp(integralNumber(parameters, "interval_ticks", 2), 1, 20);
+            String defaultLanding = interpretation.contract().type() == WishContractType.OBTAIN_RESOURCE
+                    || interpretation.contract().requires(WishConstraintKind.PLAYER_ACCESSIBLE)
+                    ? "DELIVER_TO_PLAYER" : "PLACE_OR_DROP";
+            String landing = enumParameter(parameters, "landing_mode", defaultLanding,
+                    Set.of("PLACE", "DROP_ITEM", "PLACE_OR_DROP", "DELIVER_TO_PLAYER"));
+            String spread = enumParameter(parameters, "spread", "RANDOM", Set.of("RANDOM"));
+            parameters = fallingBlockParameters(count, height, radius, interval, landing, spread);
             if (WishSemanticRecipeRegistry.resolve(interpretation).isPresent()
                     && !WishSemanticRecipeRegistry.proves(interpretation, direct.type())) {
                 throw invalid(WishPlanError.UNSUPPORTED_ACTION);
@@ -258,6 +273,44 @@ public final class DirectActionPlanCompiler {
         }
     }
 
+    /** Canonicalizes provider numbers such as JSON {@code 10.0} when they are mathematically integral. */
+    private static int integralNumber(JsonObject object, String name, int defaultValue) {
+        if (!object.has(name)) return defaultValue;
+        try {
+            if (!object.get(name).isJsonPrimitive() || !object.get(name).getAsJsonPrimitive().isNumber()) {
+                throw invalid(WishPlanError.INVALID_PARAMETER,
+                        "falling_block_shower." + name + "_must_be_an_integer");
+            }
+            return new BigDecimal(object.get(name).getAsString()).intValueExact();
+        } catch (ArithmeticException | NumberFormatException error) {
+            throw invalid(WishPlanError.INVALID_PARAMETER,
+                    "falling_block_shower." + name + "_must_be_an_integer");
+        }
+    }
+
+    private static String enumParameter(JsonObject object, String name, String defaultValue,
+                                        Set<String> allowed) {
+        if (!object.has(name)) return defaultValue;
+        String value = string(object, name).strip().toUpperCase(java.util.Locale.ROOT);
+        return allowed.contains(value) ? value : defaultValue;
+    }
+
+    private static JsonObject fallingBlockParameters(int count, int height, int radius, int interval,
+                                                      String landing, String spread) {
+        JsonObject canonical = new JsonObject();
+        canonical.addProperty("count", count);
+        canonical.addProperty("spawn_height", height);
+        canonical.addProperty("radius", radius);
+        canonical.addProperty("interval_ticks", interval);
+        canonical.addProperty("landing_mode", landing);
+        canonical.addProperty("spread", spread);
+        return canonical;
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
     private static String string(JsonObject object, String name) {
         try { return object.has(name) ? object.get(name).getAsString() : ""; }
         catch (RuntimeException ignored) { return ""; }
@@ -265,6 +318,10 @@ public final class DirectActionPlanCompiler {
 
     private static IllegalArgumentException invalid(WishPlanError error) {
         return new IllegalArgumentException(error.name());
+    }
+
+    private static IllegalArgumentException invalid(WishPlanError error, String detail) {
+        return new IllegalArgumentException(error.name() + "|" + detail);
     }
 
     private record Timing(WishStepTiming timing, int delay, WishTriggerType trigger) {}

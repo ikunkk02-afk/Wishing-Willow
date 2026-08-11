@@ -111,6 +111,11 @@ final class DirectActionJson {
                 for fall_from_sky, rain_from_sky, drop_from_above, block_rain, and gravity_delivery semantics.
                 If the player must obtain the blocks, use landing_mode DELIVER_TO_PLAYER. This still creates every
                 real FallingBlockEntity and only guarantees the corresponding BlockItem after its physical landing.
+                FALLING_BLOCK_SHOWER uses target SELF or AREA, a BLOCK registry resource, and parameters:
+                count (integer 1-256), spawn_height (integer 8-64), radius (integer 1-32), interval_ticks
+                (integer 1-20), landing_mode (PLACE, DROP_ITEM, PLACE_OR_DROP, or DELIVER_TO_PLAYER), and spread
+                RANDOM. Safe defaults are 28, 10, 2, DELIVER_TO_PLAYER, and RANDOM. Do not add parameters from
+                another action type. Presentation tuning is server-canonicalized and clamped to its safe range.
                 Never substitute GIVE_ITEM plus particles for a requested physical fall. SPAWN_ENTITY does not prove
                 entity rain; if no matching controlled action exists, return COMPLEX_AGENT/unsupported.
                 Prefer particles, sounds, and theatrical presentation. Never replace the requested item, state,
@@ -148,9 +153,10 @@ final class DirectActionJson {
 
     static String repairMessage(String originalWish, WishInterpretation interpretation,
                                 RegistrySnapshot registry, ExecutionSettingsSnapshot settings,
-                                String error, String invalid) {
+                                String error, String detail, String invalid) {
         JsonObject repair = new JsonObject();
         repair.addProperty("validation_error", clean(error, 96));
+        repair.addProperty("validation_detail", clean(detail, 160));
         repair.addProperty("invalid_response_untrusted", clean(invalid, 8192));
         return userMessage(originalWish, interpretation, registry, settings)
                 + "\n<REPAIR_THIS_RESPONSE_ONCE>\n" + GSON.toJson(repair)

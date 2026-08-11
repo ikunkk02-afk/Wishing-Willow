@@ -92,16 +92,18 @@ public final class DirectWishActionPlanner {
                         "direct_dsl_cannot_prove_contract", attempt));
             }
             if (attempt >= MAX_ATTEMPTS) {
-                WishingWillow.LOGGER.warn("Direct action validation state=FAILED error={} attempts={}",
-                        error, attempt);
+                WishingWillow.LOGGER.warn("Direct action validation state=FAILED error={} detail={} attempts={}",
+                        error, validationDetail(invalid), attempt);
                 return CompletableFuture.completedFuture(DirectActionPlanningResult.failed(error,
-                        clean(invalid.getMessage(), 96), attempt));
+                        validationDetail(invalid), attempt));
             }
-            WishingWillow.LOGGER.info("Direct action repair started error={} attempt=2", error);
+            WishingWillow.LOGGER.info("Direct action repair started error={} detail={} attempt=2", error,
+                    validationDetail(invalid));
             AiRequest repair = new AiRequest(DirectActionJson.systemPrompt()
                     + "\nRepair exactly the named validation error. Preserve the same core outcome. Return JSON only.",
                     DirectActionJson.repairMessage(originalWish, interpretation, registry, settings,
-                            error.name(), raw), 2200, AiOutputMode.JSON_SCHEMA, DirectActionJson.schema());
+                            error.name(), validationDetail(invalid), raw), 2200,
+                    AiOutputMode.JSON_SCHEMA, DirectActionJson.schema());
             return provider.complete(repair).orTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS).handle((response, providerError) -> {
                 if (providerError != null || response == null) {
                     return CompletableFuture.completedFuture(failedProvider(providerError, 2));
@@ -123,8 +125,17 @@ public final class DirectWishActionPlanner {
     }
 
     private static WishPlanError planError(IllegalArgumentException error) {
-        try { return WishPlanError.valueOf(error.getMessage()); }
+        String message = error.getMessage();
+        String code = message == null ? "" : message.split("\\|", 2)[0];
+        try { return WishPlanError.valueOf(code); }
         catch (RuntimeException ignored) { return WishPlanError.INVALID_JSON; }
+    }
+
+    private static String validationDetail(IllegalArgumentException error) {
+        String message = error.getMessage();
+        if (message == null || message.isBlank()) return "validation_failed";
+        int separator = message.indexOf('|');
+        return clean(separator < 0 ? message : message.substring(separator + 1), 160);
     }
 
     private static Throwable root(Throwable error) {

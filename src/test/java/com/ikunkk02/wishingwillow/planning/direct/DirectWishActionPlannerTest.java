@@ -35,6 +35,47 @@ class DirectWishActionPlannerTest {
         assertTrue(result.compiled().directActions().contains("CORE:GIVE_ITEM"));
     }
 
+    @Test void fallingBlockShowerCanonicalizesProviderTuningInsteadOfRejectingTheWish() {
+        QueueProvider provider = new QueueProvider(json("""
+                {"type":"FALLING_BLOCK_SHOWER","target":"SELF","resource":"minecraft:diamond_block",
+                 "parameters":{"count":64,"spawn_height":100,"radius":10.0,"interval_ticks":0,
+                 "landing_mode":"deliver_to_player","spread":"random"}}
+                """, "CINEMATIC", 85, ""));
+
+        DirectActionPlanningResult result = plan(provider, resourceWish("diamond_block", 64));
+
+        assertEquals(DirectActionPlanningResult.State.SUCCESS, result.state());
+        assertEquals(1, provider.calls, "safe presentation tuning must not consume the repair attempt");
+        WishPlanStep shower = result.compiled().draft().steps().stream()
+                .filter(step -> step.action() == WishActionType.FALLING_BLOCK_SHOWER)
+                .findFirst().orElseThrow();
+        assertEquals(64, shower.parameters().get("count").getAsInt());
+        assertEquals(64, shower.parameters().get("spawn_height").getAsInt());
+        assertEquals(10, shower.parameters().get("radius").getAsInt());
+        assertEquals(1, shower.parameters().get("interval_ticks").getAsInt());
+        assertEquals("DELIVER_TO_PLAYER", shower.parameters().get("landing_mode").getAsString());
+        assertEquals("RANDOM", shower.parameters().get("spread").getAsString());
+    }
+
+    @Test void fallingBlockShowerFillsSafeDefaultsFromTheStructuredContract() {
+        QueueProvider provider = new QueueProvider(json("""
+                {"type":"FALLING_BLOCK_SHOWER","target":"SELF","resource":"minecraft:diamond_block",
+                 "parameters":{}}
+                """, "CINEMATIC", 85, ""));
+
+        DirectActionPlanningResult result = plan(provider, resourceWish("diamond_block", 64));
+
+        assertEquals(DirectActionPlanningResult.State.SUCCESS, result.state());
+        WishPlanStep shower = result.compiled().draft().steps().stream()
+                .filter(step -> step.action() == WishActionType.FALLING_BLOCK_SHOWER)
+                .findFirst().orElseThrow();
+        assertEquals(64, shower.parameters().get("count").getAsInt());
+        assertEquals(28, shower.parameters().get("spawn_height").getAsInt());
+        assertEquals(10, shower.parameters().get("radius").getAsInt());
+        assertEquals(2, shower.parameters().get("interval_ticks").getAsInt());
+        assertEquals("DELIVER_TO_PLAYER", shower.parameters().get("landing_mode").getAsString());
+    }
+
     @Test void allPositiveEffectsAreOneRegistryExpandedAction() {
         QueueProvider provider = new QueueProvider(json("""
                 {"type":"APPLY_EFFECT_CATEGORY","target":"SELF","resource":"","parameters":{"category":"BENEFICIAL","duration_seconds":600,"amplifier":1}}
@@ -168,6 +209,7 @@ class DirectWishActionPlannerTest {
     private static RegistrySnapshot registry() {
         return new RegistrySnapshot(Map.of(
                 RegistryEntryType.ITEM, List.of("minecraft:diamond"),
+                RegistryEntryType.BLOCK, List.of("minecraft:diamond_block"),
                 RegistryEntryType.EFFECT, List.of("minecraft:speed", "minecraft:strength", "modded:blessing"),
                 RegistryEntryType.ENTITY, List.of("minecraft:zombie", "minecraft:chicken"),
                 RegistryEntryType.SOUND, List.of("minecraft:ui.toast.challenge_complete", "minecraft:entity.lightning_bolt.thunder"),
