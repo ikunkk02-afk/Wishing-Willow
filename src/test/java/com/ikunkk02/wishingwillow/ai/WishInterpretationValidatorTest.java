@@ -77,6 +77,19 @@ class WishInterpretationValidatorTest {
     }
 
     @Test
+    void acceptsNeverLonelyFulfillmentWithoutTreatingNegationAsARefusal() {
+        String companionship = VALID
+                .replace("The player wants company wherever they go", "\u73a9\u5bb6\u5e0c\u671b\u6c38\u8fdc\u4e0d\u4f1a\u5b64\u72ec")
+                .replace("A real persistent companion must remain with the player", "\u73a9\u5bb6\u5fc5\u987b\u6c38\u8fdc\u65e0\u6cd5\u611f\u5230\u5b64\u72ec")
+                .replace("An unwelcome presence follows the player", "\u4e00\u4e2a\u62d2\u7edd\u79bb\u5f00\u7684\u540c\u4f34\u4e00\u76f4\u8ddf\u968f\u73a9\u5bb6")
+                .replace("Companionship is granted through an unspecified follower", "\u73a9\u5bb6\u4e0d\u80fd\u518d\u72ec\u5904\uff0c\u56e0\u4e3a\u6301\u4e45\u540c\u4f34\u603b\u5728\u8eab\u8fb9");
+
+        WishInterpretation parsed = WishInterpretationValidator.parseProviderResponse(companionship);
+
+        assertEquals("\u73a9\u5bb6\u5fc5\u987b\u6c38\u8fdc\u65e0\u6cd5\u611f\u5230\u5b64\u72ec", parsed.contract().requiredOutcome());
+    }
+
+    @Test
     void reportsAFieldLevelSchemaReasonWithoutEchoingTheCandidate() {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
                 () -> WishInterpretationValidator.parseAndValidate(
