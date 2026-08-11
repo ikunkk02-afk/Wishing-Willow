@@ -70,11 +70,13 @@ public final class WishExecutionManager {
             return rejected(wish,WishExecutionAcceptError.INVALID_OWNER,"submitting player does not own wish",server);
         if(wish.plan()==null||!wish.plan().planId().equals(plan.planId()))
             return rejected(wish,WishExecutionAcceptError.INVALID_PLAN,"plan id does not match stored plan",server);
-        if(wish.planState()==WishPlanState.READY&&!plan.unfulfilledCapabilities().isEmpty())
+        int interpretationSchema=wish.interpretation()==null?1:wish.interpretation().schemaVersion();
+        if(WishExecutionPlanPolicy.readyHasBlockingUnfulfilledCapabilities(
+                interpretationSchema,wish.planState(),plan.unfulfilledCapabilities()))
             return rejected(wish,WishExecutionAcceptError.INVALID_PLAN,"READY plan still has unfulfilled capabilities",server);
         if(wish.planState()==WishPlanState.PARTIAL&&(wish.interpretation()==null
-                ||wish.interpretation().requiredCapabilities().isEmpty()
-                ||plan.unfulfilledCapabilities().contains(wish.interpretation().requiredCapabilities().get(0))))
+                ||WishExecutionPlanPolicy.partialMissesPrimaryCapability(wish.planState(),
+                wish.interpretation().requiredCapabilities(),plan.unfulfilledCapabilities())))
             return rejected(wish,WishExecutionAcceptError.INVALID_PLAN,"PARTIAL plan does not cover primary capability",server);
         if(wish.interpretation()!=null){
             var contract=WishContractValidator.validate(wish.interpretation(),plan.steps());

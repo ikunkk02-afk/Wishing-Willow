@@ -3,6 +3,8 @@ package com.ikunkk02.wishingwillow.wish;
 import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
 import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
+import com.ikunkk02.wishingwillow.planning.WishPlanError;
+import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -92,6 +94,19 @@ public final class WishSavedData extends SavedData {
 
     public List<WishRecord> allRecords() {
         return List.copyOf(wishesBySession.values());
+    }
+
+    @Nullable
+    public WishRecord getLatestResumablePlanning(UUID playerId) {
+        return wishesBySession.values().stream()
+                .filter(record -> record.playerId().equals(playerId))
+                .filter(record -> record.interpretationState() == InterpretationState.SUCCESS
+                        && record.interpretation() != null)
+                .filter(record -> record.planState() == WishPlanState.FAILED
+                        && record.planError() == WishPlanError.DISCONNECTED
+                        && record.plan() == null && record.executionId() == null)
+                .max(Comparator.comparingLong(WishRecord::submittedAtEpochMillis))
+                .orElse(null);
     }
 
     public void failPendingForPlayer(UUID playerId) {

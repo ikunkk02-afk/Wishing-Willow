@@ -43,16 +43,31 @@ class WishInterpreterRepairTest {
     }
 
     @Test
-    void rejectsCandidateWhenTheSingleRepairIsStillInvalid() {
+    void thirdAttemptCanRecoverAfterTwoSchemaInvalidResponses() {
         SequenceProvider provider = new SequenceProvider(
                 VALID.replace("\"IRONIC\"", "\"MISCHIEVOUS\""),
-                VALID.replace("\"IRONIC\"", "\"GREEDY\"")
+                VALID.replace("\"IRONIC\"", "\"GREEDY\""),
+                VALID
         );
         WishInterpretationResult result = new WishInterpreter(config -> provider)
                 .interpret(config(), "我想要十颗钻石").join();
 
+        assertEquals(InterpretationState.SUCCESS, result.state());
+        assertEquals(3, provider.requests.size());
+    }
+
+    @Test
+    void rejectsCandidateOnlyAfterAllThreeSchemaAttemptsFail() {
+        SequenceProvider provider = new SequenceProvider(
+                VALID.replace("\"IRONIC\"", "\"MISCHIEVOUS\""),
+                VALID.replace("\"IRONIC\"", "\"GREEDY\""),
+                VALID.replace("\"IRONIC\"", "\"HOSTILE_COMEDY\"")
+        );
+        WishInterpretationResult result = new WishInterpreter(config -> provider)
+                .interpret(config(), "all buffs").join();
+
         assertEquals(InterpretationState.INVALID_RESPONSE, result.state());
-        assertEquals(2, provider.requests.size());
+        assertEquals(WishInterpreter.MAX_ATTEMPTS, provider.requests.size());
     }
 
     @Test

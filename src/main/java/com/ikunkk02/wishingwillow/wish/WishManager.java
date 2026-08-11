@@ -70,6 +70,7 @@ public final class WishManager {
 
     public static void register() {
         MinecraftForge.EVENT_BUS.addListener(WishManager::onServerTick);
+        MinecraftForge.EVENT_BUS.addListener(WishManager::onPlayerLoggedIn);
         MinecraftForge.EVENT_BUS.addListener(WishManager::onPlayerLoggedOut);
         MinecraftForge.EVENT_BUS.addListener(WishManager::onLivingDeath);
         MinecraftForge.EVENT_BUS.addListener(WishManager::onServerStopping);
@@ -415,6 +416,14 @@ public final class WishManager {
             LAST_SUBMISSIONS.remove(player.getUUID());
             failPlanningForPlayer(player.server, player.getUUID());
         }
+    }
+
+    private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        WishRecord resumable = WishSavedData.get(player.server).getLatestResumablePlanning(player.getUUID());
+        if (resumable == null || resumable.interpretation() == null) return;
+        WishingWillow.LOGGER.info("Wish planning resumed after reconnect session={}", resumable.sessionId());
+        beginPlanning(player, resumable.sessionId(), resumable.interpretation());
     }
 
     private static void onLivingDeath(LivingDeathEvent event) {

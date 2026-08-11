@@ -75,4 +75,13 @@ class WishInterpretationValidatorTest {
                 VALID.replace("\"intent\":\"companionship\"", "\"intent\":\"陪伴\"")
         ));
     }
+
+    @Test
+    void reportsAFieldLevelSchemaReasonWithoutEchoingTheCandidate() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> WishInterpretationValidator.parseAndValidate(
+                        VALID.replace("\"tone\":\"HORROR\"", "\"tone\":\"MYSTERY\"")));
+
+        assertEquals("MALFORMED_RESPONSE:ENUM_tone", error.getMessage());
+    }
 }

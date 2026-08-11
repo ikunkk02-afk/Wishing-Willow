@@ -12,6 +12,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptError;
 import com.ikunkk02.wishingwillow.execution.WishExecutionState;
+import com.ikunkk02.wishingwillow.planning.WishPlanError;
+import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -56,6 +58,22 @@ class WishSavedDataTest {
         WishRecord legacyLoaded=WishRecord.load(legacy);
         assertEquals(WishExecutionAcceptError.NONE,legacyLoaded.executionError());
         assertEquals("",legacyLoaded.executionErrorDetail());
+    }
+
+    @Test
+    void returnsLatestDisconnectedPlanningForReconnectResume() {
+        UUID player = UUID.randomUUID();
+        UUID older = UUID.randomUUID();
+        UUID latest = UUID.randomUUID();
+        WishSavedData data = new WishSavedData();
+        data.update(record(older, player, 100L, InterpretationState.SUCCESS)
+                .withPlanning(WishPlanState.FAILED, WishPlanError.DISCONNECTED, null));
+        data.update(record(latest, player, 200L, InterpretationState.SUCCESS)
+                .withPlanning(WishPlanState.FAILED, WishPlanError.DISCONNECTED, null));
+        data.update(record(UUID.randomUUID(), player, 300L, InterpretationState.SUCCESS)
+                .withPlanning(WishPlanState.FAILED, WishPlanError.INVALID_PARAMETER, null));
+
+        assertEquals(latest, data.getLatestResumablePlanning(player).sessionId());
     }
 
     private static WishRecord record(UUID session, UUID player, long submittedAt, InterpretationState state) {
