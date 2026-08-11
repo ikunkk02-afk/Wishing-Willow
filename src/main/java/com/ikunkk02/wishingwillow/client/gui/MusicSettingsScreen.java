@@ -2,6 +2,8 @@ package com.ikunkk02.wishingwillow.client.gui;
 
 import com.ikunkk02.wishingwillow.ai.WishFulfillmentMode;
 import com.ikunkk02.wishingwillow.client.music.WishingWillowMusicController;
+import com.ikunkk02.wishingwillow.client.cinematic.CinematicFilterIntensity;
+import com.ikunkk02.wishingwillow.client.cinematic.WishingWillowCinematicFilterController;
 import com.ikunkk02.wishingwillow.config.WishingWillowClientConfig;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -17,7 +19,8 @@ public final class MusicSettingsScreen extends Screen {
     }
 
     @Override protected void init() {
-        int width = Math.min(280, this.width - 24), x = (this.width - width) / 2, y = Math.max(28, this.height / 2 - 76);
+        int width = Math.min(280, this.width - 24), x = (this.width - width) / 2,
+                y = Math.max(20, this.height / 2 - 88);
         addRenderableWidget(RetroButton.create(modeLabel(), button -> {
             WishFulfillmentMode current = WishingWillowClientConfig.FULFILLMENT_MODE.get();
             WishFulfillmentMode[] values = WishFulfillmentMode.values();
@@ -43,7 +46,21 @@ public final class MusicSettingsScreen extends Screen {
             if (!WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get()) WishingWillowMusicController.clear();
             save(); button.setMessage(toggleLabel("wish", WishingWillowClientConfig.WISH_SEQUENCE_MUSIC.get()));
         }, x, y + 104, width, 20));
-        addRenderableWidget(RetroButton.create(Component.translatable("gui.done"), button -> onClose(), x, y + 136, width, 20));
+        addRenderableWidget(RetroButton.create(toggleLabel("filter", WishingWillowClientConfig.CINEMATIC_TRADE_FILTER.get()), button -> {
+            WishingWillowClientConfig.CINEMATIC_TRADE_FILTER.set(!WishingWillowClientConfig.CINEMATIC_TRADE_FILTER.get());
+            if (!WishingWillowClientConfig.CINEMATIC_TRADE_FILTER.get()) {
+                WishingWillowCinematicFilterController.clear();
+            }
+            save(); button.setMessage(toggleLabel("filter", WishingWillowClientConfig.CINEMATIC_TRADE_FILTER.get()));
+        }, x, y + 130, width, 20));
+        addRenderableWidget(RetroButton.create(intensityLabel(), button -> {
+            CinematicFilterIntensity current = WishingWillowClientConfig.CINEMATIC_FILTER_INTENSITY.get();
+            CinematicFilterIntensity[] values = CinematicFilterIntensity.values();
+            WishingWillowClientConfig.CINEMATIC_FILTER_INTENSITY.set(
+                    values[(current.ordinal() + 1) % values.length]);
+            save(); button.setMessage(intensityLabel());
+        }, x, y + 156, width, 20));
+        addRenderableWidget(RetroButton.create(Component.translatable("gui.done"), button -> onClose(), x, y + 188, width, 20));
     }
 
     private static Component modeLabel() {
@@ -54,6 +71,12 @@ public final class MusicSettingsScreen extends Screen {
     private static Component masterLabel() { return toggleLabel("cinematic", WishingWillowClientConfig.CINEMATIC_MUSIC.get()); }
     private static Component volumeLabel() {
         return Component.translatable("screen.wishing_willow.music.volume", WishingWillowClientConfig.MUSIC_VOLUME.get());
+    }
+    private static Component intensityLabel() {
+        String intensity = WishingWillowClientConfig.CINEMATIC_FILTER_INTENSITY.get()
+                .name().toLowerCase(Locale.ROOT);
+        return Component.translatable("screen.wishing_willow.music.filter_intensity",
+                Component.translatable("screen.wishing_willow.music.filter_intensity." + intensity));
     }
     private static Component toggleLabel(String name, boolean value) {
         return Component.translatable("screen.wishing_willow.music." + name,

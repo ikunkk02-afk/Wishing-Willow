@@ -12,6 +12,7 @@ import com.ikunkk02.wishingwillow.ai.WishDelivery;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishTone;
 import com.ikunkk02.wishingwillow.client.planning.PlanningDebugController;
+import com.ikunkk02.wishingwillow.client.cinematic.WishingWillowCinematicFilterController;
 import com.ikunkk02.wishingwillow.planning.CapabilityMatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.client.Minecraft;
@@ -36,6 +37,7 @@ public final class ClientSetup {
                 )
         );
         MinecraftForge.EVENT_BUS.addListener(ClientSetup::registerClientCommands);
+        context.getModEventBus().addListener(WishingWillowCinematicFilterController::onRegisterReloadListeners);
         ModResearchManager.getInstance().start();
     }
 
