@@ -214,7 +214,8 @@ public final class WishPlanValidator {
                     WishCapability.FRIENDLY_ENTITY, WishCapability.HOSTILE_ENTITY).contains(capability);
             case CHANGE_REPUTATION -> capability == WishCapability.REPUTATION;
             case START_PREDEFINED_EVENT -> capability == WishCapability.WORLD_EVENT
-                    || capability == WishCapability.MEMORY_RELATED_EVENT;
+                    || capability == WishCapability.MEMORY_RELATED_EVENT
+                    || capability == WishCapability.POWER_BUFF;
         };
     }
 

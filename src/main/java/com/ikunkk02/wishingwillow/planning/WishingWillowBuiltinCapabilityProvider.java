@@ -29,6 +29,7 @@ public final class WishingWillowBuiltinCapabilityProvider {
                 RegistryEntryType.SOUND, "minecraft:ambient.cave", registry, graph, severity);
         addRegistryBuiltin(result, requested, WishingWillowBuiltinCapability.SPAWN_PARTICLE,
                 RegistryEntryType.PARTICLE, "minecraft:smoke", registry, graph, severity);
+        addAllPositiveEffects(result, requested, interpretation, graph, severity);
 
         for (WishingWillowBuiltinCapability builtin : List.of(
                 WishingWillowBuiltinCapability.APPLY_PLAYER_STATE,
@@ -43,7 +44,7 @@ public final class WishingWillowBuiltinCapabilityProvider {
 
         MatchType eventRelation = graph.relation(requested, WishCapability.WORLD_EVENT);
         if (eventRelation != MatchType.UNSATISFIED) {
-            for (String eventId : PredefinedWishEventRegistry.ids()) {
+            for (String eventId : PredefinedWishEventRegistry.worldEventIds()) {
                 int risk = CapabilityMatcher.risk(WishCapability.WORLD_EVENT);
                 result.add(new CapabilityCandidate("", requested, WishCapability.WORLD_EVENT, eventRelation,
                         CandidateSourceKind.MOD_FEATURE, WishingWillow.MOD_ID, "Wishing Willow", "1.0.0",
@@ -55,6 +56,24 @@ public final class WishingWillowBuiltinCapabilityProvider {
             }
         }
         return result;
+    }
+
+    private static void addAllPositiveEffects(List<CapabilityCandidate> result, WishCapability requested,
+                                              WishInterpretation interpretation,
+                                              CapabilityRelationGraph graph, int severity) {
+        if (interpretation.schemaVersion() < 2
+                || !"all_positive_status_effects".equals(interpretation.contract()
+                .semantic(WishConstraintKind.STATE_METRIC).orElse(""))) return;
+        MatchType relation = graph.relation(requested, WishCapability.POWER_BUFF);
+        if (relation == MatchType.UNSATISFIED) return;
+        int risk = CapabilityMatcher.risk(WishCapability.POWER_BUFF);
+        result.add(new CapabilityCandidate("", requested, WishCapability.POWER_BUFF, relation,
+                CandidateSourceKind.MOD_FEATURE, WishingWillow.MOD_ID, "Wishing Willow", "1.0.0",
+                PredefinedWishEventRegistry.ALL_POSITIVE_EFFECTS, FeatureType.PLAYER_SYSTEM, null,
+                "Applies every registered beneficial status effect through a server-whitelisted Forge API event.",
+                KnowledgeLevel.VERIFIED, 1, 1, 0, 100, risk,
+                CapabilityMatcher.score(relation, KnowledgeLevel.VERIFIED, true,
+                        1, 100, 1, severity, risk)));
     }
 
     private static void addContractResources(List<CapabilityCandidate> result, WishCapability requested,

@@ -4,6 +4,7 @@ import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.ai.WishDelivery;
 import com.ikunkk02.wishingwillow.ai.prompt.WishingWillowPrompt;
 import com.ikunkk02.wishingwillow.planning.ai.WishPlannerPrompt;
+import com.ikunkk02.wishingwillow.planning.ai.WishGameToolSkill;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 import org.junit.jupiter.api.Test;
 
@@ -43,5 +44,13 @@ class WishPlannerPromptTest {
         assertFalse(schemaText.contains("plan_id"));
         assertFalse(schemaText.contains("registry_id"));
         assertFalse(java.util.Arrays.stream(WishActionType.values()).map(Enum::name).anyMatch(name->name.contains("COMMAND")||name.equals("JAVA")||name.equals("SHELL")));
+    }
+
+    @Test void bundledSkillTeachesValidatedGameToolCalls(){
+        assertTrue(WishGameToolSkill.TEXT.contains("A plan step is a tool call."));
+        assertTrue(WishGameToolSkill.TEXT.contains("START_PREDEFINED_EVENT"));
+        assertTrue(WishGameToolSkill.TEXT.contains("wishing_willow:all_positive_effects"));
+        assertTrue(WishGameToolSkill.TEXT.contains("Never bypass the Action Registry"));
+        assertTrue(WishPlannerPrompt.SYSTEM_PROMPT.contains(WishGameToolSkill.TEXT));
     }
 }

@@ -24,7 +24,8 @@ import java.util.Map;
 
 public final class WishPlannerPrompt {
     private static final Gson GSON = new Gson();
-    public static final String SYSTEM_PROMPT = WishFulfillmentRules.TEXT + "\n" + """
+    public static final String SYSTEM_PROMPT = WishFulfillmentRules.TEXT + "\n\n"
+            + WishGameToolSkill.TEXT + "\n\n" + """
             You are the Wishing Willow's wish director inside a fictional Minecraft world.
             THE WISH IS SACRED. THE FULFILLMENT METHOD IS NOT.
             The player's requested outcome and every Wish Contract hard constraint are mandatory.

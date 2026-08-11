@@ -13,6 +13,9 @@ import com.ikunkk02.wishingwillow.contract.WishContract;
 import com.ikunkk02.wishingwillow.contract.WishContractType;
 import com.ikunkk02.wishingwillow.contract.WishHardConstraint;
 import com.ikunkk02.wishingwillow.contract.WishContractHasher;
+import com.ikunkk02.wishingwillow.contract.WishContractValidationState;
+import com.ikunkk02.wishingwillow.contract.WishContractValidator;
+import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import com.ikunkk02.wishingwillow.research.FeatureType;
 import com.ikunkk02.wishingwillow.research.KnowledgeBaseSnapshot;
@@ -115,6 +118,42 @@ class NonRefusingFulfillmentTest {
                 PlanningFixtures.catalog(item),PlanningFixtures.environment(true,true));
         assertEquals(WishPlanState.READY,validation.state());
         assertEquals(List.of(WishCapability.BLOCK_CHANGE),validation.unfulfilledCapabilities().stream().toList());
+    }
+
+    @Test void allBuffsSkipSingleEffectsAndDecorationThenUseExactBuiltinTool(){
+        WishContract contract=new WishContract(WishContractType.CHANGE_PLAYER_STATE,
+                "Every positive status effect is applied to the player",List.of(
+                constraint(WishConstraintKind.STATE_METRIC,WishConstraintOperator.EQUALS,
+                        "all_positive_status_effects",0,true),
+                constraint(WishConstraintKind.STATE_DIRECTION,WishConstraintOperator.INCREASE,
+                        "increase",0,true),
+                constraint(WishConstraintKind.TARGET_SCOPE,WishConstraintOperator.EQUALS,
+                        "player",0,true)));
+        WishInterpretation interpretation=new WishInterpretation(2,"all buffs",
+                contract.requiredOutcome(),contract,
+                new WishFulfillment(WishFulfillmentMode.ABSURD,"Apply every beneficial effect",
+                        List.of(FulfillmentStyle.IRONIC),90),"Exact player state",
+                WishTone.ABSURD,40,WishDelivery.IMMEDIATE,
+                List.of(WishCapability.POWER_BUFF,WishCapability.SOUND_EVENT,WishCapability.VISUAL_EVENT));
+        var registry=PlanningFixtures.registry(Map.of(
+                RegistryEntryType.EFFECT,List.of("minecraft:strength"),
+                RegistryEntryType.SOUND,List.of("minecraft:ambient.cave"),
+                RegistryEntryType.PARTICLE,List.of("minecraft:smoke")));
+        CapabilityCatalog catalog=new CapabilityMatcher().match("我要全部buff",interpretation,
+                new KnowledgeBaseSnapshot(KnowledgeBaseState.RUNNING,false,List.of()),registry);
+
+        WishPlanResult result=new FallbackWishPlanner().plan("我要全部buff",interpretation,
+                emptyContext(),catalog,new RegistrySnapshotEnvironment(registry),
+                ExecutionSettingsSnapshot.permissive());
+
+        assertNotNull(result.draft());
+        assertEquals(1,result.draft().steps().size());
+        WishPlanStep step=result.draft().steps().get(0);
+        assertEquals(WishActionType.START_PREDEFINED_EVENT,step.action());
+        assertEquals(PredefinedWishEventRegistry.ALL_POSITIVE_EFFECTS,
+                step.candidateReference().featureName());
+        assertEquals(WishContractValidationState.CONTRACT_FULFILLED,
+                WishContractValidator.validate(interpretation,result.draft()).state());
     }
 
     private static WishInterpretation diamondBlockContract(WishCapability... capabilities){

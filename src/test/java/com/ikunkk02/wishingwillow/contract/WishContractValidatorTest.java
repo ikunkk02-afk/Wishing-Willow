@@ -3,6 +3,7 @@ package com.ikunkk02.wishingwillow.contract;
 import com.google.gson.JsonParser;
 import com.ikunkk02.wishingwillow.ai.*;
 import com.ikunkk02.wishingwillow.planning.*;
+import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
 import com.ikunkk02.wishingwillow.research.FeatureType;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 import com.ikunkk02.wishingwillow.research.VerifiedRegistryResource;
@@ -50,6 +51,21 @@ class WishContractValidatorTest {
                 WishContractValidator.validate(wish, List.of(speed)).state());
     }
 
+    @Test void allBuffsRequireTheExactWhitelistedToolAndRejectDecoration() {
+        WishInterpretation wish = allPositiveEffectsWish();
+        WishPlanStep sound = eventStep("minecraft:ambient.cave", WishActionType.PLAY_SOUND,
+                WishCapability.SOUND_EVENT, CandidateSourceKind.VANILLA_REGISTRY);
+        assertEquals(WishContractValidationState.CONTRACT_NOT_FULFILLED,
+                WishContractValidator.validate(wish, List.of(sound)).state());
+
+        WishPlanStep exact = eventStep(PredefinedWishEventRegistry.ALL_POSITIVE_EFFECTS,
+                WishActionType.START_PREDEFINED_EVENT, WishCapability.POWER_BUFF,
+                CandidateSourceKind.MOD_FEATURE);
+        WishContractValidation validation = WishContractValidator.validate(wish, List.of(exact));
+        assertEquals(WishContractValidationState.CONTRACT_FULFILLED, validation.state());
+        assertEquals("ALL_POSITIVE_STATUS_EFFECTS_PROVEN", validation.code());
+    }
+
     private static WishInterpretation resourceWish(String semantic, int quantity) {
         WishContract contract = new WishContract(WishContractType.OBTAIN_RESOURCE, "Player obtains resources", List.of(
                 new WishHardConstraint(WishConstraintKind.RESOURCE_KIND, WishConstraintOperator.EQUALS, "item_or_block", 0, 0, true),
@@ -58,6 +74,30 @@ class WishContractValidatorTest {
                 new WishHardConstraint(WishConstraintKind.REAL_RESOURCE, WishConstraintOperator.REQUIRED, "", 0, 0, true),
                 new WishHardConstraint(WishConstraintKind.PLAYER_ACCESSIBLE, WishConstraintOperator.REQUIRED, "", 0, 0, true)));
         return interpretation(contract, List.of(WishCapability.GIVE_ITEM, WishCapability.BLOCK_CHANGE));
+    }
+
+    private static WishInterpretation allPositiveEffectsWish() {
+        WishContract contract = new WishContract(WishContractType.CHANGE_PLAYER_STATE,
+                "Every positive status effect is applied to the player", List.of(
+                new WishHardConstraint(WishConstraintKind.STATE_METRIC, WishConstraintOperator.EQUALS,
+                        "all_positive_status_effects", 0, 0, true),
+                new WishHardConstraint(WishConstraintKind.STATE_DIRECTION, WishConstraintOperator.INCREASE,
+                        "increase", 0, 1, true),
+                new WishHardConstraint(WishConstraintKind.TARGET_SCOPE, WishConstraintOperator.EQUALS,
+                        "player", 0, 0, true)));
+        return interpretation(contract, List.of(WishCapability.POWER_BUFF));
+    }
+
+    private static WishPlanStep eventStep(String feature, WishActionType action,
+                                          WishCapability capability, CandidateSourceKind source) {
+        CandidateReference reference = new CandidateReference("candidate-001", capability, capability,
+                MatchType.EXACT, source, source == CandidateSourceKind.MOD_FEATURE ? "wishing_willow" : "minecraft",
+                "1.20.1", feature, FeatureType.PLAYER_SYSTEM, null, 100, 20);
+        String parameters = action == WishActionType.START_PREDEFINED_EVENT ? "{\"intensity\":1}" :
+                "{\"volume\":1,\"pitch\":1,\"distance\":32}";
+        return new WishPlanStep(0, WishStepTiming.IMMEDIATE, 0, WishTriggerType.NONE, action, capability,
+                reference.candidateId(), WishTargetType.PLAYER,
+                JsonParser.parseString(parameters).getAsJsonObject(), "test", reference);
     }
 
     private static WishInterpretation interpretation(WishContract contract, List<WishCapability> capabilities) {

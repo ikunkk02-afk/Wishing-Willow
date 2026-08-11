@@ -7,6 +7,8 @@ import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import com.ikunkk02.wishingwillow.execution.WishSafetyPolicy;
 import com.ikunkk02.wishingwillow.contract.WishConstraintKind;
+import com.ikunkk02.wishingwillow.contract.WishContractValidationState;
+import com.ikunkk02.wishingwillow.contract.WishContractValidator;
 import com.ikunkk02.wishingwillow.contract.WishContractType;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 
@@ -53,7 +55,11 @@ public final class FallbackWishPlanner {
             try {
                 WishPlanValidation validated = WishPlanValidator.parseAndValidate(
                         WishPlanJson.toAiJson(draft), interpretation, catalog, environment, settings);
-                if (validated.state() == WishPlanState.READY) return WishPlanResult.success(validated.draft());
+                if (validated.state() == WishPlanState.READY
+                        && WishContractValidator.validate(interpretation, validated.draft()).state()
+                        == WishContractValidationState.CONTRACT_FULFILLED) {
+                    return WishPlanResult.success(validated.draft());
+                }
                 if (interpretation.schemaVersion() < 2 && !validated.unfulfilledCapabilities().contains(
                         interpretation.requiredCapabilities().get(0))) {
                     return WishPlanResult.partial(validated.draft());

@@ -7,6 +7,7 @@ import com.ikunkk02.wishingwillow.planning.WishActionType;
 import com.ikunkk02.wishingwillow.planning.WishPlanDraft;
 import com.ikunkk02.wishingwillow.planning.WishPlanStep;
 import com.ikunkk02.wishingwillow.execution.WishExecutionRecord;
+import com.ikunkk02.wishingwillow.execution.PredefinedWishEventRegistry;
 
 import java.util.List;
 import java.util.Locale;
@@ -91,6 +92,14 @@ public final class WishContractValidator {
 
     private static WishContractValidation validatePlayerState(WishContract contract, List<WishPlanStep> steps) {
         String metric = contract.semantic(WishConstraintKind.STATE_METRIC).orElse("");
+        if (metric.equals("all_positive_status_effects")) {
+            boolean exactBuiltin = steps.stream().anyMatch(step -> step.action() == WishActionType.START_PREDEFINED_EVENT
+                    && step.candidateReference() != null
+                    && PredefinedWishEventRegistry.ALL_POSITIVE_EFFECTS.equals(
+                    step.candidateReference().featureName()));
+            return exactBuiltin ? fulfilled("ALL_POSITIVE_STATUS_EFFECTS_PROVEN", 0)
+                    : rejected("ALL_POSITIVE_STATUS_EFFECTS_MISSING", 0);
+        }
         if (metric.equals("movement_speed") || metric.equals("speed")) {
             for (WishPlanStep step : steps) {
                 if (step.action() == WishActionType.MODIFY_ATTRIBUTE

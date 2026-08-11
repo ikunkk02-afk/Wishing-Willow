@@ -17,6 +17,7 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.attributes.*;
@@ -130,5 +131,24 @@ final class StandardWishActionExecutors {
     static WishActionExecutor avoidPlayer(){return behavior(WishEntityBehaviorManager.Mode.AVOID);}
     private static WishActionExecutor behavior(WishEntityBehaviorManager.Mode mode){return executor(c->{int affected=0,duration=c.step().parameters().has("duration_seconds")?i(c.step().parameters(),"duration_seconds"):60,max=c.step().parameters().has("max_entities")?i(c.step().parameters(),"max_entities"):16;for(UUID uuid:c.execution().allEntities()){if(affected>=max)break;Entity entity=c.level().getEntity(uuid);if(entity instanceof Mob){double min=c.step().parameters().has("radius")?i(c.step().parameters(),"radius"):8;long expires=c.level().getGameTime()+duration*20L;c.execution().leaseBehavior(uuid,mode.name(),1.1,min,expires);WishEntityBehaviorManager.bind(c.execution().executionId(),uuid,c.player().getUUID(),mode,1.1,min,expires);affected++;}}return affected>0?WishActionResult.success(affected):WishActionResult.retry("WAITING_BOUND_ENTITY");});}
     static WishActionExecutor changeReputation(){return executor(c->{int delta=i(c.step().parameters(),"delta");if(delta>0){int affected=WishPersistentSocialRules.grant(c.player(),delta);return WishActionResult.success(affected);}int affected=0,radius=i(c.step().parameters(),"radius");for(Villager villager:c.level().getEntitiesOfClass(Villager.class,c.player().getBoundingBox().inflate(radius),v->true)){villager.getGossips().add(c.player().getUUID(),GossipType.MINOR_NEGATIVE,Math.abs(delta));affected++;if(affected>=16)break;}return affected>0?WishActionResult.success(affected):WishActionResult.unsupported("NO_VANILLA_VILLAGER");});}
-    static WishActionExecutor predefinedEvent(){return executor(c->{String event=c.candidate().featureName();int intensity=i(c.step().parameters(),"intensity");if(!PredefinedWishEventRegistry.contains(event))return WishActionResult.unsupported("EVENT_NOT_REGISTERED");ServerPlayer p=c.player();if(p==null)return WishActionResult.retry("WAITING_TARGET");if(event.equals(PredefinedWishEventRegistry.ENDLESS_NIGHT)){long expires=c.level().getGameTime()+intensity*1200L;c.execution().leaseEvent(event,expires);long day=c.level().getDayTime()/24000L*24000L;c.level().setDayTime(day+18000);return WishActionResult.success(1);}if(event.equals(PredefinedWishEventRegistry.OMINOUS_STORM)){c.level().setWeatherParameters(0,intensity*1200,true,true);c.level().playSound(null,p.getX(),p.getY(),p.getZ(),SoundEvents.AMBIENT_CAVE.get(),SoundSource.AMBIENT,1,0.7f);int spawned=0;for(int n=0;n<Math.min(4,intensity);n++){LightningBolt bolt=EntityType.LIGHTNING_BOLT.create(c.level());if(bolt==null)continue;Vec3 pos=SafeSpawnPositionFinder.find(c.level(),bolt,p.position(),16,48,false,p.getYRot(),c.execution().executionId().getLeastSignificantBits()+n);if(pos!=null){bolt.moveTo(pos);if(c.level().addFreshEntity(bolt))spawned++;}}return WishActionResult.success(1+spawned);}c.level().playSound(null,p.getX(),p.getY(),p.getZ(),SoundEvents.AMBIENT_CAVE.get(),SoundSource.AMBIENT,1,0.6f);c.execution().leaseEvent(PredefinedWishEventRegistry.stalkerLease(c.step().stepIndex()),c.level().getGameTime()+60);return WishActionResult.success(1);});}
+    static WishActionExecutor predefinedEvent(){return executor(c->{
+        String event=c.candidate().featureName();int intensity=i(c.step().parameters(),"intensity");
+        if(!PredefinedWishEventRegistry.contains(event))return WishActionResult.unsupported("EVENT_NOT_REGISTERED");
+        ServerPlayer p=c.player();if(p==null)return WishActionResult.retry("WAITING_TARGET");
+        if(event.equals(PredefinedWishEventRegistry.ALL_POSITIVE_EFFECTS)){
+            int durationSeconds=Math.min(3600,Math.max(60,intensity*720));int amplifier=Math.min(4,intensity-1);int applied=0;
+            for(MobEffect effect:List.copyOf(ForgeRegistries.MOB_EFFECTS.getValues())){
+                if(effect.getCategory()!= MobEffectCategory.BENEFICIAL)continue;
+                if(effect.isInstantenous()){
+                    effect.applyInstantenousEffect(null,null,p,amplifier,1.0);applied++;
+                }else if(p.addEffect(new MobEffectInstance(effect,durationSeconds*20,amplifier))){
+                    applied++;
+                }
+            }
+            return applied>0?WishActionResult.success(applied):WishActionResult.failed("NO_BENEFICIAL_EFFECTS_REGISTERED");
+        }
+        if(event.equals(PredefinedWishEventRegistry.ENDLESS_NIGHT)){long expires=c.level().getGameTime()+intensity*1200L;c.execution().leaseEvent(event,expires);long day=c.level().getDayTime()/24000L*24000L;c.level().setDayTime(day+18000);return WishActionResult.success(1);}
+        if(event.equals(PredefinedWishEventRegistry.OMINOUS_STORM)){c.level().setWeatherParameters(0,intensity*1200,true,true);c.level().playSound(null,p.getX(),p.getY(),p.getZ(),SoundEvents.AMBIENT_CAVE.get(),SoundSource.AMBIENT,1,0.7f);int spawned=0;for(int n=0;n<Math.min(4,intensity);n++){LightningBolt bolt=EntityType.LIGHTNING_BOLT.create(c.level());if(bolt==null)continue;Vec3 pos=SafeSpawnPositionFinder.find(c.level(),bolt,p.position(),16,48,false,p.getYRot(),c.execution().executionId().getLeastSignificantBits()+n);if(pos!=null){bolt.moveTo(pos);if(c.level().addFreshEntity(bolt))spawned++;}}return WishActionResult.success(1+spawned);}
+        c.level().playSound(null,p.getX(),p.getY(),p.getZ(),SoundEvents.AMBIENT_CAVE.get(),SoundSource.AMBIENT,1,0.6f);c.execution().leaseEvent(PredefinedWishEventRegistry.stalkerLease(c.step().stepIndex()),c.level().getGameTime()+60);return WishActionResult.success(1);
+    });}
 }

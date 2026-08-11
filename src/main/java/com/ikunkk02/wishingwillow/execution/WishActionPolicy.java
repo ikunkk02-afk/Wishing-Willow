@@ -88,7 +88,8 @@ public final class WishActionPolicy {
                     WishCapability.FRIENDLY_ENTITY, WishCapability.HOSTILE_ENTITY).contains(provided);
             case CHANGE_REPUTATION -> provided == WishCapability.REPUTATION;
             case START_PREDEFINED_EVENT -> provided == WishCapability.WORLD_EVENT
-                    || provided == WishCapability.MEMORY_RELATED_EVENT;
+                    || provided == WishCapability.MEMORY_RELATED_EVENT
+                    || provided == WishCapability.POWER_BUFF;
         };
     }
 
