@@ -60,7 +60,9 @@ public final class CapabilityMatcher {
                                    ExecutionSettingsSnapshot settings) {
         Map<WishCapability, List<CapabilityCandidate>> ranked = new LinkedHashMap<>();
         String relevanceText = originalWish + " " + interpretation.literalGoal() + " " + interpretation.twistedOutcome();
-        for (WishCapability requested : interpretation.requiredCapabilities()) {
+        List<WishCapability> planningCapabilities =
+                WishContractCapabilityDeriver.planningCapabilities(interpretation);
+        for (WishCapability requested : planningCapabilities) {
             List<CapabilityCandidate> candidates = new ArrayList<>();
             candidates.addAll(vanilla.candidates(requested, relevanceText, interpretation, registry, graph, interpretation.severity()));
             candidates.addAll(builtins.candidates(requested, interpretation, registry, graph,
@@ -97,7 +99,7 @@ public final class CapabilityMatcher {
 
         List<CapabilityCandidate> selected = new ArrayList<>();
         for (int rank = 0; rank < MAX_PER_CAPABILITY && selected.size() < CapabilityCatalog.MAX_CANDIDATES; rank++) {
-            for (WishCapability capability : interpretation.requiredCapabilities()) {
+            for (WishCapability capability : planningCapabilities) {
                 List<CapabilityCandidate> values = ranked.getOrDefault(capability, List.of());
                 if (rank < values.size() && selected.size() < CapabilityCatalog.MAX_CANDIDATES) selected.add(values.get(rank));
             }
@@ -108,7 +110,7 @@ public final class CapabilityMatcher {
         }
         List<CapabilityCandidate> catalogCandidates = new ArrayList<>(assigned.values());
         List<CapabilityMatchSet> sets = new ArrayList<>();
-        for (WishCapability capability : interpretation.requiredCapabilities()) {
+        for (WishCapability capability : planningCapabilities) {
             List<CapabilityCandidate> values = ranked.getOrDefault(capability, List.of()).stream()
                     .filter(assigned::containsKey).map(assigned::get).toList();
             MatchType quality = values.isEmpty() ? MatchType.UNSATISFIED : values.get(0).matchType();

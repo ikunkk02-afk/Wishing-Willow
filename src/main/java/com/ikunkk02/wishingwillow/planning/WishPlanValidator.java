@@ -89,7 +89,7 @@ public final class WishPlanValidator {
             validateTiming(timing, delay, trigger);
             WishActionType action = enumValue(step, "action", WishActionType.class);
             WishCapability capability = enumValue(step, "capability", WishCapability.class);
-            if (!interpretation.requiredCapabilities().contains(capability)) {
+            if (!WishContractCapabilityDeriver.allows(interpretation, capability)) {
                 throw invalid(WishPlanError.INVALID_CANDIDATE);
             }
             String candidateId = string(step, "candidate_id", 32);
