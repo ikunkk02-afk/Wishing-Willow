@@ -52,6 +52,8 @@
   "screen.wishing_willow.ai.status": "Status: %s",
   "screen.wishing_willow.ai.status.not_tested": "Not tested",
   "screen.wishing_willow.ai.status.testing": "Testing connection...",
+  "screen.wishing_willow.ai.status.success_tools": "Connected — tool calling supported (Agent mode)",
+  "screen.wishing_willow.ai.status.success_json": "Connected — tool calling unavailable (JSON compatibility mode)",
   "screen.wishing_willow.ai.status.testing_interpretation": "Testing interpretation...",
   "screen.wishing_willow.ai.status.fetching_models": "Fetching models...",
   "screen.wishing_willow.ai.status.success": "Connection successful",

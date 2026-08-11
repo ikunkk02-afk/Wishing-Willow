@@ -60,6 +60,7 @@ public final class AiConfigManager {
                 Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING);
             }
             current = config;
+            AiService.getInstance().retainOnlyToolCallingSupport(config);
             return true;
         } catch (IOException exception) {
             LOGGER.warn("Unable to save local Wishing Willow AI configuration: {}", exception.getClass().getSimpleName());

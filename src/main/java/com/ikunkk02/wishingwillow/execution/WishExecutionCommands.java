@@ -11,12 +11,25 @@ import net.minecraftforge.fml.loading.FMLEnvironment;
 
 import java.util.Objects;
 import java.util.UUID;
+import com.ikunkk02.wishingwillow.agent.core.WishAgentDebugStore;
 
 public final class WishExecutionCommands {
     private WishExecutionCommands() {}
 
     public static void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("wishingwillow")
+                .then(Commands.literal("agent")
+                        .then(Commands.literal("latest").executes(context -> {
+                            var player = context.getSource().getPlayerOrException();
+                            var debug = WishAgentDebugStore.latest(player.getUUID());
+                            if (debug == null) { context.getSource().sendFailure(Component.literal("No agent debug record found.")); return 0; }
+                            context.getSource().sendSuccess(() -> Component.literal("session=" + debug.sessionId()
+                                    + " mode=" + debug.mode() + " iterations=" + debug.iterations()
+                                    + " toolCalls=" + debug.toolCalls() + " toolsUsed=" + debug.toolsUsed()
+                                    + " verificationState=" + debug.verificationState()
+                                    + " finalizationState=" + debug.finalizationState()), false);
+                            return 1;
+                        })))
                 .then(Commands.literal("wish")
                         .then(Commands.literal("latest").executes(context -> {
                             var player=context.getSource().getPlayerOrException();

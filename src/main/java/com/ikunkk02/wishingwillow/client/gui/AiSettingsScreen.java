@@ -229,7 +229,9 @@ public final class AiSettingsScreen extends Screen {
         busy = false;
         if (throwable == null && result != null && result.success() && sameConnection(tested, currentDraft())) {
             testedConfig = tested;
-            status = Component.translatable("screen.wishing_willow.ai.status.success");
+            status = Component.translatable(result.toolCallingSupport() == com.ikunkk02.wishingwillow.ai.ToolCallingSupport.SUPPORTED
+                    ? "screen.wishing_willow.ai.status.success_tools"
+                    : "screen.wishing_willow.ai.status.success_json");
         } else {
             testedConfig = null;
             status = errorStatus(result == null ? AiErrorCategory.UNKNOWN : result.errorCategory());
