@@ -8,11 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class WishInterpretationValidatorTest {
     private static final String VALID = """
             {
-              "schema_version":1,
+              "schema_version":2,
               "intent":"companionship",
               "literal_goal":"The player wants company wherever they go",
-              "loophole":"The player did not specify who or whether they are friendly",
-              "twisted_outcome":"An unwelcome presence follows the player",
+              "contract":{"type":"SPAWN_COMPANION","required_outcome":"A real persistent companion must remain with the player","hard_constraints":[
+                {"kind":"COMPANION_EXISTS","operator":"REQUIRED","semantic":"","quantity":0,"amount":0,"required":true},
+                {"kind":"PERSISTENCE","operator":"REQUIRED","semantic":"persistent","quantity":0,"amount":0,"required":true}]},
+              "fulfillment":{"mode":"ABSURD","method":"An unwelcome presence follows the player","styles":["HORROR","SOCIAL_ABSURDITY"],"absurdity":78},
               "reasoning_summary":"Companionship is granted through an unspecified follower",
               "tone":"HORROR",
               "severity":72,
@@ -49,7 +51,7 @@ class WishInterpretationValidatorTest {
     @Test
     void rejectsExtraFieldsDuplicateCapabilitiesAndFractionalIntegers() {
         assertThrows(IllegalArgumentException.class, () -> WishInterpretationValidator.parseAndValidate(
-                VALID.replace("\"schema_version\":1,", "\"schema_version\":1,\"extra\":true,")
+                VALID.replace("\"schema_version\":2,", "\"schema_version\":2,\"extra\":true,")
         ));
         assertThrows(IllegalArgumentException.class, () -> WishInterpretationValidator.parseAndValidate(
                 VALID.replace("\"STALKING_ENTITY\",\"PERSISTENT_FOLLOWER\"", "\"STALKING_ENTITY\",\"STALKING_ENTITY\"")

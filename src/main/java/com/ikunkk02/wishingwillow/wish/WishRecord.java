@@ -247,6 +247,9 @@ public record WishRecord(
 
     private static CompoundTag saveInterpretation(WishInterpretation interpretation) {
         CompoundTag tag = new CompoundTag();
+        if (interpretation.schemaVersion() == com.ikunkk02.wishingwillow.ai.WishInterpretationValidator.CURRENT_SCHEMA_VERSION) {
+            tag.putString("SchemaJson", com.ikunkk02.wishingwillow.ai.WishInterpretationValidator.toJson(interpretation));
+        }
         tag.putInt("SchemaVersion", interpretation.schemaVersion());
         tag.putString("Intent", interpretation.intent());
         tag.putString("LiteralGoal", interpretation.literalGoal());
@@ -265,6 +268,9 @@ public record WishRecord(
     }
 
     private static WishInterpretation loadInterpretation(CompoundTag tag) {
+        if (tag.contains("SchemaJson", Tag.TAG_STRING)) {
+            return com.ikunkk02.wishingwillow.ai.WishInterpretationValidator.parseAndValidate(tag.getString("SchemaJson"));
+        }
         ListTag capabilityTags = tag.getList("RequiredCapabilities", Tag.TAG_STRING);
         List<WishCapability> capabilities = new ArrayList<>();
         for (Tag capabilityTag : capabilityTags) {
@@ -282,7 +288,7 @@ public record WishRecord(
                 WishDelivery.valueOf(tag.getString("Delivery")),
                 capabilities
         );
-        com.ikunkk02.wishingwillow.ai.WishInterpretationValidator.validate(interpretation);
+        com.ikunkk02.wishingwillow.ai.WishInterpretationValidator.validateStored(interpretation);
         return interpretation;
     }
 

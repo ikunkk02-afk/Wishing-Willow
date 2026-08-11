@@ -1,6 +1,8 @@
 package com.ikunkk02.wishingwillow.planning;
 
 import com.ikunkk02.wishingwillow.ai.WishCapability;
+import com.ikunkk02.wishingwillow.ai.WishInterpretation;
+import com.ikunkk02.wishingwillow.contract.WishConstraintKind;
 import com.ikunkk02.wishingwillow.research.FeatureType;
 import com.ikunkk02.wishingwillow.research.KnowledgeLevel;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
@@ -28,7 +30,17 @@ public final class VanillaCapabilityProvider {
     public List<CapabilityCandidate> candidates(WishCapability requested, String wishText,
                                                 RegistrySnapshot snapshot, CapabilityRelationGraph graph,
                                                 int severity) {
+        return candidates(requested, wishText, null, snapshot, graph, severity);
+    }
+
+    public List<CapabilityCandidate> candidates(WishCapability requested, String wishText,
+                                                WishInterpretation interpretation, RegistrySnapshot snapshot,
+                                                CapabilityRelationGraph graph, int severity) {
         List<CapabilityCandidate> result = new ArrayList<>();
+        if (interpretation != null && interpretation.schemaVersion() >= 2) {
+            interpretation.contract().semantic(WishConstraintKind.RESOURCE_SEMANTIC)
+                    .ifPresent(semantic -> addContractResources(result, requested, semantic, snapshot, graph, severity));
+        }
         String lowerWish = wishText.toLowerCase(Locale.ROOT);
         for (Map.Entry<WishCapability, List<ResourceDescriptor>> entry : RESOURCES.entrySet()) {
             MatchType relation = graph.relation(requested, entry.getKey());
@@ -58,6 +70,13 @@ public final class VanillaCapabilityProvider {
                     CapabilityMatcher.score(relation, KnowledgeLevel.VERIFIED, true, 1.0, 70,
                             0, severity, risk)));
         }
+        if (requested == WishCapability.STRUCTURE) {
+            result.add(new CapabilityCandidate("", requested, WishCapability.STRUCTURE, MatchType.EXACT,
+                    CandidateSourceKind.VANILLA_BUILTIN, "minecraft", "Minecraft", "1.20.1",
+                    WishCapability.STRUCTURE.name(), FeatureType.STRUCTURE, null,
+                    "Fixed server-whitelisted simple house template.", KnowledgeLevel.VERIFIED,
+                    1, 1, 0, 100, CapabilityMatcher.risk(WishCapability.STRUCTURE), 95));
+        }
         if (graph.relation(requested, WishCapability.WORLD_EVENT) != MatchType.UNSATISFIED) {
             for (String eventId : PredefinedWishEventRegistry.ids()) {
                 MatchType relation = graph.relation(requested, WishCapability.WORLD_EVENT);
@@ -72,6 +91,35 @@ public final class VanillaCapabilityProvider {
             }
         }
         return result;
+    }
+
+    private static void addContractResources(List<CapabilityCandidate> result, WishCapability requested,
+                                             String semantic, RegistrySnapshot snapshot,
+                                             CapabilityRelationGraph graph, int severity) {
+        List<RegistryEntryType> types = requested == WishCapability.BLOCK_CHANGE
+                || requested == WishCapability.STRUCTURE ? List.of(RegistryEntryType.BLOCK)
+                : requested == WishCapability.GIVE_ITEM || requested == WishCapability.INVENTORY_CHANGE
+                ? List.of(RegistryEntryType.ITEM) : List.of();
+        for (RegistryEntryType type : types) {
+            for (String id : snapshot.entries().getOrDefault(type, List.of())) {
+                String path = id.substring(id.indexOf(':') + 1);
+                if (!normalize(path).equals(normalize(semantic))) continue;
+                WishCapability provided = type == RegistryEntryType.BLOCK ? WishCapability.BLOCK_CHANGE : WishCapability.GIVE_ITEM;
+                MatchType relation = graph.relation(requested, provided);
+                if (relation == MatchType.UNSATISFIED) continue;
+                int risk = CapabilityMatcher.risk(provided);
+                result.add(new CapabilityCandidate("", requested, provided, relation,
+                        CandidateSourceKind.VANILLA_REGISTRY, "minecraft", "Minecraft", "1.20.1", path,
+                        featureType(type), new VerifiedRegistryResource(type, id),
+                        "Exact registry resource selected from the structured Wish Contract.",
+                        KnowledgeLevel.VERIFIED, 1, 1, 0, 100, risk,
+                        CapabilityMatcher.score(relation, KnowledgeLevel.VERIFIED, true, 1, 100, 0, severity, risk)));
+            }
+        }
+    }
+
+    private static String normalize(String value) {
+        return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
     }
 
     private static Map<WishCapability, List<ResourceDescriptor>> resources() {
@@ -149,6 +197,7 @@ public final class VanillaCapabilityProvider {
     private static FeatureType builtinType(WishCapability capability) {
         return switch (capability) {
             case PLAYER_ATTRIBUTE, HEALING, DAMAGE, INVENTORY_CHANGE -> FeatureType.PLAYER_SYSTEM;
+            case STRUCTURE -> FeatureType.STRUCTURE;
             case MOB_BEHAVIOR, REPUTATION -> FeatureType.ENTITY;
             default -> FeatureType.WORLD_SYSTEM;
         };

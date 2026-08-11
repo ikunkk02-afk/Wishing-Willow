@@ -16,6 +16,8 @@ import com.ikunkk02.wishingwillow.execution.WishExecutionAcceptError;
 import com.ikunkk02.wishingwillow.execution.WishPolicyDecision;
 import com.ikunkk02.wishingwillow.execution.WishSafetyPolicy;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
+import com.ikunkk02.wishingwillow.contract.WishContractValidator;
+import com.ikunkk02.wishingwillow.contract.WishContractValidationState;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -117,11 +119,15 @@ public final class WishPlanValidator {
         if (destructive > WishPlanBudget.maxDestructiveCost(severity)) {
             throw invalid(WishPlanError.BUDGET_EXCEEDED);
         }
+        WishPlanDraft draft = new WishPlanDraft(1, summary, delivery, severity, duration, steps);
+        var contractValidation = WishContractValidator.validate(interpretation, draft);
+        if (contractValidation.state() == WishContractValidationState.CONTRACT_NOT_FULFILLED) {
+            throw invalid(WishPlanError.CONTRACT_NOT_FULFILLED);
+        }
         Set<WishCapability> unfulfilled = EnumSet.copyOf(interpretation.requiredCapabilities());
         unfulfilled.removeAll(covered);
         WishPlanState state = unfulfilled.isEmpty() ? WishPlanState.READY : WishPlanState.PARTIAL;
-        return new WishPlanValidation(new WishPlanDraft(1, summary, delivery, severity, duration, steps),
-                state, unfulfilled);
+        return new WishPlanValidation(draft, state, unfulfilled);
     }
 
     public static void validateStored(WishPlan plan, PlanningEnvironment environment) {
@@ -190,8 +196,9 @@ public final class WishPlanValidator {
             case SPAWN_PARTICLE -> capability == WishCapability.VISUAL_EVENT || capability == WishCapability.HALLUCINATION;
             case LIGHTNING -> capability == WishCapability.LIGHTNING || capability == WishCapability.WORLD_EVENT;
             case EXPLOSION -> capability == WishCapability.EXPLOSION;
-            case CHANGE_BLOCK, REPLACE_BLOCK_AREA -> capability == WishCapability.BLOCK_CHANGE
+            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN -> capability == WishCapability.BLOCK_CHANGE
                     || capability == WishCapability.STRUCTURE;
+            case CREATE_STRUCTURE -> capability == WishCapability.STRUCTURE;
             case MODIFY_HEALTH -> Set.of(WishCapability.HEALING, WishCapability.DAMAGE,
                     WishCapability.IMMORTALITY, WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF).contains(capability);
             case MODIFY_HUNGER -> capability == WishCapability.PLAYER_ATTRIBUTE
@@ -214,7 +221,7 @@ public final class WishPlanValidator {
             case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
             case PLAY_SOUND -> RegistryEntryType.SOUND;
             case SPAWN_PARTICLE -> RegistryEntryType.PARTICLE;
-            case CHANGE_BLOCK, REPLACE_BLOCK_AREA -> RegistryEntryType.BLOCK;
+            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN -> RegistryEntryType.BLOCK;
             default -> null;
         };
     }
@@ -261,6 +268,8 @@ public final class WishPlanValidator {
             case EXPLOSION -> { keys(p,Set.of("power","destroy_blocks","distance_min","distance_max"),Set.of("power","destroy_blocks","distance_min","distance_max")); range(p,"power",0.1,8); bool(p,"destroy_blocks"); distance(p,128); if (severity<41 || bool(p,"destroy_blocks")&&severity<61 || number(p,"power")>4&&severity<81) throw invalid(WishPlanError.BUDGET_EXCEEDED); }
             case CHANGE_BLOCK -> { keys(p,Set.of("distance_min","distance_max"),Set.of("distance_min","distance_max")); distance(p,64); }
             case REPLACE_BLOCK_AREA -> { keys(p,Set.of("radius","max_blocks"),Set.of("radius","max_blocks")); rangeInt(p,"radius",1,16); rangeInt(p,"max_blocks",1,2048); if(severity<41) throw invalid(WishPlanError.BUDGET_EXCEEDED); }
+            case PLACE_BLOCK_PATTERN -> { keys(p,Set.of("pattern","count"),Set.of("pattern","count")); oneOf(p,"pattern",Set.of("ENCLOSURE","PILLAR","ROOM")); rangeInt(p,"count",1,2048); }
+            case CREATE_STRUCTURE -> { keys(p,Set.of("template"),Set.of("template")); oneOf(p,"template",Set.of("SIMPLE_HOUSE")); }
             case MODIFY_HEALTH -> { keys(p,Set.of("delta","allow_lethal"),Set.of("delta","allow_lethal")); range(p,"delta",-40,40); if(bool(p,"allow_lethal")&&severity<81) throw invalid(WishPlanError.BUDGET_EXCEEDED); }
             case MODIFY_HUNGER -> { keys(p,Set.of("delta"),Set.of("delta")); rangeInt(p,"delta",-20,20); }
             case MODIFY_ATTRIBUTE -> { keys(p,Set.of("attribute","operation","amount","duration_seconds"),Set.of("attribute","operation","amount","duration_seconds")); oneOf(p,"attribute",Set.of("MAX_HEALTH","MOVEMENT_SPEED","ATTACK_DAMAGE","ARMOR","LUCK")); String op=oneOf(p,"operation",Set.of("ADD","MULTIPLY")); range(p,"amount",op.equals("ADD")?-20:-1,op.equals("ADD")?20:1); rangeInt(p,"duration_seconds",1,3600); }

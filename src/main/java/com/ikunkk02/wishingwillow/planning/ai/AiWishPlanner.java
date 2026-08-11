@@ -18,6 +18,9 @@ import com.ikunkk02.wishingwillow.planning.WishPlanState;
 import com.ikunkk02.wishingwillow.planning.WishPlanValidation;
 import com.ikunkk02.wishingwillow.planning.WishPlanValidator;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
+import com.ikunkk02.wishingwillow.contract.WishContractReviewer;
+import com.ikunkk02.wishingwillow.contract.WishContractValidationState;
+import com.ikunkk02.wishingwillow.contract.WishContractValidator;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -63,6 +66,15 @@ public final class AiWishPlanner {
                 WishPlanValidation validation = WishPlanValidator.parseAndValidate(
                         response.assistantContent(), interpretation, catalog, environment, settings);
                 if (validation.state() == WishPlanState.READY) {
+                    if (WishContractValidator.validate(interpretation, validation.draft()).state()
+                            == WishContractValidationState.AI_REVIEW_REQUIRED) {
+                        return WishContractReviewer.review(provider, interpretation, validation.draft())
+                                .handle((review, error) -> review != null && error == null && review.fulfilled())
+                                .thenCompose(fulfilled -> fulfilled
+                                        ? CompletableFuture.completedFuture(WishPlanResult.success(validation.draft()))
+                                        : repair(provider, originalWish, interpretation, context, catalog, environment,
+                                        settings, response.assistantContent(), WishPlanError.CONTRACT_NOT_FULFILLED));
+                    }
                     return CompletableFuture.completedFuture(WishPlanResult.success(validation.draft()));
                 }
                 return repair(provider, originalWish, interpretation, context, catalog, environment,
@@ -104,20 +116,29 @@ public final class AiWishPlanner {
         return provider.complete(repairRequest).handle((response, throwable) -> {
             if (throwable != null || response == null) {
                 AiErrorCategory category = category(throwable);
-                return WishPlanResult.failed(category == AiErrorCategory.TIMEOUT
-                        ? WishPlanError.AI_TIMEOUT : WishPlanError.AI_REQUEST_FAILED);
+                return CompletableFuture.completedFuture(WishPlanResult.failed(category == AiErrorCategory.TIMEOUT
+                        ? WishPlanError.AI_TIMEOUT : WishPlanError.AI_REQUEST_FAILED));
             }
             try {
                 WishPlanValidation validation = WishPlanValidator.parseAndValidate(
                         response.assistantContent(), interpretation, catalog, environment, settings);
-                if (validation.state() == WishPlanState.READY) return WishPlanResult.success(validation.draft());
-                return coversPrimary(interpretation, validation)
+                if (validation.state() == WishPlanState.READY) {
+                    if (WishContractValidator.validate(interpretation, validation.draft()).state()
+                            == WishContractValidationState.AI_REVIEW_REQUIRED) {
+                        return WishContractReviewer.review(provider, interpretation, validation.draft())
+                                .handle((review, error) -> review != null && error == null && review.fulfilled()
+                                        ? WishPlanResult.success(validation.draft())
+                                        : WishPlanResult.failed(WishPlanError.CONTRACT_NOT_FULFILLED));
+                    }
+                    return CompletableFuture.completedFuture(WishPlanResult.success(validation.draft()));
+                }
+                return CompletableFuture.completedFuture(coversPrimary(interpretation, validation)
                         ? WishPlanResult.partial(validation.draft())
-                        : WishPlanResult.failed(WishPlanError.UNSATISFIED_CAPABILITIES);
+                        : WishPlanResult.failed(WishPlanError.UNSATISFIED_CAPABILITIES));
             } catch (IllegalArgumentException exception) {
-                return WishPlanResult.failed(parseError(exception));
+                return CompletableFuture.completedFuture(WishPlanResult.failed(parseError(exception)));
             }
-        });
+        }).thenCompose(Function.identity());
     }
 
     private static boolean coversPrimary(WishInterpretation interpretation, WishPlanValidation validation) {

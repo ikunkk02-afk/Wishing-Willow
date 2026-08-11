@@ -19,7 +19,8 @@ public final class WishActionRegistry {
         map.put(WishActionType.CHANGE_WEATHER,StandardWishActionExecutors.changeWeather());map.put(WishActionType.PLAY_SOUND,StandardWishActionExecutors.playSound());
         map.put(WishActionType.SPAWN_PARTICLE,StandardWishActionExecutors.spawnParticle());map.put(WishActionType.LIGHTNING,StandardWishActionExecutors.lightning());
         map.put(WishActionType.EXPLOSION,StandardWishActionExecutors.explosion());map.put(WishActionType.CHANGE_BLOCK,StandardWishActionExecutors.changeBlock());
-        map.put(WishActionType.REPLACE_BLOCK_AREA,StandardWishActionExecutors.replaceBlockArea());map.put(WishActionType.MODIFY_HEALTH,StandardWishActionExecutors.modifyHealth());
+        map.put(WishActionType.REPLACE_BLOCK_AREA,StandardWishActionExecutors.replaceBlockArea());map.put(WishActionType.PLACE_BLOCK_PATTERN,StandardWishActionExecutors.placeBlockPattern());
+        map.put(WishActionType.CREATE_STRUCTURE,StandardWishActionExecutors.createStructure());map.put(WishActionType.MODIFY_HEALTH,StandardWishActionExecutors.modifyHealth());
         map.put(WishActionType.MODIFY_HUNGER,StandardWishActionExecutors.modifyHunger());map.put(WishActionType.MODIFY_ATTRIBUTE,StandardWishActionExecutors.modifyAttribute());
         map.put(WishActionType.CHANGE_MOB_TARGET,StandardWishActionExecutors.changeMobTarget());map.put(WishActionType.FOLLOW_PLAYER,StandardWishActionExecutors.followPlayer());
         map.put(WishActionType.AVOID_PLAYER,StandardWishActionExecutors.avoidPlayer());map.put(WishActionType.CHANGE_REPUTATION,StandardWishActionExecutors.changeReputation());

@@ -54,7 +54,7 @@ public final class CapabilityMatcher {
         String relevanceText = originalWish + " " + interpretation.literalGoal() + " " + interpretation.twistedOutcome();
         for (WishCapability requested : interpretation.requiredCapabilities()) {
             List<CapabilityCandidate> candidates = new ArrayList<>();
-            candidates.addAll(vanilla.candidates(requested, relevanceText, registry, graph, interpretation.severity()));
+            candidates.addAll(vanilla.candidates(requested, relevanceText, interpretation, registry, graph, interpretation.severity()));
             for (KnowledgeEntry entry : knowledge.entries()) {
                 if (entry.knowledge() == null || entry.knowledgeLevel() == KnowledgeLevel.UNKNOWN) continue;
                 for (ModFeature feature : entry.knowledge().features()) {

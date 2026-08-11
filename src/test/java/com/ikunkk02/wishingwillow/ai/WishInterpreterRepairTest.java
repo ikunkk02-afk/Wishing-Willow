@@ -12,8 +12,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WishInterpreterRepairTest {
     private static final String VALID = """
-            {"schema_version":1,"intent":"wealth","literal_goal":"The player wants diamonds",
-             "loophole":"The form was not specified","twisted_outcome":"Diamonds arrive inconveniently",
+            {"schema_version":2,"intent":"wealth","literal_goal":"The player wants diamonds",
+             "contract":{"type":"OBTAIN_RESOURCE","required_outcome":"The player must obtain ten real diamonds","hard_constraints":[
+               {"kind":"RESOURCE_KIND","operator":"EQUALS","semantic":"item","quantity":0,"amount":0,"required":true},
+               {"kind":"RESOURCE_SEMANTIC","operator":"EQUALS","semantic":"diamond","quantity":0,"amount":0,"required":true},
+               {"kind":"MINIMUM_QUANTITY","operator":"AT_LEAST","semantic":"","quantity":10,"amount":0,"required":true},
+               {"kind":"REAL_RESOURCE","operator":"REQUIRED","semantic":"","quantity":0,"amount":0,"required":true},
+               {"kind":"PLAYER_ACCESSIBLE","operator":"REQUIRED","semantic":"","quantity":0,"amount":0,"required":true}]},
+             "fulfillment":{"mode":"ABSURD","method":"Diamonds arrive inconveniently","styles":["QUANTITY_ABSURDITY"],"absurdity":70},
              "reasoning_summary":"The request is granted with an ironic delivery","tone":"IRONIC",
              "severity":35,"delivery":"IMMEDIATE","required_capabilities":["GIVE_ITEM"]}
             """;

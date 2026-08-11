@@ -23,11 +23,11 @@ class WishingWillowPromptTest {
         assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("Never invent a Mod ID"));
         assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("STALKING_ENTITY"));
         assertFalse(WishingWillowPrompt.SYSTEM_PROMPT.contains("KNOWN_CAPABILITY"));
-        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("same language as the player's wish"));
-        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("requested quantity"));
-        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("required_capabilities must include"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("player's language"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("MINIMUM_QUANTITY"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("requested core outcome is mandatory"));
         assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("GIVE_ITEM"));
-        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("Every capability must have a"));
-        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("lowercase snake_case"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("directly implement the contract"));
+        assertTrue(WishingWillowPrompt.SYSTEM_PROMPT.contains("THE WISH IS SACRED"));
     }
 }

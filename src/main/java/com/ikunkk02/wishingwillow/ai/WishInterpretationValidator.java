@@ -4,10 +4,14 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
 import com.google.gson.internal.Streams;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
+import com.ikunkk02.wishingwillow.contract.WishConstraintKind;
+import com.ikunkk02.wishingwillow.contract.WishConstraintOperator;
+import com.ikunkk02.wishingwillow.contract.WishContract;
+import com.ikunkk02.wishingwillow.contract.WishContractType;
+import com.ikunkk02.wishingwillow.contract.WishHardConstraint;
 
 import java.io.StringReader;
 import java.util.ArrayList;
@@ -17,258 +21,253 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+/** Strict boundary for every new AI interpretation submitted to the server. */
 public final class WishInterpretationValidator {
+    public static final int CURRENT_SCHEMA_VERSION = 2;
     public static final int MAX_INTENT_LENGTH = 64;
     public static final int MAX_LITERAL_GOAL_LENGTH = 512;
     public static final int MAX_TEXT_LENGTH = 1024;
     public static final int MAX_CAPABILITIES = 12;
+    public static final int MAX_CONSTRAINTS = 16;
 
     private static final Pattern INTENT_PATTERN = Pattern.compile("[a-z][a-z0-9_-]{0,63}");
-    private static final Set<String> FIELDS = Set.of(
-            "schema_version", "intent", "literal_goal", "loophole", "twisted_outcome",
-            "reasoning_summary", "tone", "severity", "delivery", "required_capabilities"
-    );
+    private static final Pattern SEMANTIC_PATTERN = Pattern.compile("[a-z][a-z0-9_-]{0,127}");
+    private static final Set<String> FIELDS = Set.of("schema_version", "intent", "literal_goal", "contract",
+            "fulfillment", "reasoning_summary", "tone", "severity", "delivery", "required_capabilities");
+    private static final Set<String> CONTRACT_FIELDS = Set.of("type", "required_outcome", "hard_constraints");
+    private static final Set<String> CONSTRAINT_FIELDS = Set.of("kind", "operator", "semantic", "quantity", "amount", "required");
+    private static final Set<String> FULFILLMENT_FIELDS = Set.of("mode", "method", "styles", "absurdity");
     private static final Gson GSON = new Gson();
 
-    private WishInterpretationValidator() {
-    }
+    private WishInterpretationValidator() {}
 
     public static WishInterpretation parseAndValidate(String rawContent) {
-        String json = stripSingleCodeFence(rawContent);
-        JsonElement parsed = parseStrict(json);
-        if (!parsed.isJsonObject()) {
-            throw invalid();
-        }
+        JsonElement parsed = parseStrict(stripSingleCodeFence(rawContent));
+        if (!parsed.isJsonObject() || !parsed.getAsJsonObject().keySet().equals(FIELDS)) throw invalid();
         JsonObject object = parsed.getAsJsonObject();
-        if (!object.keySet().equals(FIELDS)) {
-            throw invalid();
-        }
-
-        int schemaVersion = exactInteger(object, "schema_version");
-        if (schemaVersion != 1) {
-            throw invalid();
-        }
+        int schema = exactInteger(object, "schema_version");
+        if (schema != CURRENT_SCHEMA_VERSION) throw invalid();
         String intent = string(object, "intent", MAX_INTENT_LENGTH);
-        if (!INTENT_PATTERN.matcher(intent).matches()) {
-            throw invalid();
+        if (!INTENT_PATTERN.matcher(intent).matches()) throw invalid();
+        String literal = string(object, "literal_goal", MAX_LITERAL_GOAL_LENGTH);
+
+        JsonObject contractJson = exactObject(object, "contract", CONTRACT_FIELDS);
+        WishContractType contractType = enumValue(contractJson, "type", WishContractType.class);
+        String requiredOutcome = string(contractJson, "required_outcome", MAX_TEXT_LENGTH);
+        JsonArray constraintsJson = exactArray(contractJson, "hard_constraints", 1, MAX_CONSTRAINTS);
+        List<WishHardConstraint> constraints = new ArrayList<>();
+        for (JsonElement element : constraintsJson) {
+            if (!element.isJsonObject() || !element.getAsJsonObject().keySet().equals(CONSTRAINT_FIELDS)) throw invalid();
+            JsonObject value = element.getAsJsonObject();
+            WishConstraintKind kind = enumValue(value, "kind", WishConstraintKind.class);
+            WishConstraintOperator operator = enumValue(value, "operator", WishConstraintOperator.class);
+            String semantic = stringAllowEmpty(value, "semantic", 128);
+            int quantity = exactInteger(value, "quantity");
+            double amount = finiteNumber(value, "amount");
+            boolean required = bool(value, "required");
+            validateConstraint(kind, operator, semantic, quantity, amount, required);
+            constraints.add(new WishHardConstraint(kind, operator, semantic, quantity, amount, required));
         }
-        String literalGoal = string(object, "literal_goal", MAX_LITERAL_GOAL_LENGTH);
-        String loophole = string(object, "loophole", MAX_TEXT_LENGTH);
-        String twistedOutcome = string(object, "twisted_outcome", MAX_TEXT_LENGTH);
-        String reasoningSummary = string(object, "reasoning_summary", MAX_TEXT_LENGTH);
+        WishContract contract = new WishContract(contractType, requiredOutcome, constraints);
+
+        JsonObject fulfillmentJson = exactObject(object, "fulfillment", FULFILLMENT_FIELDS);
+        WishFulfillmentMode mode = enumValue(fulfillmentJson, "mode", WishFulfillmentMode.class);
+        String method = string(fulfillmentJson, "method", MAX_TEXT_LENGTH);
+        int absurdity = exactInteger(fulfillmentJson, "absurdity");
+        if (absurdity < 0 || absurdity > 100) throw invalid();
+        JsonArray stylesJson = exactArray(fulfillmentJson, "styles", 1, 3);
+        List<FulfillmentStyle> styles = enumList(stylesJson, FulfillmentStyle.class);
+        WishFulfillment fulfillment = new WishFulfillment(mode, method, styles, absurdity);
+
+        String reasoning = string(object, "reasoning_summary", MAX_TEXT_LENGTH);
         WishTone tone = enumValue(object, "tone", WishTone.class);
         int severity = exactInteger(object, "severity");
-        if (severity < 0 || severity > 100) {
-            throw invalid();
-        }
+        if (severity < 0 || severity > 100) throw invalid();
         WishDelivery delivery = enumValue(object, "delivery", WishDelivery.class);
-
-        JsonElement capabilitiesElement = object.get("required_capabilities");
-        if (capabilitiesElement == null || !capabilitiesElement.isJsonArray()) {
-            throw invalid();
-        }
-        JsonArray capabilitiesArray = capabilitiesElement.getAsJsonArray();
-        if (capabilitiesArray.size() < 1 || capabilitiesArray.size() > MAX_CAPABILITIES) {
-            throw invalid();
-        }
-        List<WishCapability> capabilities = new ArrayList<>();
-        Set<WishCapability> seen = new HashSet<>();
-        for (JsonElement element : capabilitiesArray) {
-            if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
-                throw invalid();
-            }
-            final WishCapability capability;
-            try {
-                capability = WishCapability.valueOf(element.getAsString());
-            } catch (IllegalArgumentException exception) {
-                throw invalid();
-            }
-            if (!seen.add(capability)) {
-                throw invalid();
-            }
-            capabilities.add(capability);
-        }
-        return new WishInterpretation(
-                schemaVersion, intent, literalGoal, loophole, twistedOutcome,
-                reasoningSummary, tone, severity, delivery, capabilities
-        );
+        List<WishCapability> capabilities = enumList(exactArray(object, "required_capabilities", 1, MAX_CAPABILITIES), WishCapability.class);
+        return new WishInterpretation(schema, intent, literal, contract, fulfillment, reasoning, tone, severity, delivery, capabilities);
     }
 
-    /**
-     * Accepts one narrowly repairable provider deviation while keeping the persisted and server-facing
-     * interpretation contract strict. Some JSON-object-only providers emit an English intent label as
-     * prose (for example, "obtain diamonds") even when the schema requires snake_case.
-     */
     public static WishInterpretation parseProviderResponse(String rawContent) {
-        try {
-            return parseAndValidate(rawContent);
-        } catch (IllegalArgumentException original) {
+        try { return parseAndValidate(rawContent); }
+        catch (IllegalArgumentException original) {
             final JsonElement parsed;
-            try {
-                parsed = parseStrict(stripSingleCodeFence(rawContent));
-            } catch (IllegalArgumentException ignored) {
-                throw original;
-            }
-            if (!parsed.isJsonObject() || !parsed.getAsJsonObject().keySet().equals(FIELDS)) {
-                throw original;
-            }
+            try { parsed = parseStrict(stripSingleCodeFence(rawContent)); }
+            catch (IllegalArgumentException ignored) { throw original; }
+            if (!parsed.isJsonObject() || !parsed.getAsJsonObject().keySet().equals(FIELDS)) throw original;
             JsonObject object = parsed.getAsJsonObject();
-            JsonElement intentElement = object.get("intent");
-            if (intentElement == null || !intentElement.isJsonPrimitive()
-                    || !intentElement.getAsJsonPrimitive().isString()) {
-                throw original;
-            }
-            String intent = intentElement.getAsString().strip();
-            String normalized = normalizeIntent(intent);
-            if (normalized.equals(intent) || !INTENT_PATTERN.matcher(normalized).matches()) {
-                throw original;
-            }
+            JsonElement value = object.get("intent");
+            if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) throw original;
+            String normalized = normalizeIntent(value.getAsString().strip());
+            if (!INTENT_PATTERN.matcher(normalized).matches()) throw original;
             object.addProperty("intent", normalized);
             return parseAndValidate(GSON.toJson(object));
         }
     }
 
-    public static void validate(WishInterpretation interpretation) {
-        parseAndValidate(toJson(interpretation));
+    /** Legacy records are deliberately accepted only by the save loader, never by the network parser above. */
+    public static void validateStored(WishInterpretation interpretation) {
+        if (interpretation.schemaVersion() == 1) return;
+        validate(interpretation);
     }
 
-    public static String toJson(WishInterpretation interpretation) {
-        JsonObject object = new JsonObject();
-        object.addProperty("schema_version", interpretation.schemaVersion());
-        object.addProperty("intent", interpretation.intent());
-        object.addProperty("literal_goal", interpretation.literalGoal());
-        object.addProperty("loophole", interpretation.loophole());
-        object.addProperty("twisted_outcome", interpretation.twistedOutcome());
-        object.addProperty("reasoning_summary", interpretation.reasoningSummary());
-        object.addProperty("tone", interpretation.tone().name());
-        object.addProperty("severity", interpretation.severity());
-        object.addProperty("delivery", interpretation.delivery().name());
+    public static void validate(WishInterpretation interpretation) { parseAndValidate(toJson(interpretation)); }
+
+    public static String toJson(WishInterpretation value) {
+        JsonObject root = new JsonObject();
+        root.addProperty("schema_version", value.schemaVersion());
+        root.addProperty("intent", value.intent());
+        root.addProperty("literal_goal", value.literalGoal());
+        JsonObject contract = new JsonObject();
+        contract.addProperty("type", value.contract().type().name());
+        contract.addProperty("required_outcome", value.contract().requiredOutcome());
+        JsonArray constraints = new JsonArray();
+        for (WishHardConstraint constraint : value.contract().hardConstraints()) {
+            JsonObject json = new JsonObject();
+            json.addProperty("kind", constraint.kind().name());
+            json.addProperty("operator", constraint.operator().name());
+            json.addProperty("semantic", constraint.semantic());
+            json.addProperty("quantity", constraint.quantity());
+            json.addProperty("amount", constraint.amount());
+            json.addProperty("required", constraint.required());
+            constraints.add(json);
+        }
+        contract.add("hard_constraints", constraints);
+        root.add("contract", contract);
+        JsonObject fulfillment = new JsonObject();
+        fulfillment.addProperty("mode", value.fulfillment().mode().name());
+        fulfillment.addProperty("method", value.fulfillment().method());
+        JsonArray styles = new JsonArray();
+        value.fulfillment().styles().forEach(style -> styles.add(style.name()));
+        fulfillment.add("styles", styles);
+        fulfillment.addProperty("absurdity", value.fulfillment().absurdity());
+        root.add("fulfillment", fulfillment);
+        root.addProperty("reasoning_summary", value.reasoningSummary());
+        root.addProperty("tone", value.tone().name());
+        root.addProperty("severity", value.severity());
+        root.addProperty("delivery", value.delivery().name());
         JsonArray capabilities = new JsonArray();
-        interpretation.requiredCapabilities().forEach(capability -> capabilities.add(capability.name()));
-        object.add("required_capabilities", capabilities);
-        return GSON.toJson(object);
+        value.requiredCapabilities().forEach(capability -> capabilities.add(capability.name()));
+        root.add("required_capabilities", capabilities);
+        return GSON.toJson(root);
     }
 
     public static JsonObject jsonSchema() {
-        JsonObject schema = GSON.fromJson("""
-                {
-                  "type":"object",
-                  "additionalProperties":false,
-                  "required":["schema_version","intent","literal_goal","loophole","twisted_outcome","reasoning_summary","tone","severity","delivery","required_capabilities"],
-                  "properties":{
-                    "schema_version":{"type":"integer","const":1},
-                    "intent":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[a-z][a-z0-9_-]{0,63}$"},
-                    "literal_goal":{"type":"string","minLength":1,"maxLength":512},
-                    "loophole":{"type":"string","minLength":1,"maxLength":1024},
-                    "twisted_outcome":{"type":"string","minLength":1,"maxLength":1024},
-                    "reasoning_summary":{"type":"string","minLength":1,"maxLength":1024},
-                    "tone":{"type":"string","enum":["NEUTRAL","IRONIC","DARK","HORROR","TRAGIC","ABSURD"]},
-                    "severity":{"type":"integer","minimum":0,"maximum":100},
-                    "delivery":{"type":"string","enum":["IMMEDIATE","DELAYED","CONDITIONAL","PROGRESSIVE","HIDDEN"]},
-                    "required_capabilities":{"type":"array","minItems":1,"maxItems":12,"uniqueItems":true,"items":{"type":"string"}}
-                  }
-                }
+        JsonObject root = GSON.fromJson("""
+                {"type":"object","additionalProperties":false,
+                 "required":["schema_version","intent","literal_goal","contract","fulfillment","reasoning_summary","tone","severity","delivery","required_capabilities"],
+                 "properties":{
+                   "schema_version":{"type":"integer","const":2},
+                   "intent":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[a-z][a-z0-9_-]{0,63}$"},
+                   "literal_goal":{"type":"string","minLength":1,"maxLength":512},
+                   "contract":{"type":"object","additionalProperties":false,"required":["type","required_outcome","hard_constraints"],"properties":{
+                     "type":{"type":"string"},"required_outcome":{"type":"string","minLength":1,"maxLength":1024},
+                     "hard_constraints":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"object","additionalProperties":false,
+                       "required":["kind","operator","semantic","quantity","amount","required"],"properties":{
+                         "kind":{"type":"string"},"operator":{"type":"string"},"semantic":{"type":"string","maxLength":128},
+                         "quantity":{"type":"integer","minimum":0},"amount":{"type":"number"},"required":{"type":"boolean"}}}}}},
+                   "fulfillment":{"type":"object","additionalProperties":false,"required":["mode","method","styles","absurdity"],"properties":{
+                     "mode":{"type":"string"},"method":{"type":"string","minLength":1,"maxLength":1024},
+                     "styles":{"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"type":"string"}},
+                     "absurdity":{"type":"integer","minimum":0,"maximum":100}}},
+                   "reasoning_summary":{"type":"string","minLength":1,"maxLength":1024},
+                   "tone":{"type":"string"},"severity":{"type":"integer","minimum":0,"maximum":100},
+                   "delivery":{"type":"string"},
+                   "required_capabilities":{"type":"array","minItems":1,"maxItems":12,"uniqueItems":true,"items":{"type":"string"}}
+                 }}
                 """, JsonObject.class);
-        JsonArray capabilityValues = new JsonArray();
-        for (WishCapability capability : WishCapability.values()) {
-            capabilityValues.add(capability.name());
-        }
-        schema.getAsJsonObject("properties")
-                .getAsJsonObject("required_capabilities")
-                .getAsJsonObject("items")
-                .add("enum", capabilityValues);
-        return schema;
+        JsonObject properties = root.getAsJsonObject("properties");
+        enumSchema(properties.getAsJsonObject("contract").getAsJsonObject("properties").getAsJsonObject("type"), WishContractType.values());
+        JsonObject constraintProps = properties.getAsJsonObject("contract").getAsJsonObject("properties").getAsJsonObject("hard_constraints")
+                .getAsJsonObject("items").getAsJsonObject("properties");
+        enumSchema(constraintProps.getAsJsonObject("kind"), WishConstraintKind.values());
+        enumSchema(constraintProps.getAsJsonObject("operator"), WishConstraintOperator.values());
+        JsonObject fulfillment = properties.getAsJsonObject("fulfillment").getAsJsonObject("properties");
+        enumSchema(fulfillment.getAsJsonObject("mode"), WishFulfillmentMode.values());
+        enumSchema(fulfillment.getAsJsonObject("styles").getAsJsonObject("items"), FulfillmentStyle.values());
+        enumSchema(properties.getAsJsonObject("tone"), WishTone.values());
+        enumSchema(properties.getAsJsonObject("delivery"), WishDelivery.values());
+        enumSchema(properties.getAsJsonObject("required_capabilities").getAsJsonObject("items"), WishCapability.values());
+        return root;
     }
 
-    private static JsonElement parseStrict(String json) {
-        try {
-            JsonReader reader = new JsonReader(new StringReader(json));
-            reader.setLenient(false);
-            JsonElement result = Streams.parse(reader);
-            if (reader.peek() != JsonToken.END_DOCUMENT) {
-                throw invalid();
-            }
-            return result;
-        } catch (Exception exception) {
-            if (exception instanceof IllegalArgumentException illegalArgumentException) {
-                throw illegalArgumentException;
-            }
-            throw invalid();
-        }
+    private static void validateConstraint(WishConstraintKind kind, WishConstraintOperator operator, String semantic,
+                                           int quantity, double amount, boolean required) {
+        if (quantity < 0 || !Double.isFinite(amount)) throw invalid();
+        boolean semanticKind = switch (kind) {
+            case RESOURCE_KIND, RESOURCE_SEMANTIC, STATE_METRIC, TARGET_SEMANTIC, TARGET_SCOPE, PERSISTENCE -> true;
+            default -> false;
+        };
+        if (semanticKind && !SEMANTIC_PATTERN.matcher(semantic).matches()) throw invalid();
+        if (kind == WishConstraintKind.CUSTOM_SEMANTIC && semantic.isBlank()) throw invalid();
+        if (kind == WishConstraintKind.MINIMUM_QUANTITY && (operator != WishConstraintOperator.AT_LEAST || quantity < 1)) throw invalid();
+        if (!required) throw invalid();
     }
 
-    private static String stripSingleCodeFence(String rawContent) {
-        if (rawContent == null) {
-            throw invalid();
+    private static <E extends Enum<E>> List<E> enumList(JsonArray array, Class<E> type) {
+        List<E> result = new ArrayList<>(); Set<E> seen = new HashSet<>();
+        for (JsonElement value : array) {
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) throw invalid();
+            final E parsed; try { parsed = Enum.valueOf(type, value.getAsString()); } catch (IllegalArgumentException e) { throw invalid(); }
+            if (!seen.add(parsed)) throw invalid(); result.add(parsed);
         }
-        String content = rawContent.strip();
-        if (!content.startsWith("```")) {
-            return content;
-        }
-        int firstNewline = content.indexOf('\n');
-        if (firstNewline < 0 || !content.endsWith("```")) {
-            throw invalid();
-        }
-        String language = content.substring(3, firstNewline).strip();
-        if (!language.isEmpty() && !language.equalsIgnoreCase("json")) {
-            throw invalid();
-        }
-        String body = content.substring(firstNewline + 1, content.length() - 3).strip();
-        if (body.contains("```")) {
-            throw invalid();
-        }
-        return body;
+        return result;
     }
 
+    private static JsonObject exactObject(JsonObject parent, String name, Set<String> fields) {
+        JsonElement value = parent.get(name);
+        if (value == null || !value.isJsonObject() || !value.getAsJsonObject().keySet().equals(fields)) throw invalid();
+        return value.getAsJsonObject();
+    }
+    private static JsonArray exactArray(JsonObject parent, String name, int min, int max) {
+        JsonElement value = parent.get(name);
+        if (value == null || !value.isJsonArray() || value.getAsJsonArray().size() < min || value.getAsJsonArray().size() > max) throw invalid();
+        return value.getAsJsonArray();
+    }
     private static int exactInteger(JsonObject object, String name) {
-        JsonElement element = object.get(name);
-        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isNumber()) {
-            throw invalid();
-        }
-        String value = element.getAsString();
-        if (!value.matches("-?(0|[1-9][0-9]*)")) {
-            throw invalid();
-        }
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException exception) {
-            throw invalid();
-        }
+        JsonElement value = object.get(name);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber() || !value.getAsString().matches("-?(0|[1-9][0-9]*)")) throw invalid();
+        try { return Integer.parseInt(value.getAsString()); } catch (NumberFormatException e) { throw invalid(); }
     }
-
-    private static String string(JsonObject object, String name, int maxLength) {
-        JsonElement element = object.get(name);
-        if (element == null || !element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
-            throw invalid();
-        }
-        String value = element.getAsString().strip();
-        if (value.isEmpty() || value.length() > maxLength) {
-            throw invalid();
-        }
-        return value;
+    private static double finiteNumber(JsonObject object, String name) {
+        JsonElement value = object.get(name);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()) throw invalid();
+        try { double result = value.getAsDouble(); if (!Double.isFinite(result)) throw invalid(); return result; }
+        catch (NumberFormatException e) { throw invalid(); }
     }
-
+    private static boolean bool(JsonObject object, String name) {
+        JsonElement value = object.get(name);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) throw invalid();
+        return value.getAsBoolean();
+    }
+    private static String string(JsonObject object, String name, int max) {
+        String value = stringAllowEmpty(object, name, max); if (value.isEmpty()) throw invalid(); return value;
+    }
+    private static String stringAllowEmpty(JsonObject object, String name, int max) {
+        JsonElement value = object.get(name);
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) throw invalid();
+        String result = value.getAsString().strip(); if (result.length() > max) throw invalid(); return result;
+    }
     private static <E extends Enum<E>> E enumValue(JsonObject object, String name, Class<E> type) {
-        String value = string(object, name, 64);
-        try {
-            return Enum.valueOf(type, value);
-        } catch (IllegalArgumentException exception) {
-            throw invalid();
-        }
+        try { return Enum.valueOf(type, string(object, name, 64)); } catch (IllegalArgumentException e) { throw invalid(); }
     }
-
+    private static void enumSchema(JsonObject schema, Enum<?>[] values) {
+        JsonArray enums = new JsonArray(); for (Enum<?> value : values) enums.add(value.name()); schema.add("enum", enums);
+    }
+    private static JsonElement parseStrict(String json) {
+        try { JsonReader reader = new JsonReader(new StringReader(json)); reader.setLenient(false); JsonElement result = Streams.parse(reader);
+            if (reader.peek() != JsonToken.END_DOCUMENT) throw invalid(); return result; }
+        catch (Exception e) { if (e instanceof IllegalArgumentException iae) throw iae; throw invalid(); }
+    }
+    private static String stripSingleCodeFence(String raw) {
+        if (raw == null) throw invalid(); String value = raw.strip(); if (!value.startsWith("```")) return value;
+        int newline = value.indexOf('\n'); if (newline < 0 || !value.endsWith("```")) throw invalid();
+        String language = value.substring(3, newline).strip(); if (!language.isEmpty() && !language.equalsIgnoreCase("json")) throw invalid();
+        String body = value.substring(newline + 1, value.length() - 3).strip(); if (body.contains("```")) throw invalid(); return body;
+    }
     private static String normalizeIntent(String intent) {
-        String normalized = intent.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9_-]+", "_")
-                .replaceAll("^[^a-z]+", "")
-                .replaceAll("[_-]+$", "");
-        if (normalized.length() > MAX_INTENT_LENGTH) {
-            normalized = normalized.substring(0, MAX_INTENT_LENGTH).replaceAll("[_-]+$", "");
-        }
-        return normalized;
+        String value = intent.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]+", "_").replaceAll("^[^a-z]+", "").replaceAll("[_-]+$", "");
+        if (value.length() > MAX_INTENT_LENGTH) value = value.substring(0, MAX_INTENT_LENGTH).replaceAll("[_-]+$", ""); return value;
     }
-
-    private static IllegalArgumentException invalid() {
-        return new IllegalArgumentException(AiErrorCategory.MALFORMED_RESPONSE.name());
-    }
+    private static IllegalArgumentException invalid() { return new IllegalArgumentException(AiErrorCategory.MALFORMED_RESPONSE.name()); }
 }

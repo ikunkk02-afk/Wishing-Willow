@@ -45,7 +45,7 @@ public final class WishActionPolicy {
             case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
             case PLAY_SOUND -> RegistryEntryType.SOUND;
             case SPAWN_PARTICLE -> RegistryEntryType.PARTICLE;
-            case CHANGE_BLOCK, REPLACE_BLOCK_AREA -> RegistryEntryType.BLOCK;
+            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN -> RegistryEntryType.BLOCK;
             default -> null;
         };
     }
@@ -74,8 +74,9 @@ public final class WishActionPolicy {
             case SPAWN_PARTICLE -> provided == WishCapability.VISUAL_EVENT || provided == WishCapability.HALLUCINATION;
             case LIGHTNING -> provided == WishCapability.LIGHTNING || provided == WishCapability.WORLD_EVENT;
             case EXPLOSION -> provided == WishCapability.EXPLOSION;
-            case CHANGE_BLOCK, REPLACE_BLOCK_AREA -> provided == WishCapability.BLOCK_CHANGE
+            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN -> provided == WishCapability.BLOCK_CHANGE
                     || provided == WishCapability.STRUCTURE;
+            case CREATE_STRUCTURE -> provided == WishCapability.STRUCTURE;
             case MODIFY_HEALTH -> Set.of(WishCapability.HEALING, WishCapability.DAMAGE,
                     WishCapability.IMMORTALITY, WishCapability.POWER_BUFF,
                     WishCapability.POWER_DEBUFF).contains(provided);
@@ -173,6 +174,15 @@ public final class WishActionPolicy {
                 keys(p, Set.of("radius", "max_blocks")); rangeInt(p, "radius", 1, 16);
                 rangeInt(p, "max_blocks", 1, 2048);
                 if (severity < 41) reject(WishExecutionAcceptError.BUDGET_EXCEEDED, "Block replacement requires severity 41");
+            }
+            case PLACE_BLOCK_PATTERN -> {
+                keys(p, Set.of("pattern", "count"));
+                oneOf(p, "pattern", Set.of("ENCLOSURE", "PILLAR", "ROOM"));
+                rangeInt(p, "count", 1, 2048);
+            }
+            case CREATE_STRUCTURE -> {
+                keys(p, Set.of("template"));
+                oneOf(p, "template", Set.of("SIMPLE_HOUSE"));
             }
             case MODIFY_HEALTH -> {
                 keys(p, Set.of("delta", "allow_lethal")); range(p, "delta", -40, 40); bool(p, "allow_lethal");

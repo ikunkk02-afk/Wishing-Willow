@@ -6,6 +6,8 @@ import com.ikunkk02.wishingwillow.ai.WishDelivery;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import com.ikunkk02.wishingwillow.execution.WishSafetyPolicy;
+import com.ikunkk02.wishingwillow.contract.WishConstraintKind;
+import com.ikunkk02.wishingwillow.contract.WishContractType;
 import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 
 import java.util.ArrayList;
@@ -65,13 +67,17 @@ public final class FallbackWishPlanner {
 
     private WishPlanDraft createDraft(String originalWish, String text, WishInterpretation interpretation,
                                       CapabilityCandidate candidate) {
-        WishActionType action = action(candidate);
-        if (action == null || !semanticMatch(text, candidate, action)) return null;
+        WishActionType action = action(candidate, interpretation);
+        if (action == null || (interpretation.schemaVersion() >= 2
+                ? !structuredSemanticMatch(interpretation, candidate, action)
+                : !semanticMatch(text, candidate, action))) return null;
         Timing timing = timing(interpretation.delivery());
         if (timing == null) return null;
         List<WishPlanStep> steps = new ArrayList<>();
         if (action == WishActionType.GIVE_ITEM) {
-            OptionalInt quantity = quantity(originalWish + " " + interpretation.literalGoal());
+            OptionalInt quantity = interpretation.schemaVersion() >= 2
+                    ? interpretation.contract().quantity(WishConstraintKind.MINIMUM_QUANTITY)
+                    : quantity(originalWish + " " + interpretation.literalGoal());
             if (quantity.isEmpty()) return null;
             int total = quantity.getAsInt();
             int max = 64 * WishPlanBudget.maxSteps(interpretation.severity());
@@ -84,12 +90,34 @@ public final class FallbackWishPlanner {
                         parameters));
                 remaining -= count;
             }
+        } else if (action == WishActionType.PLACE_BLOCK_PATTERN) {
+            int count = interpretation.contract().quantity(WishConstraintKind.MINIMUM_QUANTITY).orElse(1);
+            JsonObject parameters = new JsonObject();
+            parameters.addProperty("pattern", "ENCLOSURE"); parameters.addProperty("count", count);
+            steps.add(step(0, timing, action, candidate, WishTargetType.PLAYER, parameters));
+        } else if (action == WishActionType.CREATE_STRUCTURE) {
+            JsonObject parameters = new JsonObject(); parameters.addProperty("template", "SIMPLE_HOUSE");
+            steps.add(step(0, timing, action, candidate, WishTargetType.PLAYER, parameters));
+        } else if (action == WishActionType.MODIFY_ATTRIBUTE) {
+            JsonObject parameters = new JsonObject(); parameters.addProperty("attribute", "MOVEMENT_SPEED");
+            parameters.addProperty("operation", "MULTIPLY"); parameters.addProperty("amount", 1.0);
+            parameters.addProperty("duration_seconds", 3600);
+            steps.add(step(0, timing, action, candidate, WishTargetType.PLAYER, parameters));
+        } else if (action == WishActionType.CHANGE_REPUTATION) {
+            JsonObject parameters = new JsonObject(); parameters.addProperty("delta", 100); parameters.addProperty("radius", 64);
+            steps.add(step(0, timing, action, candidate, WishTargetType.NEARBY_ENTITIES, parameters));
         } else {
             JsonObject parameters = parameters(action, text, candidate);
             if (parameters == null) return null;
             WishTargetType target = action == WishActionType.CHANGE_TIME
                     || action == WishActionType.CHANGE_WEATHER ? WishTargetType.WORLD : WishTargetType.PLAYER;
             steps.add(step(0, timing, action, candidate, target, parameters));
+            if (action == WishActionType.SPAWN_ENTITY
+                    && interpretation.contract().type() == WishContractType.SPAWN_COMPANION) {
+                JsonObject follow = new JsonObject(); follow.addProperty("radius", 64);
+                follow.addProperty("max_entities", 10); follow.addProperty("duration_seconds", 3600);
+                steps.add(step(1, timing, WishActionType.FOLLOW_PLAYER, candidate, WishTargetType.NEARBY_ENTITIES, follow));
+            }
         }
         return new WishPlanDraft(1, "Controlled vanilla fallback", interpretation.delivery(),
                 interpretation.severity(), timing.delaySeconds == 0
@@ -104,7 +132,7 @@ public final class FallbackWishPlanner {
                 "Controlled fallback preserving the primary interpreted capability", candidate.reference());
     }
 
-    private static WishActionType action(CapabilityCandidate candidate) {
+    private static WishActionType action(CapabilityCandidate candidate, WishInterpretation interpretation) {
         RegistryEntryType type = candidate.registryResource() == null ? null : candidate.registryResource().type();
         if (type == RegistryEntryType.ITEM && Set.of(WishCapability.GIVE_ITEM,
                 WishCapability.STRONG_WEAPON, WishCapability.INVENTORY_CHANGE)
@@ -113,11 +141,15 @@ public final class FallbackWishPlanner {
         if (type == RegistryEntryType.ENTITY) return WishActionType.SPAWN_ENTITY;
         if (type == RegistryEntryType.SOUND) return WishActionType.PLAY_SOUND;
         if (type == RegistryEntryType.DIMENSION) return WishActionType.TELEPORT;
+        if (type == RegistryEntryType.BLOCK) return WishActionType.PLACE_BLOCK_PATTERN;
         if (candidate.sourceKind() == CandidateSourceKind.VANILLA_BUILTIN) {
             return switch (candidate.providedCapability()) {
                 case CHANGE_TIME -> WishActionType.CHANGE_TIME;
                 case CHANGE_WEATHER -> WishActionType.CHANGE_WEATHER;
                 case TELEPORT -> WishActionType.TELEPORT;
+                case STRUCTURE -> WishActionType.CREATE_STRUCTURE;
+                case PLAYER_ATTRIBUTE -> WishActionType.MODIFY_ATTRIBUTE;
+                case REPUTATION -> WishActionType.CHANGE_REPUTATION;
                 default -> null;
             };
         }
@@ -169,6 +201,21 @@ public final class FallbackWishPlanner {
         String path = id.substring(id.indexOf(':') + 1).replace('_', ' ');
         if (text.contains(path) || text.contains(candidate.featureName().toLowerCase(Locale.ROOT))) return true;
         return VANILLA_ALIASES.getOrDefault(id, List.of()).stream().anyMatch(text::contains);
+    }
+
+    private static boolean structuredSemanticMatch(WishInterpretation interpretation,
+                                                   CapabilityCandidate candidate, WishActionType action) {
+        if (interpretation.contract().type() != WishContractType.OBTAIN_RESOURCE) return true;
+        if (candidate.registryResource() == null) return false;
+        String expected = interpretation.contract().semantic(WishConstraintKind.RESOURCE_SEMANTIC).orElse("");
+        String id = candidate.registryResource().id();
+        String path = id.substring(id.indexOf(':') + 1);
+        return normalize(path).equals(normalize(expected))
+                && (action == WishActionType.GIVE_ITEM || action == WishActionType.PLACE_BLOCK_PATTERN);
+    }
+
+    private static String normalize(String value) {
+        return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
     }
 
     private static OptionalInt quantity(String value) {

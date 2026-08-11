@@ -6,6 +6,7 @@ import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.planning.WishActionType;
 import com.ikunkk02.wishingwillow.planning.WishPlan;
 import com.ikunkk02.wishingwillow.planning.WishPlanStep;
+import com.ikunkk02.wishingwillow.ai.FulfillmentStyle;
 
 import java.util.EnumMap;
 import java.util.List;
@@ -25,7 +26,8 @@ public final class WishOmenGenerator {
     }
 
     public static WishOmen generate(UUID sessionId, WishInterpretation interpretation, WishPlan plan) {
-        WishOmenCategory category = selectCategory(interpretation.requiredCapabilities(), plan.steps());
+        WishOmenCategory category = interpretation.schemaVersion() >= 2
+                ? categoryForContract(interpretation) : selectCategory(interpretation.requiredCapabilities(), plan.steps());
         WishDelivery delivery = plan.delivery();
         long seed = stableSeed(sessionId, category, delivery);
         boolean useDelivery = delivery == WishDelivery.HIDDEN
@@ -74,6 +76,21 @@ public final class WishOmenGenerator {
         return POOL_SIZES.get(category);
     }
 
+    private static WishOmenCategory categoryForContract(WishInterpretation interpretation) {
+        return switch (interpretation.contract().type()) {
+            case OBTAIN_RESOURCE -> interpretation.fulfillment().styles().contains(FulfillmentStyle.SPATIAL_ABSURDITY)
+                    || interpretation.fulfillment().styles().contains(FulfillmentStyle.PHYSICAL_ABSURDITY)
+                    ? WishOmenCategory.WORLD : WishOmenCategory.GIFT;
+            case CREATE_STRUCTURE, CHANGE_WORLD_STATE -> WishOmenCategory.WORLD;
+            case CHANGE_PLAYER_STATE, PERSISTENT_CONDITION, RESURRECTION -> WishOmenCategory.POWER;
+            case SPAWN_COMPANION -> WishOmenCategory.STALKING;
+            case REMOVE_THREAT -> WishOmenCategory.HOSTILE;
+            case TRAVEL -> WishOmenCategory.TELEPORT;
+            case SOCIAL_RELATION -> WishOmenCategory.REPUTATION;
+            case KNOWLEDGE, OTHER -> WishOmenCategory.GENERAL;
+        };
+    }
+
     private static WishOmenCategory categoryFor(WishCapability capability, WishActionType action) {
         if (capability != null) {
             return switch (capability) {
@@ -110,7 +127,7 @@ public final class WishOmenGenerator {
             case CHANGE_REPUTATION -> WishOmenCategory.REPUTATION;
             case FOLLOW_PLAYER, CHANGE_MOB_TARGET, SPAWN_ENTITY -> WishOmenCategory.HOSTILE;
             case SPAWN_PARTICLE -> WishOmenCategory.HALLUCINATION;
-            case EXPLOSION, CHANGE_BLOCK, REPLACE_BLOCK_AREA, START_PREDEFINED_EVENT -> WishOmenCategory.WORLD;
+            case EXPLOSION, CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, CREATE_STRUCTURE, START_PREDEFINED_EVENT -> WishOmenCategory.WORLD;
             default -> WishOmenCategory.GENERAL;
         };
     }

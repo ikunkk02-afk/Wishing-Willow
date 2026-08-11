@@ -1,0 +1,16 @@
+package com.ikunkk02.wishingwillow.contract;
+
+public enum WishContractType {
+    OBTAIN_RESOURCE,
+    CREATE_STRUCTURE,
+    CHANGE_PLAYER_STATE,
+    CHANGE_WORLD_STATE,
+    SPAWN_COMPANION,
+    REMOVE_THREAT,
+    TRAVEL,
+    SOCIAL_RELATION,
+    KNOWLEDGE,
+    RESURRECTION,
+    PERSISTENT_CONDITION,
+    OTHER
+}

@@ -1,0 +1,18 @@
+package com.ikunkk02.wishingwillow.contract;
+
+public enum WishConstraintKind {
+    RESOURCE_KIND,
+    RESOURCE_SEMANTIC,
+    MINIMUM_QUANTITY,
+    REAL_RESOURCE,
+    PLAYER_ACCESSIBLE,
+    STATE_METRIC,
+    STATE_DIRECTION,
+    TARGET_SEMANTIC,
+    TARGET_SCOPE,
+    PERSISTENCE,
+    STRUCTURE_EXISTS,
+    COMPANION_EXISTS,
+    THREAT_REMOVED,
+    CUSTOM_SEMANTIC
+}

@@ -1,10 +1,8 @@
 package com.ikunkk02.wishingwillow.network;
 
-import com.ikunkk02.wishingwillow.ai.WishCapability;
-import com.ikunkk02.wishingwillow.ai.WishDelivery;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishInterpretationValidator;
-import com.ikunkk02.wishingwillow.ai.WishTone;
+import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.planning.CandidateSourceKind;
 import com.ikunkk02.wishingwillow.planning.CapabilityCandidate;
 import com.ikunkk02.wishingwillow.planning.CapabilityCatalog;
@@ -27,20 +25,11 @@ public final class PlanningPacketCodec {
     private PlanningPacketCodec() { }
 
     public static void writeInterpretation(FriendlyByteBuf b, WishInterpretation i) {
-        b.writeVarInt(i.schemaVersion()); b.writeUtf(i.intent(),64); b.writeUtf(i.literalGoal(),512);
-        b.writeUtf(i.loophole(),1024); b.writeUtf(i.twistedOutcome(),1024); b.writeUtf(i.reasoningSummary(),1024);
-        b.writeEnum(i.tone()); b.writeVarInt(i.severity()); b.writeEnum(i.delivery());
-        b.writeVarInt(i.requiredCapabilities().size()); i.requiredCapabilities().forEach(b::writeEnum);
+        b.writeUtf(WishInterpretationValidator.toJson(i), 32 * 1024);
     }
 
     public static WishInterpretation readInterpretation(FriendlyByteBuf b) {
-        int schema=b.readVarInt(); String intent=b.readUtf(64); String literal=b.readUtf(512);
-        String loophole=b.readUtf(1024); String outcome=b.readUtf(1024); String reason=b.readUtf(1024);
-        WishTone tone=b.readEnum(WishTone.class); int severity=b.readVarInt(); WishDelivery delivery=b.readEnum(WishDelivery.class);
-        int count=b.readVarInt(); if(count<1||count>WishInterpretationValidator.MAX_CAPABILITIES) throw new IllegalArgumentException("INVALID_CAPABILITIES");
-        List<WishCapability> caps=new ArrayList<>(); for(int x=0;x<count;x++) caps.add(b.readEnum(WishCapability.class));
-        WishInterpretation value=new WishInterpretation(schema,intent,literal,loophole,outcome,reason,tone,severity,delivery,caps);
-        WishInterpretationValidator.validate(value); return value;
+        return WishInterpretationValidator.parseAndValidate(b.readUtf(32 * 1024));
     }
 
     public static void writeContext(FriendlyByteBuf b, WishContextSnapshot c) {

@@ -35,6 +35,8 @@ public final class WishPlanBudget {
             }
             case CHANGE_BLOCK -> 1;
             case REPLACE_BLOCK_AREA -> Math.max(1, (int) Math.ceil(integer(parameters, "max_blocks", 1) / 128.0));
+            case PLACE_BLOCK_PATTERN -> Math.max(1, (int) Math.ceil(integer(parameters, "count", 1) / 128.0));
+            case CREATE_STRUCTURE -> 4;
             case MODIFY_HEALTH -> {
                 double delta = decimal(parameters, "delta", 0);
                 yield delta < 0 ? (int) Math.ceil(-delta / 5.0) : 0;
