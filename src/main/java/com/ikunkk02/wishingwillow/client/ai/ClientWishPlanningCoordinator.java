@@ -103,7 +103,7 @@ public final class ClientWishPlanningCoordinator {
                 WishProgramJson.validate(packet.program(),
                         com.ikunkk02.wishingwillow.execution.action.WishActionRegistry.defaults());
                 WishProgramResourceKindValidator.validate(packet.program(), registry);
-                WishSkillRegistry.defaults().validateSelection(packet.program());
+                WishSkillRegistry.defaults().validateSelection(packet.program(), packet.sessionId());
                 if (packet.program().requiresAgent()) throw new IllegalArgumentException("UNKNOWN_CAPABILITY");
                 LOGGER.info("Wish program accepted session={} program={} coreActions={} presentationActions={}",
                         packet.sessionId(), packet.program().goal(),
@@ -181,7 +181,7 @@ public final class ClientWishPlanningCoordinator {
             WishProgramJson.validate(program,
                     com.ikunkk02.wishingwillow.execution.action.WishActionRegistry.defaults());
             WishProgramResourceKindValidator.validate(program, registry);
-            WishSkillRegistry.defaults().validateSelection(program);
+            WishSkillRegistry.defaults().validateSelection(program, packet.sessionId());
             LOGGER.info("Agent program accepted session={} coreActions={} presentationActions={}",
                     packet.sessionId(),
                     program.coreActions().stream().map(a -> a.action()).toList(),

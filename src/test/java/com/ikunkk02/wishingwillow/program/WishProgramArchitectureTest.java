@@ -1,5 +1,7 @@
 package com.ikunkk02.wishingwillow.program;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.ikunkk02.wishingwillow.execution.WishActionLoopDetector;
 import com.ikunkk02.wishingwillow.execution.WishExecutionState;
 import com.ikunkk02.wishingwillow.execution.WishProgramResultPolicy;
@@ -9,12 +11,18 @@ import com.ikunkk02.wishingwillow.execution.action.ActionStatus;
 import com.ikunkk02.wishingwillow.planning.WishActionRouter;
 import com.ikunkk02.wishingwillow.planning.WishExecutionRoute;
 import com.ikunkk02.wishingwillow.program.skill.WishSkillRegistry;
+import com.ikunkk02.wishingwillow.program.skill.ActionRequirementGroup;
+import com.ikunkk02.wishingwillow.program.skill.RequirementMode;
+import com.ikunkk02.wishingwillow.program.skill.WishSkillDefinition;
+import com.ikunkk02.wishingwillow.program.skill.WishSkillType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.Set;
+import java.time.Duration;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -52,6 +60,94 @@ class WishProgramArchitectureTest {
         WishSkillRegistry.defaults().validateSelection(program);
         assertTrue(program.usesSkill());
         assertFalse(program.requiresAgent());
+    }
+
+    @Test
+    void strategySkillAcceptsAttractionAuraWithoutEveryRecommendedAction() {
+        WishProgram program = program("never alone", "absurd_wish_realization",
+                List.of(action("entity_attraction_aura")), List.of());
+
+        assertDoesNotThrow(() -> WishSkillRegistry.defaults().validateSelection(program));
+    }
+
+    @Test
+    void strategySkillAcceptsSpawnedPermanentFriendWithoutAttractionAura() {
+        WishProgram program = program("a friend forever", "absurd_wish_realization",
+                List.of(action("spawn_entity"), action("follow_player")), List.of());
+
+        assertDoesNotThrow(() -> WishSkillRegistry.defaults().validateSelection(program));
+    }
+
+    @Test
+    void recipeSkillRejectsProgramMissingItsRequiredAction() {
+        WishProgram program = program("block rain", "block_rain",
+                List.of(action("play_sound")), List.of());
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> WishSkillRegistry.defaults().validateSelection(program));
+        assertEquals("SKILL_REQUIRED_ACTIONS_MISSING", error.getMessage());
+    }
+
+    @Test
+    void dramaticItemRewardAcceptsCoreRewardWithoutEveryPresentationAction() {
+        WishProgram program = program("dramatic reward", "dramatic_item_reward",
+                List.of(action("give_item")), List.of(action("play_sound")));
+
+        assertDoesNotThrow(() -> WishSkillRegistry.defaults().validateSelection(program));
+    }
+
+    @Test
+    void dramaticItemRewardRejectsPresentationWithoutCoreReward() {
+        WishProgram program = program("dramatic reward", "dramatic_item_reward",
+                List.of(), List.of(action("play_sound"), action("spawn_particle")));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> WishSkillRegistry.defaults().validateSelection(program));
+        assertEquals("SKILL_REQUIRED_ACTIONS_MISSING", error.getMessage());
+    }
+
+    @Test
+    void unknownSkillRemainsInvalid() {
+        WishProgram program = program("unknown", "not_registered",
+                List.of(action("play_sound")), List.of());
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> WishSkillRegistry.defaults().validateSelection(program));
+        assertEquals("UNKNOWN_SKILL", error.getMessage());
+    }
+
+    @Test
+    void anyOfRequirementGroupAcceptsOneAlternative() {
+        WishSkillRegistry registry = registryWithGroup(RequirementMode.ANY_OF, Set.of("give_item", "spawn_entity"));
+        WishProgram program = program("one alternative", "group_skill",
+                List.of(action("spawn_entity")), List.of());
+
+        assertDoesNotThrow(() -> registry.validateSelection(program));
+    }
+
+    @Test
+    void allOfRequirementGroupRejectsPartialAlternative() {
+        WishSkillRegistry registry = registryWithGroup(RequirementMode.ALL_OF, Set.of("spawn_entity", "follow_player"));
+        WishProgram program = program("partial recipe", "group_skill",
+                List.of(action("spawn_entity")), List.of());
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> registry.validateSelection(program));
+        assertEquals("SKILL_REQUIRED_ACTIONS_MISSING", error.getMessage());
+    }
+
+    @Test
+    void candidatePromptExplainsStrategyRecommendationsAndGroups() {
+        JsonObject candidate = JsonParser.parseString(
+                        WishSkillRegistry.defaults().candidatePrompt("I wish I would never be lonely"))
+                .getAsJsonArray().get(0).getAsJsonObject();
+
+        assertEquals("absurd_wish_realization", candidate.get("id").getAsString());
+        assertEquals("strategy", candidate.get("skill_type").getAsString());
+        assertTrue(candidate.getAsJsonArray("required_actions").isEmpty());
+        assertTrue(candidate.getAsJsonArray("recommended_actions").asList().stream()
+                .anyMatch(value -> value.getAsString().equals("entity_attraction_aura")));
+        assertTrue(candidate.has("requirement_groups"));
     }
 
     @Test
@@ -108,5 +204,20 @@ class WishProgramArchitectureTest {
                 {"schema_version":1,"goal":"%s","core_actions":[{"action":"%s","parameters":%s}],
                  "presentation_actions":[],"skill":"%s","unknown_capability":"%s"}
                 """.formatted(goal, action, parameters, skill, unknown));
+    }
+
+    private static WishProgram program(String goal, String skill, List<WishProgramAction> core,
+                                       List<WishProgramAction> presentation) {
+        return new WishProgram(WishProgram.CURRENT_SCHEMA_VERSION, goal, core, presentation, skill, "");
+    }
+
+    private static WishProgramAction action(String id) {
+        return new WishProgramAction(id, new JsonObject());
+    }
+
+    private static WishSkillRegistry registryWithGroup(RequirementMode mode, Set<String> actions) {
+        return new WishSkillRegistry(List.of(new WishSkillDefinition("group_skill", "test", Set.of("test"),
+                WishSkillType.RECIPE, Set.of(), Set.of(),
+                List.of(new ActionRequirementGroup(mode, actions)), "", List.of(), Duration.ofSeconds(1))));
     }
 }

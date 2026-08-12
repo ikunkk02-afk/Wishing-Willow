@@ -3,27 +3,37 @@ package com.ikunkk02.wishingwillow.program.skill;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
 import com.ikunkk02.wishingwillow.program.WishProgram;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /** Bounded tag/example retrieval; no Agent search loop is involved. */
 public final class WishSkillRegistry {
     private static final Gson GSON = new Gson();
+    private static final Logger LOGGER = LoggerFactory.getLogger(WishSkillRegistry.class);
     private static final WishSkillRegistry DEFAULT = defaultsInternal();
     private final Map<String, WishSkillDefinition> skills;
 
-    private WishSkillRegistry(List<WishSkillDefinition> definitions) {
+    public WishSkillRegistry(List<WishSkillDefinition> definitions) {
         Map<String, WishSkillDefinition> values = new LinkedHashMap<>();
-        definitions.forEach(skill -> values.put(skill.id(), skill));
+        definitions.forEach(skill -> {
+            if (values.putIfAbsent(skill.id(), skill) != null) {
+                throw new IllegalArgumentException("DUPLICATE_SKILL_ID");
+            }
+        });
         this.skills = Map.copyOf(values);
     }
 
@@ -40,24 +50,63 @@ public final class WishSkillRegistry {
     }
 
     public void validateSelection(WishProgram program) {
+        validateSelection(program, null);
+    }
+
+    public void validateSelection(WishProgram program, @Nullable UUID sessionId) {
         if (!program.usesSkill()) return;
         WishSkillDefinition skill = find(program.skill());
-        if (skill == null) throw new IllegalArgumentException("UNKNOWN_SKILL");
-        Set<String> used = new java.util.HashSet<>();
+        LOGGER.info("Skill validation started session={} skill={}", session(sessionId), program.skill());
+        if (skill == null) {
+            LOGGER.warn("Skill validation failed session={} skill={} requirement=KNOWN_SKILL",
+                    session(sessionId), program.skill());
+            throw new IllegalArgumentException("UNKNOWN_SKILL");
+        }
+        Set<String> used = new HashSet<>();
         program.coreActions().forEach(action -> used.add(action.action()));
         program.presentationActions().forEach(action -> used.add(action.action()));
-        if (!used.containsAll(skill.requiredActions())) throw new IllegalArgumentException("SKILL_REQUIRED_ACTIONS_MISSING");
+        LOGGER.info("Skill validation actions session={} skill={} used={} required={} recommended={} groups={}",
+                session(sessionId), skill.id(), sorted(used), sorted(skill.requiredActions()),
+                sorted(skill.recommendedActions()), skill.requirementGroups());
+
+        Set<String> missing = new HashSet<>(skill.requiredActions());
+        missing.removeAll(used);
+        if (!missing.isEmpty()) {
+            fail(sessionId, skill, RequirementMode.ALL_OF.name(), skill.requiredActions(), used, missing);
+        }
+        for (ActionRequirementGroup group : skill.requirementGroups()) {
+            if (!group.satisfiedBy(used)) {
+                Set<String> groupMissing = new HashSet<>(group.actions());
+                groupMissing.removeAll(used);
+                fail(sessionId, skill, group.mode().name(), group.actions(), used, groupMissing);
+            }
+        }
+        LOGGER.info("Skill validation passed session={} skill={} mode={}",
+                session(sessionId), skill.id(), skill.type());
     }
 
     public String candidatePrompt(String intent) {
         JsonArray result = new JsonArray();
         retrieve(intent, 3).forEach(skill -> {
             JsonObject value = new JsonObject();
-            value.addProperty("id", skill.id()); value.addProperty("description", skill.description());
-            JsonArray triggers = new JsonArray(); skill.triggers().forEach(triggers::add); value.add("triggers", triggers);
-            JsonArray required = new JsonArray(); skill.requiredActions().forEach(required::add); value.add("required_actions", required);
+            value.addProperty("id", skill.id());
+            value.addProperty("description", skill.description());
+            value.addProperty("skill_type", skill.type().name().toLowerCase(Locale.ROOT));
+            value.add("triggers", strings(skill.triggers()));
+            value.add("required_actions", strings(skill.requiredActions()));
+            value.add("recommended_actions", strings(skill.recommendedActions()));
+            JsonArray groups = new JsonArray();
+            skill.requirementGroups().forEach(group -> {
+                JsonObject requirement = new JsonObject();
+                requirement.addProperty("mode", group.mode().name().toLowerCase(Locale.ROOT));
+                requirement.add("actions", strings(group.actions()));
+                groups.add(requirement);
+            });
+            value.add("requirement_groups", groups);
             value.addProperty("parameter_template", skill.parameterTemplate());
-            JsonArray examples = new JsonArray(); skill.examples().forEach(examples::add); value.add("examples", examples);
+            JsonArray examples = new JsonArray();
+            skill.examples().forEach(examples::add);
+            value.add("examples", examples);
             result.add(value);
         });
         return GSON.toJson(result);
@@ -76,12 +125,35 @@ public final class WishSkillRegistry {
         return value == null ? "" : value.toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N}]+", "_");
     }
 
+    private static void fail(@Nullable UUID sessionId, WishSkillDefinition skill,
+                             String mode, Set<String> required, Set<String> used,
+                             Set<String> missing) {
+        LOGGER.warn("Skill validation failed session={} skill={} requirement={} required={} used={} missing={}",
+                session(sessionId), skill.id(), mode, sorted(required), sorted(used), sorted(missing));
+        throw new IllegalArgumentException("SKILL_REQUIRED_ACTIONS_MISSING");
+    }
+
+    private static List<String> sorted(Set<String> actions) {
+        return actions.stream().sorted().toList();
+    }
+
+    private static JsonArray strings(Set<String> values) {
+        JsonArray result = new JsonArray();
+        values.stream().sorted().forEach(result::add);
+        return result;
+    }
+
+    private static String session(@Nullable UUID sessionId) {
+        return sessionId == null ? "UNAVAILABLE" : sessionId.toString();
+    }
+
     private static WishSkillRegistry defaultsInternal() {
         List<WishSkillDefinition> values = new ArrayList<>();
         values.add(new WishSkillDefinition("block_rain",
                 "Physical rain made only from real registered blocks around a target.",
                 Set.of("block rain", "falling blocks", "blocks from above", "\u65b9\u5757\u96e8"),
-                Set.of("spawn_falling_block"),
+                WishSkillType.RECIPE,
+                Set.of("spawn_falling_block"), Set.of(), List.of(),
                 "Resolve block id; clamp count; call spawn_falling_block with gravity, spread and bounded interval.",
                 List.of("\u8ba9100\u4e2a\u94bb\u77f3\u5757\u4ece\u5929\u800c\u964d",
                         "\u8ba9\u91d1\u5757\u50cf\u96e8\u4e00\u6837\u6389\u4e0b\u6765", "sand falls from the sky"),
@@ -90,8 +162,9 @@ public final class WishSkillRegistry {
                 "Give a real item reward and add optional celebratory presentation.",
                 Set.of("dramatic reward with sound and particles", "cinematic item reward",
                         "\u58f0\u97f3\u548c\u7c92\u5b50\u7279\u6548\u5956\u52b1"),
-                Set.of("give_item", "play_sound", "spawn_particle"),
-                "give_item is core; sound/particle/lightning are presentation actions.",
+                WishSkillType.RECIPE,
+                Set.of("give_item"), Set.of("play_sound", "spawn_particle"), List.of(),
+                "give_item is core; sound/particle/lightning are optional presentation actions.",
                 List.of("\u7ed9\u621164\u9897\u94bb\u77f3\u7136\u540e\u5e86\u795d",
                         "reward me with emeralds and effects"), Duration.ofSeconds(30)));
         values.add(new WishSkillDefinition("absurd_wish_realization",
@@ -109,16 +182,35 @@ public final class WishSkillRegistry {
                         "become the luckiest", "world peace", "everybody",
                         "all animals", "all monsters", "attract everything",
                         "\u5438\u5f15\u6240\u6709", "\u5168\u90e8\u9760\u8fd1"),
-                Set.of("entity_attraction_aura", "follow_player", "spawn_entity", "play_sound"),
-                "Use entity_attraction_aura with permanent=true for wishes about \"never being alone\" or \"all creatures coming to me\". Use follow_player with permanent=true for a single dedicated follower. Always prefer global rules over single-entity spawns for abstract wishes. Set permanent=true and use large radius. Include ALL entity types (hostile, passive, villagers, modded). The absurdity is that the wish IS fulfilled literally: the player truly is NEVER alone, but the consequence is overwhelming.",
+                WishSkillType.STRATEGY,
+                Set.of(),
+                Set.of("entity_attraction_aura", "follow_player", "spawn_entity",
+                        "apply_effect", "apply_effect_group", "set_entity_target",
+                        "play_sound", "spawn_particle", "place_pattern"),
+                List.of(),
+                "Use entity_attraction_aura with permanent=true for wishes about \"never being alone\" or \"all creatures coming to me\". Use spawn_entity plus follow_player with permanent=true for a single dedicated follower. Recommended actions are optional tools, not a list that must all appear. Prefer global rules over single-entity spawns for abstract global wishes. The absurdity is that the wish is fulfilled literally, potentially with overwhelming consequences.",
                 List.of("I wish I would never be lonely",
                         "\u6211\u5e0c\u671b\u6c38\u8fdc\u4e0d\u5b64\u5355",
                         "\u8ba9\u6240\u6709\u751f\u7269\u90fd\u88ab\u6211\u5438\u5f15",
                         "make the whole world come to me",
                         "every living thing should follow me forever"),
                 Duration.ofSeconds(120)));
-        
+
+        validateActionReferences(values, WishActionRegistry.defaults().ids());
         return new WishSkillRegistry(values);
+    }
+
+    private static void validateActionReferences(List<WishSkillDefinition> skills,
+                                                 Set<String> registeredActions) {
+        for (WishSkillDefinition skill : skills) {
+            Set<String> referenced = new HashSet<>(skill.requiredActions());
+            referenced.addAll(skill.recommendedActions());
+            skill.requirementGroups().forEach(group -> referenced.addAll(group.actions()));
+            if (!registeredActions.containsAll(referenced)) {
+                referenced.removeAll(registeredActions);
+                throw new IllegalArgumentException("UNKNOWN_SKILL_ACTIONS:" + skill.id() + ":" + sorted(referenced));
+            }
+        }
     }
 
     private record Scored(WishSkillDefinition skill, int score) { }
