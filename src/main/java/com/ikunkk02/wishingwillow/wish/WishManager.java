@@ -296,6 +296,20 @@ public final class WishManager {
             WishPipelineAudit.failure(sessionId,"INTERPRETATION",acceptedError.name(),state.name());
             WishLifecycleLog.event(sessionId, "INTERPRETATION_COMPLETED",
                     "status=FAILED error=" + acceptedError + " state=" + state);
+            String aiErrorKey = switch (acceptedError) {
+                case TIMEOUT -> "message.wishing_willow.ai.error.timeout";
+                case DNS_FAILURE -> "message.wishing_willow.ai.error.dns_failure";
+                case UNAUTHORIZED -> "message.wishing_willow.ai.error.unauthorized";
+                case FORBIDDEN -> "message.wishing_willow.ai.error.forbidden";
+                case MODEL_UNAVAILABLE -> "message.wishing_willow.ai.error.model_unavailable";
+                case RATE_LIMITED -> "message.wishing_willow.ai.error.rate_limited";
+                case MALFORMED_RESPONSE, EMPTY_RESPONSE ->
+                        "message.wishing_willow.ai.error.invalid_response";
+                case SERVER_ERROR -> "message.wishing_willow.ai.error.server_error";
+                case CONNECTION_REFUSED -> "message.wishing_willow.ai.error.connection_refused";
+                default -> "message.wishing_willow.ai.error.default";
+            };
+            player.sendSystemMessage(Component.translatable(aiErrorKey));
             if (record != null && record.program() != null) {
                 recordProgramFailure(player, sessionId, WishProgramError.INVALID_PROGRAM,
                         "interpretation: " + acceptedError.name());

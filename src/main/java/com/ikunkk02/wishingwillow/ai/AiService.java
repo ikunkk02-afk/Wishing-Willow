@@ -12,11 +12,11 @@ import java.util.List;
 import com.google.gson.JsonObject;
 
 public final class AiService {
-    private static final AiService INSTANCE = new AiService(true);
     private static final int AI_WORKER_THREADS = 4;
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
     private static final Duration PROVIDER_REQUEST_TIMEOUT = Duration.ofSeconds(25);
     private static final long PROVIDER_RETRY_DELAY_MS = 1000L;
+    private static final AiService INSTANCE = new AiService(true);
 
     private final ScheduledExecutorService executor;
     private final HttpClient httpClient;

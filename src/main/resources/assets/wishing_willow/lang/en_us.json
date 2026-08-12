@@ -338,5 +338,15 @@
   "advancement.wishing_willow.backfire.title": "Too Much of a Good Thing",
   "advancement.wishing_willow.backfire.description": "Sometimes a wish comes true a little too well.",
   "advancement.wishing_willow.careful.title": "Careful What You Wish For",
-  "advancement.wishing_willow.careful.description": "Some wishes are better left unrealized."
+  "advancement.wishing_willow.careful.description": "Some wishes are better left unrealized.",
+  "message.wishing_willow.ai.error.timeout": "✦ The wish's power did not respond... Please check your AI network connection and try again.",
+  "message.wishing_willow.ai.error.dns_failure": "✦ Cannot reach the AI service. Please check your network or server address.",
+  "message.wishing_willow.ai.error.unauthorized": "✦ The AI API key is invalid. Please update it in settings.",
+  "message.wishing_willow.ai.error.forbidden": "✦ The AI service refused the request.",
+  "message.wishing_willow.ai.error.model_unavailable": "✦ The selected AI model is unavailable. Try another model in settings.",
+  "message.wishing_willow.ai.error.rate_limited": "✦ AI requests are too frequent. Please wait a moment and wish again.",
+  "message.wishing_willow.ai.error.invalid_response": "✦ The AI returned an unreadable wish result. Please try again.",
+  "message.wishing_willow.ai.error.server_error": "✦ The AI service encountered an error. Please try again later.",
+  "message.wishing_willow.ai.error.connection_refused": "✦ Could not connect to the AI service. Please check your server address and network.",
+  "message.wishing_willow.ai.error.default": "✦ The wish encountered an unexpected AI error. Please try again."
 }

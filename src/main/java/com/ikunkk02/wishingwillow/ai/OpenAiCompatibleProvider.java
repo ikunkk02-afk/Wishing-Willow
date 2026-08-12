@@ -5,6 +5,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.mojang.logging.LogUtils;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 public final class OpenAiCompatibleProvider implements AiProvider {
+    private static final Logger LOGGER = LogUtils.getLogger();
     public static final int MAX_RESPONSE_BYTES = 1024 * 1024;
     private static final Duration DEFAULT_REQUEST_TIMEOUT = Duration.ofSeconds(45);
     private static final Map<String, AiOutputMode> OUTPUT_MODE_CACHE = new ConcurrentHashMap<>();
@@ -232,12 +235,23 @@ public final class OpenAiCompatibleProvider implements AiProvider {
             Supplier<CompletableFuture<AiResponse>> request,
             int attempt
     ) {
+        long startedNanos = System.nanoTime();
+        LOGGER.info("AI HTTP attempt started provider={} model={} attempt={} timeoutSeconds={}",
+                config.providerType(), safeModel(config.model()), attempt + 1, requestTimeout.toSeconds());
         return request.get().handle((response, throwable) -> {
             if (throwable == null) {
+                long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+                LOGGER.info("AI HTTP response received provider={} attempt={} elapsedMs={}",
+                        config.providerType(), attempt + 1, elapsedMs);
                 return CompletableFuture.completedFuture(response);
             }
             AiRequestException failure = unwrap(throwable);
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+            LOGGER.warn("AI HTTP attempt failed provider={} category={} attempt={} elapsedMs={} httpStatus={}",
+                    config.providerType(), failure.category(), attempt + 1, elapsedMs, failure.httpStatus());
             if (attempt == 0 && isTransient(failure.category())) {
+                LOGGER.info("AI HTTP retry scheduled provider={} nextAttempt={} delayMs={}",
+                        config.providerType(), 2, retryDelayMillis);
                 CompletableFuture<AiResponse> delayed = new CompletableFuture<>();
                 executor.schedule(
                         () -> retryOnce(request, 1).whenComplete((value, retryError) -> {
@@ -252,6 +266,8 @@ public final class OpenAiCompatibleProvider implements AiProvider {
                 );
                 return delayed;
             }
+            LOGGER.warn("AI HTTP request exhausted provider={} category={} attempt={} elapsedMs={}",
+                    config.providerType(), failure.category(), attempt + 1, elapsedMs);
             return CompletableFuture.<AiResponse>failedFuture(failure);
         }).thenCompose(future -> future);
     }
@@ -261,6 +277,9 @@ public final class OpenAiCompatibleProvider implements AiProvider {
         body.addProperty("model", config.model());
         body.addProperty("stream", false);
         body.addProperty("max_tokens", request.maxTokens());
+        LOGGER.info("AI HTTP request params provider={} model={} maxTokens={} outputMode={}",
+                config.providerType(), safeModel(config.model()),
+                request.maxTokens(), request.outputMode());
         if (request.outputMode() != AiOutputMode.TEXT) {
             body.addProperty("temperature", 0.0);
         }
@@ -352,6 +371,15 @@ public final class OpenAiCompatibleProvider implements AiProvider {
 
     private String cacheKey() {
         return endpoints.chatCompletions() + "\n" + config.model();
+    }
+
+    private static String safeModel(String model) {
+        if (model == null) return "NULL";
+        return model.chars()
+                .map(character -> Character.isISOControl(character) ? '?' : character)
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint,
+                        StringBuilder::append)
+                .toString();
     }
 
     private static JsonObject message(String role, String content) {

@@ -338,5 +338,15 @@
   "advancement.wishing_willow.backfire.title": "物极必反",
   "advancement.wishing_willow.backfire.description": "有时候，愿望实现得太好了。",
   "advancement.wishing_willow.careful.title": "小心你许下的愿望",
-  "advancement.wishing_willow.careful.description": "有些愿望，还是不要实现比较好。"
+  "advancement.wishing_willow.careful.description": "有些愿望，还是不要实现比较好。",
+  "message.wishing_willow.ai.error.timeout": "✦ 愿望的力量没有回应……请检查 AI 网络连接后重试。",
+  "message.wishing_willow.ai.error.dns_failure": "✦ 无法连接到 AI 服务，请检查网络或接口地址。",
+  "message.wishing_willow.ai.error.unauthorized": "✦ AI API 密钥无效，请在设置中更新。",
+  "message.wishing_willow.ai.error.forbidden": "✦ AI 服务拒绝了请求。",
+  "message.wishing_willow.ai.error.model_unavailable": "✦ 当前选择的 AI 模型不可用，请在设置中更换模型。",
+  "message.wishing_willow.ai.error.rate_limited": "✦ AI 请求过于频繁，请稍后再次许愿。",
+  "message.wishing_willow.ai.error.invalid_response": "✦ AI 返回了无法解析的愿望结果，请重新尝试。",
+  "message.wishing_willow.ai.error.server_error": "✦ AI 服务出现了故障，请稍后再试。",
+  "message.wishing_willow.ai.error.connection_refused": "✦ 无法连接到 AI 服务，请检查服务地址与网络。",
+  "message.wishing_willow.ai.error.default": "✦ 愿望遇到了意外的 AI 错误，请重试。"
 }
