@@ -242,6 +242,135 @@ public final class WishExecutionGameTests {
         });
     }
 
+    /**
+     * Diagnostic helper for the one-way half of the restoration regression below. It is not
+     * independently registered because two global all-mob suppression tests running in parallel
+     * would intentionally remove the entities belonging to unrelated GameTests.
+     */
+    public static void nativeEntitySuppressionExecutesThroughTickLoop(GameTestHelper helper){
+        var server=helper.getLevel().getServer();UUID session=UUID.randomUUID(),owner=UUID.randomUUID();
+        ServerPlayer player=ownerPlayer(helper,owner);place(player,helper.absolutePos(new BlockPos(1,2,1)));
+        registerPlayer(server,player);
+        net.minecraft.world.entity.animal.Chicken chicken=EntityType.CHICKEN.create(helper.getLevel());
+        if(chicken==null){unregisterPlayer(server,player);helper.fail("Chicken creation failed");return;}
+        chicken.moveTo(player.position().add(2,0,0));helper.getLevel().addFreshEntity(chicken);
+        WishProgram program=WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"remove every mob forever","core_actions":[
+                 {"action":"entity_suppression","parameters":{"group":"all_mobs","scope":"all_dimensions",
+                  "remove_existing":true,"prevent_future":true,"permanent":true,
+                  "disappearance_mode":"discard","exclude_players":true}}],
+                 "presentation_actions":[],"skill":"absurd_wish_realization","unknown_capability":""}""");
+        WishInterpretation interpretation=new WishInterpretation(1,"entity_removal","All mobs disappear","",
+                "All mobs disappear","GameTest",WishTone.HORROR,100,WishDelivery.IMMEDIATE,
+                List.of(WishCapability.ENTITY_REMOVAL));
+        WishRecord wish=new WishRecord(session,owner,"世界上所有生物都消失",helper.getLevel().dimension().location(),
+                helper.getLevel().getGameTime(),System.currentTimeMillis(),WishState.FINISHED,InterpretationState.SUCCESS,
+                AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,AiProviderType.CUSTOM,"gametest",
+                System.currentTimeMillis(),interpretation).withProgram(program);
+        WishSavedData.get(server).update(wish);
+        ValidatedWishProgram validated=WishProgramValidator.validate(program,new ForgeWishProgramResourceResolver(server));
+        if(!validated.coreActions().get(0).parameters().has("group")){
+            unregisterPlayer(server,player);helper.fail("Validated suppression lost group parameter");return;
+        }
+        WishExecutionAcceptResult accepted=WishActionManager.startProgram(player,wish,validated);
+        if(!accepted.accepted()){unregisterPlayer(server,player);helper.fail("Program start failed: "+accepted.error()+" "+accepted.detail());return;}
+        helper.runAfterDelay(220,()->{
+            WishRecord stored=WishSavedData.get(server).getBySession(session);
+            WishExecutionRecord execution=stored==null||stored.executionId()==null?null:
+                    WishExecutionSavedData.get(server).get(stored.executionId());
+            boolean removed=chicken.isRemoved();
+            boolean hasRule=WishEntitySuppressionSavedData.get(server).rules().stream()
+                    .anyMatch(rule->rule.sourceSessionId().equals(session));
+            boolean ok=execution!=null&&execution.source()==ExecutionSource.WISH_PROGRAM
+                    &&stored.plan()==null&&execution.state()==WishExecutionState.COMPLETED&&removed&&hasRule;
+            WishEntitySuppressionSavedData.get(server).removeMatching(owner,
+                    WishEntitySuppressionSavedData.Group.ALL_MOBS,
+                    WishEntitySuppressionSavedData.Scope.ALL_DIMENSIONS,
+                    helper.getLevel().dimension().location());
+            unregisterPlayer(server,player);
+            if(!ok){helper.fail("Native entity suppression failed state="
+                    +(execution==null?"none":execution.state()+" "+execution.lastError())
+                    +" removed="+removed+" hasRule="+hasRule);return;}
+            helper.succeed();
+        });
+    }
+
+    /** Regression: a later restore wish reverses permanent suppression and makes mobs visible again. */
+    @GameTest(template="empty",templateNamespace="minecraft",batch="entitySuppression",timeoutTicks=420)
+    public static void nativeEntitySuppressionCanBeReversedByLaterWish(GameTestHelper helper){
+        var server=helper.getLevel().getServer();UUID owner=UUID.randomUUID(),suppressSession=UUID.randomUUID();
+        ServerPlayer player=ownerPlayer(helper,owner);place(player,helper.absolutePos(new BlockPos(1,2,1)));prepareFloor(helper);
+        registerPlayer(server,player);
+        WishEntitySuppressionSavedData suppressionData=WishEntitySuppressionSavedData.get(server);
+        for(WishEntitySuppressionSavedData.Rule stale:suppressionData.rules()){
+            suppressionData.removeMatching(stale.ownerId(),stale.group(),
+                    WishEntitySuppressionSavedData.Scope.ALL_DIMENSIONS,
+                    helper.getLevel().dimension().location());
+        }
+        net.minecraft.world.entity.animal.Chicken original=EntityType.CHICKEN.create(helper.getLevel());
+        if(original==null){unregisterPlayer(server,player);helper.fail("Chicken creation failed");return;}
+        original.moveTo(player.position().add(2,0,0));helper.getLevel().addFreshEntity(original);
+        WishProgram suppress=WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"remove every mob forever","core_actions":[
+                 {"action":"entity_suppression","parameters":{"group":"all_mobs","scope":"all_dimensions",
+                  "remove_existing":true,"prevent_future":true,"permanent":true,
+                  "disappearance_mode":"discard","exclude_players":true}}],
+                 "presentation_actions":[],"skill":"absurd_wish_realization","unknown_capability":""}""");
+        WishInterpretation suppressInterpretation=new WishInterpretation(1,"entity_removal","All mobs disappear","",
+                "All mobs disappear","GameTest",WishTone.HORROR,100,WishDelivery.IMMEDIATE,
+                List.of(WishCapability.ENTITY_REMOVAL));
+        WishRecord suppressWish=new WishRecord(suppressSession,owner,"世界上所有生物都消失",helper.getLevel().dimension().location(),
+                helper.getLevel().getGameTime(),System.currentTimeMillis(),WishState.FINISHED,InterpretationState.SUCCESS,
+                AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,AiProviderType.CUSTOM,"gametest",
+                System.currentTimeMillis(),suppressInterpretation).withProgram(suppress);
+        WishSavedData.get(server).update(suppressWish);
+        ValidatedWishProgram suppressValidated=WishProgramValidator.validate(suppress,new ForgeWishProgramResourceResolver(server));
+        WishExecutionAcceptResult suppressed=WishActionManager.startProgram(player,suppressWish,suppressValidated);
+        if(!suppressed.accepted()){unregisterPlayer(server,player);helper.fail("Suppression start failed");return;}
+        helper.runAfterDelay(140,()->{
+            if(!original.isRemoved()){
+                suppressionData.removeMatching(owner,WishEntitySuppressionSavedData.Group.ALL_MOBS,
+                        WishEntitySuppressionSavedData.Scope.ALL_DIMENSIONS,helper.getLevel().dimension().location());
+                unregisterPlayer(server,player);helper.fail("Initial suppression did not remove mob");return;
+            }
+            UUID restoreSession=UUID.randomUUID();
+            WishProgram restore=WishProgramJson.parseAndValidate("""
+                    {"schema_version":1,"goal":"bring all creatures back","core_actions":[
+                     {"action":"restore_entity_spawning","parameters":{"group":"all_mobs","scope":"all_dimensions",
+                      "initial_count":12,"radius":16}}],
+                     "presentation_actions":[],"skill":"absurd_wish_realization","unknown_capability":""}""");
+            WishInterpretation restoreInterpretation=new WishInterpretation(1,"entity_restoration","All mobs return","",
+                    "Creatures visibly return","GameTest",WishTone.ABSURD,60,WishDelivery.IMMEDIATE,
+                    List.of(WishCapability.SPAWN_ENTITY));
+            WishRecord restoreWish=new WishRecord(restoreSession,owner,"让所有生物回来",helper.getLevel().dimension().location(),
+                    helper.getLevel().getGameTime(),System.currentTimeMillis(),WishState.FINISHED,InterpretationState.SUCCESS,
+                    AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,AiProviderType.CUSTOM,"gametest",
+                    System.currentTimeMillis(),restoreInterpretation).withProgram(restore);
+            WishSavedData.get(server).update(restoreWish);
+            ValidatedWishProgram restoreValidated=WishProgramValidator.validate(restore,new ForgeWishProgramResourceResolver(server));
+            WishExecutionAcceptResult restored=WishActionManager.startProgram(player,restoreWish,restoreValidated);
+            if(!restored.accepted()){unregisterPlayer(server,player);helper.fail("Restoration start failed: "+restored.error());return;}
+            helper.runAfterDelay(220,()->{
+                WishRecord stored=WishSavedData.get(server).getBySession(restoreSession);
+                WishExecutionRecord execution=stored==null||stored.executionId()==null?null:
+                        WishExecutionSavedData.get(server).get(stored.executionId());
+                long visible=0;
+                for(Entity entity:helper.getLevel().getEntities().getAll()){
+                    if(entity instanceof net.minecraft.world.entity.Mob)visible++;
+                }
+                boolean suppressionGone=WishEntitySuppressionSavedData.get(server).rules().stream()
+                        .noneMatch(rule->rule.ownerId().equals(owner)&&rule.group()==WishEntitySuppressionSavedData.Group.ALL_MOBS);
+                boolean ok=execution!=null&&execution.state()==WishExecutionState.COMPLETED
+                        &&stored.plan()==null&&visible>0&&suppressionGone;
+                unregisterPlayer(server,player);
+                if(!ok){helper.fail("Restore-after-suppression failed state="
+                        +(execution==null?"none":execution.state()+" "+execution.lastError())
+                        +" visible="+visible+" suppressionGone="+suppressionGone);return;}
+                helper.succeed();
+            });
+        });
+    }
+
     /** NEW path: spawn_falling_block showers real FallingBlockEntities and delivers them. */
     @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=400)
     public static void nativeProgramFallingBlockShowerExecutesThroughTickLoop(GameTestHelper helper){

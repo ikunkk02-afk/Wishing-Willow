@@ -208,7 +208,9 @@ public final class WishProgramValidator {
 
     private static JsonObject canonicalize(WishActionType type, JsonObject raw) {
         JsonObject parameters = raw.deepCopy();
-        rename(parameters, "group", "category");
+        if (type == WishActionType.APPLY_EFFECT_CATEGORY) {
+            rename(parameters, "group", "category");
+        }
         switch (type) {
             case APPLY_EFFECT -> { defaultInt(parameters, "duration_seconds", 600); defaultInt(parameters, "amplifier", 0); }
             case APPLY_EFFECT_CATEGORY -> { defaultInt(parameters, "duration_seconds", 600); defaultInt(parameters, "amplifier", 0); }
@@ -239,6 +241,7 @@ public final class WishProgramValidator {
             case MODIFY_ATTRIBUTE -> { upper(parameters, "attribute"); upper(parameters, "operation"); defaultString(parameters, "operation", "ADD"); defaultNumber(parameters, "amount", 1.0); defaultInt(parameters, "duration_seconds", 600); }
             case CHANGE_MOB_TARGET -> { upper(parameters, "disposition"); defaultString(parameters, "disposition", "PLAYER"); defaultInt(parameters, "max_entities", 8); defaultInt(parameters, "radius", 16); }
             case FOLLOW_PLAYER, AVOID_PLAYER -> { defaultInt(parameters, "max_entities", 8); defaultInt(parameters, "radius", 16); defaultInt(parameters, "duration_seconds", 600); }
+            case RESTORE_ENTITY_SPAWNING -> { defaultInt(parameters, "initial_count", 12); defaultInt(parameters, "radius", 16); }
             case CHANGE_REPUTATION -> { defaultInt(parameters, "delta", 10); defaultInt(parameters, "radius", 16); }
             case START_PREDEFINED_EVENT -> defaultInt(parameters, "intensity", 3);
             default -> { }

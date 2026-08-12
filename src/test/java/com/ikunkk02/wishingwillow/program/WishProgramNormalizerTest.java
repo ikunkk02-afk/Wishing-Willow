@@ -13,6 +13,57 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WishProgramNormalizerTest {
     @Test
+    void treatsSkillMetadataAsNonBlockingAcrossCommonLlmShapes() {
+        WishProgramNormalizationResult stringSkill = programWithMetadata(
+                "\"skill\":\"absurd_wish_realization\"");
+        assertEquals("absurd_wish_realization", stringSkill.requireProgram().skill());
+
+        WishProgramNormalizationResult objectSkill = programWithMetadata(
+                "\"skill\":{\"id\":\"absurd_wish_realization\",\"description\":\"metadata\"}");
+        assertEquals(WishProgramValidationStatus.REPAIRABLE, objectSkill.status());
+        assertEquals("absurd_wish_realization", objectSkill.requireProgram().skill());
+
+        WishProgramNormalizationResult arraySkills = programWithMetadata(
+                "\"skills\":[\"absurd_wish_realization\"]");
+        assertEquals("absurd_wish_realization", arraySkills.requireProgram().skill());
+
+        WishProgramNormalizationResult missingSkill = programWithMetadata("");
+        assertEquals("", missingSkill.requireProgram().skill());
+        strict(stringSkill);
+        strict(objectSkill);
+        strict(arraySkills);
+        strict(missingSkill);
+    }
+
+    @Test
+    void acceptsRootActionsAsOneObjectAndIgnoresBrokenMetadata() {
+        WishProgramNormalizationResult result = WishProgramNormalizer.normalize("""
+                {"schema_version":"1","goal":"never alone",
+                 "actions":{"action":"entity_attraction_aura","parameters":{"permanent":"true"}},
+                 "skill":42,"reasoning":{"copied":"by model"},"summary":["extra"]}
+                """);
+
+        assertEquals(WishProgramValidationStatus.REPAIRABLE, result.status());
+        assertEquals(1, result.requireProgram().coreActions().size());
+        assertEquals("entity_attraction_aura", first(result).action());
+        assertTrue(first(result).parameters().get("permanent").getAsBoolean());
+        assertEquals("", result.requireProgram().skill());
+        strict(result);
+    }
+
+    @Test
+    void actionsRemainExecutableWhenSkillMetadataIsUnknownOrIncompatible() {
+        WishProgramNormalizationResult unknown = programWithMetadata("\"skill\":\"invented_skill\"");
+        assertEquals("", unknown.requireProgram().skill());
+
+        WishProgramNormalizationResult incompatible = programWithMetadata("\"skill\":\"block_rain\"");
+        assertEquals("", incompatible.requireProgram().skill());
+        assertEquals("entity_attraction_aura", first(incompatible).action());
+        strict(unknown);
+        strict(incompatible);
+    }
+
+    @Test
     void clampsFollowPlayerMaxEntitiesBeforeStrictValidation() {
         WishProgramNormalizationResult result = normalize("""
                 {"action":"follow_player","parameters":{"max_entities":100}}
@@ -171,6 +222,15 @@ class WishProgramNormalizerTest {
                 {"schema_version":1,"goal":"normalization test","core_actions":[%s],
                  "presentation_actions":[],"skill":"","unknown_capability":""}
                 """.formatted(action));
+    }
+
+    private static WishProgramNormalizationResult programWithMetadata(String metadata) {
+        String suffix = metadata.isBlank() ? "" : "," + metadata;
+        return WishProgramNormalizer.normalize("""
+                {"schema_version":1,"goal":"never alone",
+                 "core_actions":[{"action":"entity_attraction_aura","parameters":{"permanent":true}}],
+                 "presentation_actions":[],"unknown_capability":""%s}
+                """.formatted(suffix));
     }
 
     private static WishProgramAction first(WishProgramNormalizationResult result) {

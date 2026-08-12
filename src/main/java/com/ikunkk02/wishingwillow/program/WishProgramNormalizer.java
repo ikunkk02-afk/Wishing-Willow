@@ -8,6 +8,7 @@ import com.google.gson.JsonPrimitive;
 import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.execution.action.WishActionDefinition;
 import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
+import com.ikunkk02.wishingwillow.program.skill.WishSkillRegistry;
 
 import javax.annotation.Nullable;
 import java.math.BigDecimal;
@@ -73,6 +74,7 @@ public final class WishProgramNormalizer {
         try {
             JsonObject root = source.deepCopy();
             rejectForbiddenKeys(root, "", true);
+            normalizeRootAliases(root, state);
             for (String key : List.copyOf(root.keySet())) {
                 if (!ROOT_FIELDS.contains(key)) {
                     JsonElement ignored = root.remove(key);
@@ -88,7 +90,7 @@ public final class WishProgramNormalizer {
                         "unknown schema versions cannot be interpreted safely");
             }
             String goal = rootString(root, "goal", 512, false, null, state);
-            String skill = rootString(root, "skill", 64, true, "", state);
+            String skill = rootMetadataString(root, "skill", 64, state);
             String unknown = rootString(root, "unknown_capability", 256, true, "", state);
             JsonArray coreSource = rootArray(root, "core_actions", state);
             JsonArray presentationSource = rootArray(root, "presentation_actions", state);
@@ -119,6 +121,18 @@ public final class WishProgramNormalizer {
             }
 
             WishProgram program = new WishProgram(schemaVersion, goal, core, presentation, skill, unknown);
+            if (!skill.isBlank()) {
+                try {
+                    WishSkillRegistry.defaults().validateSelection(program);
+                } catch (IllegalArgumentException metadataError) {
+                    JsonPrimitive originalSkill = new JsonPrimitive(skill);
+                    state.fieldMismatch("skill", originalSkill, "KNOWN_COMPATIBLE_SKILL_ID", "AUTO_REPAIR");
+                    state.change("", "skill", originalSkill, new JsonPrimitive(""),
+                            WishNormalizationReason.METADATA_COERCION);
+                    skill = "";
+                    program = new WishProgram(schemaVersion, goal, core, presentation, skill, unknown);
+                }
+            }
             try {
                 WishProgramJson.validate(program, ACTIONS);
             } catch (IllegalArgumentException error) {
@@ -475,10 +489,68 @@ public final class WishProgramNormalizer {
         }
         JsonElement value = root.get(key);
         if (!value.isJsonArray()) {
+            if (value.isJsonObject()) {
+                JsonArray wrapped = new JsonArray();
+                wrapped.add(value.deepCopy());
+                root.add(key, wrapped);
+                state.fieldMismatch(key, value, "ARRAY", "AUTO_REPAIR");
+                state.change("", key, value, wrapped, WishNormalizationReason.ACTION_ARRAY_WRAPPED);
+                return wrapped;
+            }
             throw failure("INVALID_WISH_PROGRAM:ACTION_ARRAY_" + key, "", key, value,
-                    null, null, false, "action collection must be an array");
+                    null, null, false, "action collection must be an array or one action object");
         }
         return value.getAsJsonArray();
+    }
+
+    private static void normalizeRootAliases(JsonObject root, State state) {
+        if (!root.has("core_actions") && root.has("actions")) {
+            JsonElement actions = root.remove("actions");
+            root.add("core_actions", actions.deepCopy());
+            state.change("", "actions", actions, actions, WishNormalizationReason.ROOT_FIELD_MERGED);
+        }
+        if (!root.has("skill") && root.has("skills")) {
+            JsonElement skills = root.remove("skills");
+            JsonElement selected = firstMetadataValue(skills);
+            root.add("skill", selected == null ? new JsonPrimitive("") : selected.deepCopy());
+            state.fieldMismatch("skills", skills, "ARRAY_OR_STRING_METADATA", "AUTO_REPAIR");
+            state.change("", "skills", skills, root.get("skill"), WishNormalizationReason.METADATA_COERCION);
+        }
+    }
+
+    private static String rootMetadataString(JsonObject root, String key, int max, State state) {
+        if (!root.has(key) || root.get(key).isJsonNull()) {
+            return rootString(root, key, max, true, "", state);
+        }
+        JsonElement raw = root.get(key);
+        if (raw.isJsonPrimitive() && raw.getAsJsonPrimitive().isString()) {
+            return rootString(root, key, max, true, "", state);
+        }
+        JsonElement selected = firstMetadataValue(raw);
+        String value = selected != null && selected.isJsonPrimitive()
+                && selected.getAsJsonPrimitive().isString() ? selected.getAsString().strip() : "";
+        if (value.length() > max) value = value.substring(0, max);
+        JsonPrimitive repaired = new JsonPrimitive(value);
+        root.add(key, repaired);
+        state.fieldMismatch(key, raw, "STRING", "AUTO_REPAIR");
+        state.change("", key, raw, repaired, WishNormalizationReason.METADATA_COERCION);
+        return value;
+    }
+
+    @Nullable
+    private static JsonElement firstMetadataValue(JsonElement raw) {
+        if (raw == null || raw.isJsonNull()) return null;
+        if (raw.isJsonArray()) {
+            return raw.getAsJsonArray().isEmpty() ? null : firstMetadataValue(raw.getAsJsonArray().get(0));
+        }
+        if (raw.isJsonObject()) {
+            JsonObject object = raw.getAsJsonObject();
+            for (String field : List.of("id", "name", "skill")) {
+                if (object.has(field)) return firstMetadataValue(object.get(field));
+            }
+            return null;
+        }
+        return raw;
     }
 
     private static String actionId(String value) {
@@ -546,6 +618,17 @@ public final class WishProgramNormalizer {
         return text.length() <= 128 ? text : text.substring(0, 128);
     }
 
+    private static String jsonType(@Nullable JsonElement value) {
+        if (value == null) return "MISSING";
+        if (value.isJsonNull()) return "NULL";
+        if (value.isJsonArray()) return "ARRAY";
+        if (value.isJsonObject()) return "OBJECT";
+        if (value.getAsJsonPrimitive().isString()) return "STRING";
+        if (value.getAsJsonPrimitive().isNumber()) return "NUMBER";
+        if (value.getAsJsonPrimitive().isBoolean()) return "BOOLEAN";
+        return "UNKNOWN";
+    }
+
     private static final class State {
         private final List<WishNormalizationChange> changes = new ArrayList<>();
         private int droppedActions;
@@ -572,6 +655,13 @@ public final class WishProgramNormalizer {
                     null, reason));
             WishingWillow.LOGGER.info("Wish action dropped: action={} reason={} detail={}",
                     action, reason, detail);
+        }
+
+        private void fieldMismatch(String field, @Nullable JsonElement actual,
+                                   String expected, String repairAction) {
+            WishingWillow.LOGGER.info(
+                    "Normalization field mismatch: field={} actualType={} expectedType={} value={} action={}",
+                    field, jsonType(actual), expected, logValue(actual), repairAction);
         }
     }
 

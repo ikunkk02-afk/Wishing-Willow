@@ -90,7 +90,7 @@ public final class WishProgramJson {
         JsonArray rootRequired = new JsonArray();
         rootRequired.add("schema_version"); rootRequired.add("goal");
         rootRequired.add("core_actions"); rootRequired.add("presentation_actions");
-        rootRequired.add("skill"); rootRequired.add("unknown_capability");
+        rootRequired.add("unknown_capability");
         root.add("required", rootRequired);
         JsonObject properties = new JsonObject();
         JsonObject schemaVersion = new JsonObject();

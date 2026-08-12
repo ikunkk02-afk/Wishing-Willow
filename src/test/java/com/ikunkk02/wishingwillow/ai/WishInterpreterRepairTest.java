@@ -83,6 +83,35 @@ class WishInterpreterRepairTest {
     }
 
     @Test
+    void repairPromptExplainsFieldTypeAndIncludesLegalExamples() {
+        String missingItem = VALID.replace(
+                "{\"item\":\"minecraft:diamond\",\"count\":10}", "{\"count\":10}");
+        SequenceProvider provider = new SequenceProvider(missingItem, VALID);
+
+        new WishInterpreter(config -> provider).interpret(config(), "我希望永远不孤单").join();
+
+        String repair = provider.requests.get(1).userMessage();
+        assertTrue(repair.contains("\"error_field\":\"item\""));
+        assertTrue(repair.contains("\"expected_type\":\"string\""));
+        assertTrue(repair.contains("\"correct_field_example\""));
+        assertTrue(repair.contains("\"minimal_valid_wish_program\""));
+        assertTrue(repair.contains("\"skill\":\"absurd_wish_realization\""));
+    }
+
+    @Test
+    void promptAndSchemaUnambiguouslyDeclareSkillAsOptionalStringMetadata() {
+        SequenceProvider provider = new SequenceProvider(VALID);
+        new WishInterpreter(config -> provider).interpret(config(), "我希望永远不孤单").join();
+
+        AiRequest request = provider.requests.get(0);
+        assertEquals("string", request.jsonSchema().getAsJsonObject("properties")
+                .getAsJsonObject("program").getAsJsonObject("properties")
+                .getAsJsonObject("skill").get("type").getAsString());
+        assertTrue(request.systemMessage().contains("skill is optional metadata and must be a JSON string"));
+        assertTrue(request.systemMessage().contains("\"skill\":\"absurd_wish_realization\""));
+    }
+
+    @Test
     void thirdAttemptCanRecoverAfterTwoSchemaInvalidResponses() {
         SequenceProvider provider = new SequenceProvider(
                 VALID.replace("\"IRONIC\"", "\"MISCHIEVOUS\""),

@@ -63,6 +63,38 @@ class NewProgramMustNotUseLegacyPlanningTest {
     }
 
     @Test
+    void entitySuppressionKeepsItsGroupParameterForTheNativeExecutor() {
+        WishProgram program = program("remove every mob forever",
+                "{\"action\":\"entity_suppression\",\"parameters\":{"
+                        + "\"group\":\"all_mobs\",\"scope\":\"all_dimensions\","
+                        + "\"remove_existing\":true,\"prevent_future\":true,\"permanent\":true,"
+                        + "\"disappearance_mode\":\"discard\",\"exclude_players\":true}}");
+
+        ProgramAction leaf = WishProgramValidator.validate(program, RESOLVER).coreActions().get(0);
+
+        assertEquals("all_mobs", leaf.parameters().get("group").getAsString());
+        assertFalse(leaf.parameters().has("category"));
+        assertEquals(WishTargetType.PLAYER, leaf.target());
+        assertLegacyCountersZero();
+    }
+
+    @Test
+    void entityRestorationKeepsBoundedRepopulationParameters() {
+        WishProgram program = program("bring all creatures back",
+                "{\"action\":\"restore_entity_spawning\",\"parameters\":{"
+                        + "\"group\":\"all_mobs\",\"scope\":\"all_dimensions\","
+                        + "\"initial_count\":12,\"radius\":16}}");
+
+        ProgramAction leaf = WishProgramValidator.validate(program, RESOLVER).coreActions().get(0);
+
+        assertEquals("restore_entity_spawning", leaf.actionId());
+        assertEquals("all_mobs", leaf.parameters().get("group").getAsString());
+        assertEquals(12, leaf.parameters().get("initial_count").getAsInt());
+        assertEquals(WishTargetType.PLAYER, leaf.target());
+        assertLegacyCountersZero();
+    }
+
+    @Test
     void fallingBlockProgramCanonicalizesAndResolvesWithoutLegacyPlanning() {
         WishProgram program = program("100 diamond blocks fall from the sky",
                 "{\"action\":\"spawn_falling_block\",\"parameters\":{\"block\":\"diamond_block\",\"target\":\"self\","

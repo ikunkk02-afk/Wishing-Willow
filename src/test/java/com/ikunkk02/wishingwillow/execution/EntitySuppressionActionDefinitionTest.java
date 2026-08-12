@@ -49,4 +49,17 @@ class EntitySuppressionActionDefinitionTest {
         assertEquals(WishActionType.DESPAWN_ENTITY, legacy.legacyType());
         assertEquals(WishCapability.ENTITY_REMOVAL, legacy.capabilities().iterator().next());
     }
+
+    @Test
+    void exposesBoundedEntitySpawningRestorationAction() {
+        WishActionDefinition restore = WishActionRegistry.defaults().find("restore_entity_spawning");
+
+        assertNotNull(restore);
+        assertEquals(WishActionType.RESTORE_ENTITY_SPAWNING, restore.legacyType());
+        JsonObject properties = restore.parameterSchema().getAsJsonObject("properties");
+        assertEquals("all_mobs", properties.getAsJsonObject("group").get("default").getAsString());
+        assertEquals("all_dimensions", properties.getAsJsonObject("scope").get("default").getAsString());
+        assertEquals(12, properties.getAsJsonObject("initial_count").get("default").getAsInt());
+        assertEquals(32, properties.getAsJsonObject("initial_count").get("maximum").getAsInt());
+    }
 }

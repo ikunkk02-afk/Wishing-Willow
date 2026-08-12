@@ -10,6 +10,7 @@ import com.ikunkk02.wishingwillow.program.skill.WishSkillRegistry;
 import com.ikunkk02.wishingwillow.wish.WishLifecycleLog;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
+import net.minecraftforge.fml.loading.FMLEnvironment;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
@@ -78,6 +79,7 @@ public final class WishInterpreter {
                 if (sessionId != null) {
                     WishLifecycleLog.event(sessionId, "AI_RESPONSE_RECEIVED", "attempt=1");
                 }
+                logRawResponse(sessionId, 1, response.assistantContent());
                 WishUnderstandingJson.Understanding understanding = WishUnderstandingJson.parse(
                         response.assistantContent(), sessionId);
                 return CompletableFuture.completedFuture(understanding.accepted()
@@ -130,6 +132,7 @@ public final class WishInterpreter {
                     WishLifecycleLog.event(sessionId, "AI_RESPONSE_RECEIVED",
                             "attempt=" + attempt + " repair=true");
                 }
+                logRawResponse(sessionId, attempt, response.assistantContent());
                 WishUnderstandingJson.Understanding understanding = WishUnderstandingJson.parse(
                         response.assistantContent(), sessionId);
                 return CompletableFuture.completedFuture(understanding.accepted()
@@ -182,6 +185,8 @@ public final class WishInterpreter {
                 + "Reject only when the request cannot be represented safely and reliably inside Minecraft. Never invent an action or capability to avoid rejection.\n"
                 + "All required outcomes belong in core_actions. Optional spectacle belongs in presentation_actions.\n"
                 + "Known primitive -> use it directly. Multiple primitives -> compose them. Known reusable skill -> set skill and include its primitive composition.\n"
+                + "When a wish asks creatures to return after entity suppression, core_actions must start with restore_entity_spawning. Attraction or follow actions alone cannot undo a persistent suppression rule.\n"
+                + "program.skill is optional metadata and must be a JSON string skill id, never a copied Skill object or array. Example: \"skill\":\"absurd_wish_realization\". Use \"skill\":\"\" when no Skill applies.\n"
                 + "Only when no action or skill can express a genuinely mod-specific capability: leave both action arrays empty and set unknown_capability.\n"
                 + "Creative wording is never an unknown capability. Never output Minecraft commands, Java, scripts, code, NBT or shell text.\n"
                 + "For all beneficial effects use apply_effect_group group=beneficial.\n"
@@ -209,6 +214,16 @@ public final class WishInterpreter {
         LOGGER.info("AI prompt assembled session={} sections={} characters={} tokensEstimate={}",
                 sessionId == null ? "UNAVAILABLE" : sessionId, prompt.sections(), prompt.characters(),
                 prompt.tokensEstimate());
+    }
+
+    private static void logRawResponse(@Nullable UUID sessionId, int attempt, String raw) {
+        if (FMLEnvironment.production) return;
+        String safe = raw == null ? "<null>" : raw;
+        if (safe.length() > com.ikunkk02.wishingwillow.program.WishProgramJson.MAX_JSON) {
+            safe = safe.substring(0, com.ikunkk02.wishingwillow.program.WishProgramJson.MAX_JSON) + "\n[TRUNCATED]";
+        }
+        LOGGER.info("AI_RAW_RESPONSE session={} attempt={}\n{}",
+                sessionId == null ? "UNAVAILABLE" : sessionId, attempt, safe);
     }
 
     private static WishInterpretationResult failureResult(Throwable throwable) {

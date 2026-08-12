@@ -273,6 +273,9 @@ public final class WishPlanValidator {
             case START_PREDEFINED_EVENT, ENTITY_ATTRACTION_AURA -> capability == WishCapability.WORLD_EVENT
                     || capability == WishCapability.MEMORY_RELATED_EVENT
                     || capability == WishCapability.POWER_BUFF;
+            case RESTORE_ENTITY_SPAWNING -> capability == WishCapability.WORLD_EVENT
+                    || capability == WishCapability.SPAWN_ENTITY
+                    || capability == WishCapability.ENTITY_RECREATION;
         };
     }
 

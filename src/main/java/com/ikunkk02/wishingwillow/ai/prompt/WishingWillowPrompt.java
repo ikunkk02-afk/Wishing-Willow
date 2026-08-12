@@ -106,6 +106,11 @@ public final class WishingWillowPrompt {
         if (issue.allowedMin() != null) details.add("allowed_min", issue.allowedMin());
         if (issue.allowedMax() != null) details.add("allowed_max", issue.allowedMax());
         if (!issue.detail().isBlank()) details.addProperty("detail", issue.detail());
+        if (!issue.parameter().isBlank()) details.addProperty("error_field", issue.parameter());
+        details.addProperty("error_type", issue.validationError());
+        details.addProperty("expected_type", expectedType(issue));
+        details.add("correct_field_example", correctFieldExample(issue));
+        details.add("minimal_valid_wish_program", minimalValidWishProgram());
         details.addProperty("candidate", candidate);
         details.add("legal_capabilities", GSON.toJsonTree(
                 Arrays.stream(WishCapability.values()).map(Enum::name).toList()));
@@ -114,5 +119,39 @@ public final class WishingWillowPrompt {
         return untrustedWishMessage(wish, mode) + "\n<UNTRUSTED_INVALID_INTERPRETATION_JSON>\n"
                 + GSON.toJson(details)
                 + "\n</UNTRUSTED_INVALID_INTERPRETATION_JSON>";
+    }
+
+    private static String expectedType(WishProgramValidationIssue issue) {
+        if ("skill".equals(issue.parameter()) || "item".equals(issue.parameter())
+                || issue.validationError().contains("STRING_")) return "string";
+        if (issue.validationError().contains("ACTION_ARRAY")) return "array";
+        return "JSON Schema-declared type";
+    }
+
+    private static com.google.gson.JsonElement correctFieldExample(WishProgramValidationIssue issue) {
+        JsonObject example = new JsonObject();
+        String field = issue.parameter().isBlank() ? "skill" : issue.parameter();
+        if ("skill".equals(field)) example.addProperty("skill", "absurd_wish_realization");
+        else if ("item".equals(field)) example.addProperty("item", "minecraft:diamond");
+        else example.addProperty(field, "use the exact JSON Schema-declared type");
+        return example;
+    }
+
+    private static JsonObject minimalValidWishProgram() {
+        JsonObject program = new JsonObject();
+        program.addProperty("schema_version", 1);
+        program.addProperty("goal", "Keep the player from being alone");
+        com.google.gson.JsonArray core = new com.google.gson.JsonArray();
+        JsonObject action = new JsonObject();
+        action.addProperty("action", "entity_attraction_aura");
+        JsonObject parameters = new JsonObject();
+        parameters.addProperty("permanent", true);
+        action.add("parameters", parameters);
+        core.add(action);
+        program.add("core_actions", core);
+        program.add("presentation_actions", new com.google.gson.JsonArray());
+        program.addProperty("skill", "absurd_wish_realization");
+        program.addProperty("unknown_capability", "");
+        return program;
     }
 }

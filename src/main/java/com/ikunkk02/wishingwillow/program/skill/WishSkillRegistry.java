@@ -184,7 +184,7 @@ public final class WishSkillRegistry {
                         "\u5438\u5f15\u6240\u6709", "\u5168\u90e8\u9760\u8fd1"),
                 WishSkillType.STRATEGY,
                 Set.of(),
-                Set.of("entity_attraction_aura", "follow_player", "spawn_entity",
+                Set.of("entity_attraction_aura", "follow_player", "spawn_entity", "restore_entity_spawning",
                         "apply_effect", "apply_effect_group", "set_entity_target",
                         "play_sound", "spawn_particle", "place_pattern"),
                 List.of(),

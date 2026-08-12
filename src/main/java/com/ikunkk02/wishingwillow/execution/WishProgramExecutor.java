@@ -53,6 +53,7 @@ public final class WishProgramExecutor {
             "spawn_entity", "follow_player", "avoid_player", "set_entity_target",
             "give_item", "apply_effect", "teleport_player", "modify_attribute",
             "change_ai", "set_world_time", "set_weather", "entity_attraction_aura", "entity_suppression",
+            "restore_entity_spawning",
             "remove_entity");
     /** Actions that benefit from cinematic pacing (presentation). */
     private static final Set<String> PRESENTATION_ACTIONS = Set.of(

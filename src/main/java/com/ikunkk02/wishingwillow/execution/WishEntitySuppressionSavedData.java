@@ -52,6 +52,23 @@ public final class WishEntitySuppressionSavedData extends SavedData {
 
     public Collection<Rule> rules() { return List.copyOf(rules.values()); }
 
+    public int removeMatching(UUID ownerId, Group group, Scope scope, ResourceLocation dimension) {
+        int before = rules.size();
+        rules.entrySet().removeIf(entry -> {
+            Rule rule = entry.getValue();
+            if (!rule.ownerId().equals(ownerId) || rule.group() != group) return false;
+            if (scope == Scope.ALL_DIMENSIONS) return true;
+            return rule.scope() == Scope.CURRENT_DIMENSION && rule.dimension().equals(dimension);
+        });
+        int removed = before - rules.size();
+        if (removed > 0) {
+            setDirty();
+            WishingWillow.LOGGER.info("Entity suppression removed owner={} group={} scope={} rules={}",
+                    ownerId, group, scope, removed);
+        }
+        return removed;
+    }
+
     public int applyLoaded(MinecraftServer server, Rule rule) {
         int affected = 0;
         for (ServerLevel level : server.getAllLevels()) {

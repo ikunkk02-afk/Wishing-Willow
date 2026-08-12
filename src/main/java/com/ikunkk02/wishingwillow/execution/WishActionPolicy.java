@@ -69,6 +69,9 @@ public final class WishActionPolicy {
                     WishCapability.MIMIC_ENTITY, WishCapability.POWERFUL_ENEMY,
                     WishCapability.ENTITY_RECREATION).contains(provided);
             case DESPAWN_ENTITY, ENTITY_SUPPRESSION -> provided == WishCapability.ENTITY_REMOVAL;
+            case RESTORE_ENTITY_SPAWNING -> provided == WishCapability.WORLD_EVENT
+                    || provided == WishCapability.SPAWN_ENTITY
+                    || provided == WishCapability.ENTITY_RECREATION;
             case APPLY_EFFECT, APPLY_EFFECT_CATEGORY -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
                     WishCapability.HEALING, WishCapability.DAMAGE, WishCapability.DARKNESS,
                     WishCapability.IMMORTALITY).contains(provided);
@@ -246,6 +249,13 @@ public final class WishActionPolicy {
                 keys(p, Set.of("radius", "strength", "permanent", "include_hostile", "include_passive", "include_villagers", "include_modded"));
                 range(p, "radius", 8, 256);
                 range(p, "strength", 0.1, 3);
+            }
+            case RESTORE_ENTITY_SPAWNING -> {
+                keys(p, Set.of("group", "scope", "initial_count", "radius"));
+                oneOf(p, "group", Set.of("all_mobs", "hostile", "passive", "neutral", "animals", "monsters", "villagers"));
+                oneOf(p, "scope", Set.of("current_dimension", "all_dimensions"));
+                rangeInt(p, "initial_count", 1, 32);
+                rangeInt(p, "radius", 4, 32);
             }
         }
         if ((action == WishActionType.CHANGE_TIME || action == WishActionType.CHANGE_WEATHER)
