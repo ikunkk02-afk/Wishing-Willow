@@ -10,8 +10,10 @@ import com.ikunkk02.wishingwillow.program.WishProgramNormalizer;
 import com.ikunkk02.wishingwillow.program.WishProgramNormalizationException;
 import com.ikunkk02.wishingwillow.program.WishProgramNormalizationResult;
 import com.ikunkk02.wishingwillow.program.WishProgramValidationIssue;
+import com.ikunkk02.wishingwillow.wish.WishLifecycleLog;
 
 import java.util.Set;
+import java.util.UUID;
 
 /** JSON contract for the single AI Understanding call. */
 public final class WishUnderstandingJson {
@@ -21,6 +23,10 @@ public final class WishUnderstandingJson {
     private WishUnderstandingJson() { }
 
     public static Understanding parse(String raw) {
+        return parse(raw, null);
+    }
+
+    public static Understanding parse(String raw, UUID sessionId) {
         JsonElement parsed;
         try {
             parsed = com.ikunkk02.wishingwillow.program.LlmJsonRecovery
@@ -34,7 +40,11 @@ public final class WishUnderstandingJson {
         }
         JsonObject root = parsed.getAsJsonObject();
         WishInterpretation interpretation = WishInterpretationValidator.parseAndValidate(GSON.toJson(root.get("interpretation")));
+        if (sessionId != null) WishLifecycleLog.event(sessionId, "NORMALIZATION_STARTED", "source=AI_RESPONSE");
         WishProgramNormalizationResult normalized = WishProgramNormalizer.normalize(root.get("program"));
+        if (sessionId != null) WishLifecycleLog.event(sessionId, "NORMALIZATION_COMPLETED",
+                "status=" + normalized.status() + " repairs=" + normalized.changes().size()
+                        + " droppedActions=" + normalized.droppedActions());
         if (normalized.status() == com.ikunkk02.wishingwillow.program.WishProgramValidationStatus.REJECT) {
             WishProgramValidationIssue issue = normalized.issue();
             throw new WishProgramNormalizationException(issue == null

@@ -124,7 +124,7 @@ public final class ClientWishPlanningCoordinator {
         } else {
             planning = complexPlanning(packet, token, knowledge, registry, frozenPlatform, provider,
                     config, service, route.reason());
-            ClientWishProcessingHints.setPhase(WishProcessingPhase.RESEARCHING);
+            ClientAiWishCoordinator.markResearching(packet.sessionId());
         }
         planning = planning.exceptionally(error -> token.cancelled()
                 ? failedOutcome(packet, WishProgramError.UNKNOWN)
@@ -291,16 +291,18 @@ public final class ClientWishPlanningCoordinator {
                         packet.sessionId(), packet.attemptId(), error, totalElapsed);
                 ModNetworking.sendToServer(SubmitWishProgramPacket.failure(packet.sessionId(),
                         packet.attemptId(), packet.program().schemaVersion(), error));
-                ClientWishProcessingHints.setPhase(WishProcessingPhase.FAILED);
+                ClientAiWishCoordinator.failPlanning(packet.sessionId(),
+                        "programError=" + error + " elapsedMs=" + totalElapsed);
                 return;
             }
-            ClientWishProcessingHints.setPhase(WishProcessingPhase.PREPARING);
+            ClientAiWishCoordinator.markProgramReady(packet.sessionId());
             ModNetworking.sendToServer(SubmitWishProgramPacket.success(packet.sessionId(),
                     packet.attemptId(), packet.program().schemaVersion(),
                     WishProgramJson.toJson(outcome.program())));
             LOGGER.info("SubmitWishProgramPacket sent session={} attempt={} coreActions={}",
                     packet.sessionId(), packet.attemptId(),
                     outcome.program().coreActions().stream().map(a -> a.action()).toList());
+            ClientAiWishCoordinator.markProgramSent(packet.sessionId());
         });
     }
 

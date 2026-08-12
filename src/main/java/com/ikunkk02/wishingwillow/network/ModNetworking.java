@@ -7,6 +7,7 @@ import com.ikunkk02.wishingwillow.network.packet.SubmitWishInterpretationPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishAnimationEventPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
+import com.ikunkk02.wishingwillow.network.packet.WishPipelineStatePacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningProgressPacket;
 import com.ikunkk02.wishingwillow.network.packet.SubmitWishPlanPacket;
@@ -29,7 +30,7 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class ModNetworking {
-    private static final String PROTOCOL_VERSION = "13";
+    private static final String PROTOCOL_VERSION = "14";
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(WishingWillow.MOD_ID, "main"),
             () -> PROTOCOL_VERSION,
@@ -66,6 +67,11 @@ public final class ModNetworking {
                 .encoder(WishStatePacket::encode)
                 .decoder(WishStatePacket::decode)
                 .consumerMainThread(WishStatePacket::handle)
+                .add();
+        CHANNEL.messageBuilder(WishPipelineStatePacket.class, id++, NetworkDirection.PLAY_TO_CLIENT)
+                .encoder(WishPipelineStatePacket::encode)
+                .decoder(WishPipelineStatePacket::decode)
+                .consumerMainThread(WishPipelineStatePacket::handle)
                 .add();
         CHANNEL.messageBuilder(SubmitWishInterpretationPacket.class, id++, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(SubmitWishInterpretationPacket::encode)

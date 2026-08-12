@@ -14,7 +14,7 @@ public enum WishProcessingPhase {
     RESEARCHING,
     /** Planning completed; server is validating and preparing execution. */
     PREPARING,
-    /** Execution has started — hints stop here. */
+    /** Execution has started; hints remain until a terminal pipeline notification. */
     EXECUTING,
     /** Pipeline failed — show failure hint then stop. */
     FAILED

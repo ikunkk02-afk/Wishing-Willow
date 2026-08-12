@@ -5,9 +5,12 @@ import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
 import com.ikunkk02.wishingwillow.program.WishProgramNormalizationException;
 import com.ikunkk02.wishingwillow.program.WishProgramValidationIssue;
 import com.ikunkk02.wishingwillow.program.skill.WishSkillRegistry;
+import com.ikunkk02.wishingwillow.wish.WishLifecycleLog;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
+import javax.annotation.Nullable;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
@@ -28,7 +31,14 @@ public final class WishInterpreter {
         return interpret(config, wish, WishFulfillmentMode.ABSURD);
     }
 
-    public CompletableFuture<WishInterpretationResult> interpret(AiConfig config, String wish, WishFulfillmentMode mode) {
+    public CompletableFuture<WishInterpretationResult> interpret(AiConfig config, String wish,
+                                                                 WishFulfillmentMode mode) {
+        return interpret(config, wish, mode, null);
+    }
+
+    public CompletableFuture<WishInterpretationResult> interpret(AiConfig config, String wish,
+                                                                 WishFulfillmentMode mode,
+                                                                 @Nullable UUID sessionId) {
         if (!config.isConfigured()) {
             return CompletableFuture.completedFuture(
                     WishInterpretationResult.requestFailure(AiErrorCategory.NOT_CONFIGURED, 0)
@@ -47,19 +57,23 @@ public final class WishInterpreter {
                 AiRequestException failure = unwrap(throwable);
                 if (repairableProviderFailure(failure.category())) {
                     LOGGER.info("AI interpretation repair started cause={}", failure.category());
-                    return repair(provider, wish, mode, "", 2,
+                    return repair(provider, wish, mode, "", 2, sessionId,
                             genericRepairIssue(failure.category().name()));
                 }
                 return CompletableFuture.completedFuture(failureResult(throwable));
             }
             try {
-                WishUnderstandingJson.Understanding understanding = WishUnderstandingJson.parse(response.assistantContent());
+                if (sessionId != null) {
+                    WishLifecycleLog.event(sessionId, "AI_RESPONSE_RECEIVED", "attempt=1");
+                }
+                WishUnderstandingJson.Understanding understanding = WishUnderstandingJson.parse(
+                        response.assistantContent(), sessionId);
                 return CompletableFuture.completedFuture(WishInterpretationResult.success(
                         understanding.interpretation(), understanding.program()));
             } catch (IllegalArgumentException exception) {
                 LOGGER.info("AI interpretation repair started cause=SCHEMA_VALIDATION detail={} attempt=2",
                         validationDetail(exception));
-                return repair(provider, wish, mode, response.assistantContent(), 2,
+                return repair(provider, wish, mode, response.assistantContent(), 2, sessionId,
                         repairIssue(exception));
             }
         }).thenCompose(Function.identity());
@@ -71,6 +85,7 @@ public final class WishInterpreter {
             WishFulfillmentMode mode,
             String invalidCandidate,
             int attempt,
+            @Nullable UUID sessionId,
             WishProgramValidationIssue issue
     ) {
         AiRequest repairRequest = new AiRequest(
@@ -89,7 +104,7 @@ public final class WishInterpreter {
                 if (attempt < MAX_ATTEMPTS && repairableProviderFailure(failure.category())) {
                     LOGGER.info("AI interpretation repair retry cause={} attempt={}",
                             failure.category(), attempt + 1);
-                    return repair(provider, wish, mode, "", attempt + 1,
+                    return repair(provider, wish, mode, "", attempt + 1, sessionId,
                             genericRepairIssue(failure.category().name()));
                 }
                 LOGGER.info("AI interpretation repair failed cause={} attempt={}",
@@ -97,7 +112,12 @@ public final class WishInterpreter {
                 return CompletableFuture.completedFuture(failureResult(throwable));
             }
             try {
-                WishUnderstandingJson.Understanding understanding = WishUnderstandingJson.parse(response.assistantContent());
+                if (sessionId != null) {
+                    WishLifecycleLog.event(sessionId, "AI_RESPONSE_RECEIVED",
+                            "attempt=" + attempt + " repair=true");
+                }
+                WishUnderstandingJson.Understanding understanding = WishUnderstandingJson.parse(
+                        response.assistantContent(), sessionId);
                 return CompletableFuture.completedFuture(WishInterpretationResult.success(
                         understanding.interpretation(), understanding.program()));
             } catch (IllegalArgumentException exception) {
@@ -105,7 +125,7 @@ public final class WishInterpreter {
                     LOGGER.info("AI interpretation repair retry cause=SCHEMA_VALIDATION detail={} attempt={}",
                             validationDetail(exception), attempt + 1);
                     return repair(provider, wish, mode, response.assistantContent(), attempt + 1,
-                            repairIssue(exception));
+                            sessionId, repairIssue(exception));
                 }
                 LOGGER.info("AI interpretation repair failed cause=SCHEMA_VALIDATION detail={} attempt={}",
                         validationDetail(exception), attempt);

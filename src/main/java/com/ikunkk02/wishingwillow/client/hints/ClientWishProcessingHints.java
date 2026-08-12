@@ -56,24 +56,28 @@ public final class ClientWishProcessingHints {
 
     /** Transition to a new phase. */
     public static void transition(WishProcessingPhase newPhase) {
-        if (!active) return;
+        transition(activeSessionId, newPhase);
+    }
+
+    /** Transition only when the update belongs to the active wish pipeline. */
+    public static void transition(@Nullable UUID sessionId, WishProcessingPhase newPhase) {
+        if (!active || sessionId == null || !sessionId.equals(activeSessionId)) return;
         WishProcessingPhase previous = phase;
         phase = newPhase;
         hintIndex = 0;
         LOGGER.info("Wish pipeline UI state session={} phase {} -> {}",
                 activeSessionId, previous, newPhase);
-        if (newPhase == WishProcessingPhase.EXECUTING || newPhase == WishProcessingPhase.FAILED) {
-            showNow();
-            stop();
-        } else {
-            showNow();
-        }
+        showNow();
     }
 
     /** Update the phase based on pipeline progress (for external callers). */
     public static void setPhase(WishProcessingPhase newPhase) {
         if (!active) return;
         transition(newPhase);
+    }
+
+    public static void setPhase(UUID sessionId, WishProcessingPhase newPhase) {
+        transition(sessionId, newPhase);
     }
 
     /** Stop the hint loop entirely. */
@@ -84,6 +88,12 @@ public final class ClientWishProcessingHints {
         activeSessionId = null;
         willowPos = null;
         phase = WishProcessingPhase.INTERPRETING;
+    }
+
+    /** Stop only the named pipeline; stale UI events cannot stop a newer wish. */
+    public static void stop(UUID sessionId) {
+        if (!isActive(sessionId)) return;
+        stop();
     }
 
     /** Check if hints are active for the given session. */

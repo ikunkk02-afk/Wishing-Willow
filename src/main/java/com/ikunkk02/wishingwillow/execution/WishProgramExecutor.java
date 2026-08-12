@@ -6,16 +6,13 @@ import com.ikunkk02.wishingwillow.execution.WishExecutionScheduler.StepKey;
 import com.ikunkk02.wishingwillow.execution.action.WishActionDefinition;
 import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
 import com.ikunkk02.wishingwillow.execution.action.WishExecutionContext;
-import com.ikunkk02.wishingwillow.network.ModNetworking;
-import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
+
 import com.ikunkk02.wishingwillow.planning.WishTargetType;
 import com.ikunkk02.wishingwillow.program.ProgramAction;
 import com.ikunkk02.wishingwillow.program.ValidatedWishProgram;
 import com.ikunkk02.wishingwillow.program.WishProgramValidator;
 import com.ikunkk02.wishingwillow.wish.WishRecord;
-import com.ikunkk02.wishingwillow.wish.WishRejectionReason;
 import com.ikunkk02.wishingwillow.wish.WishSavedData;
-import com.ikunkk02.wishingwillow.wish.WishState;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -193,6 +190,8 @@ public final class WishProgramExecutor {
         if (firstAttempt) {
             WishingWillow.LOGGER.info("Action started session={} id={} parameters={}",
                     record.wishSessionId(), leaf.actionId(), leaf.parameters());
+            com.ikunkk02.wishingwillow.wish.WishLifecycleLog.event(record.wishSessionId(),
+                    "ACTION_STARTED", "id=" + leaf.actionId() + " step=" + stepIndex);
         }
         WishActionResult result = definition.executor().execute(context);
         WishPipelineProbe.actionExecution();
@@ -229,6 +228,9 @@ public final class WishProgramExecutor {
                     "Action completed session={} id={} status={} requested={} completed={} failed={} message={}",
                     record.wishSessionId(), leaf.actionId(), evidence.status(), evidence.requested(),
                     evidence.completed(), evidence.failed(), evidence.message());
+            com.ikunkk02.wishingwillow.wish.WishLifecycleLog.event(record.wishSessionId(),
+                    "ACTION_COMPLETED", "id=" + leaf.actionId() + " step=" + stepIndex
+                            + " status=" + evidence.status());
         }
         WishExecutionAudit.transition(record, stepIndex, leaf.actionId(), step.state().name(),
                 step.lastError().isBlank() ? result.code() : step.lastError(), step.affected());
@@ -328,8 +330,6 @@ public final class WishProgramExecutor {
                 WishingWillow.LOGGER.info("Wish program completed session={} status={}",
                         record.wishSessionId(), record.state());
             }
-            // Send completion notification to the client so processing hints stop.
-            notifyCompletion(server, record);
             WishExecutionManager.changed(server, record);
             return;
         }
@@ -337,18 +337,6 @@ public final class WishProgramExecutor {
         WishExecutionManager.changed(server, record);
     }
 
-    private static void notifyCompletion(MinecraftServer server, WishExecutionRecord record) {
-        ServerPlayer player = server.getPlayerList().getPlayer(record.ownerId());
-        if (player == null) return;
-        WishRecord wish = WishSavedData.get(server).getBySession(record.wishSessionId());
-        if (wish == null) return;
-        ModNetworking.sendToPlayer(player,
-                new WishStatePacket(wish.sessionId(), WishState.FINISHED,
-                        record.state() == WishExecutionState.COMPLETED
-                                ? WishRejectionReason.NONE : WishRejectionReason.INTERRUPTED));
-        WishingWillow.LOGGER.info("Wish completion notified session={} state={}",
-                record.wishSessionId(), record.state());
-    }
 
     /** Server-start recovery for stored program executions. */
     public static void rebuild(MinecraftServer server, WishExecutionRecord record) {

@@ -9,6 +9,10 @@ import com.ikunkk02.wishingwillow.program.WishProgramValidator;
 import com.ikunkk02.wishingwillow.wish.WishRecord;
 import com.ikunkk02.wishingwillow.wish.WishSavedData;
 import com.ikunkk02.wishingwillow.wish.WishPipelineAudit;
+import com.ikunkk02.wishingwillow.wish.WishLifecycleLog;
+import com.ikunkk02.wishingwillow.wish.WishPipelineState;
+import com.ikunkk02.wishingwillow.network.ModNetworking;
+import com.ikunkk02.wishingwillow.network.packet.WishPipelineStatePacket;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.HashMap;
@@ -85,6 +89,12 @@ public final class WishActionManager {
         ACTIVE_BY_PLAYER.put(player.getUUID(), record.executionId());
         WishPipelineAudit.success(wish.sessionId(), "PROGRAM_ACCEPT",
                 "program=" + programId + " execution=" + record.executionId());
+        WishLifecycleLog.event(wish.sessionId(), "PROGRAM_ACCEPT",
+                "program=" + programId + " execution=" + record.executionId());
+        ModNetworking.sendToPlayer(player,
+                WishPipelineStatePacket.progress(wish.sessionId(), WishPipelineState.EXECUTING));
+        WishLifecycleLog.event(wish.sessionId(), "EXECUTION_STARTED",
+                "execution=" + record.executionId());
         WishingWillow.LOGGER.info(
                 "Program execution started session={} program={} execution={} coreActions={} presentationActions={}",
                 wish.sessionId(), programId, record.executionId(),

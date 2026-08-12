@@ -126,7 +126,6 @@ public final class ClientWishSequence {
                 || !processedOmens.accept(packet.sessionId())) {
             return;
         }
-        ClientWishProcessingHints.stop();
         if (packet.sessionId().equals(completionSessionId) && completionStart != Long.MIN_VALUE) {
             scheduleOmen(packet);
         } else {

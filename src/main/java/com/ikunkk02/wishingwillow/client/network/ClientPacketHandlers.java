@@ -10,6 +10,7 @@ import com.ikunkk02.wishingwillow.client.hints.ClientWishProcessingHints;
 import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
+import com.ikunkk02.wishingwillow.network.packet.WishPipelineStatePacket;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
 import com.ikunkk02.wishingwillow.network.packet.UnboxingStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.UnboxingStatePacket;
@@ -47,10 +48,13 @@ public final class ClientPacketHandlers {
         ClientWishSequence.updateState(packet);
     }
 
+    public static void updateWishPipelineState(WishPipelineStatePacket packet) {
+        ClientAiWishCoordinator.updatePipelineState(packet);
+    }
+
     public static void startPlanning(WishPlanningRequestPacket packet) {
+        ClientAiWishCoordinator.markPlanning(packet.sessionId());
         ClientWishPlanningCoordinator.start(packet);
-        ClientWishProcessingHints.setPhase(
-                com.ikunkk02.wishingwillow.client.hints.WishProcessingPhase.PLANNING);
     }
 
     public static void executionSettings(ExecutionSettingsSnapshot settings) {
