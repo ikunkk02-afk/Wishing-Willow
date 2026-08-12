@@ -12,6 +12,7 @@ import com.ikunkk02.wishingwillow.execution.action.WishActionDefinition;
 import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
 
 import java.io.StringReader;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -145,9 +146,18 @@ public final class WishProgramJson {
             if (FORBIDDEN_KEYS.contains(key.toLowerCase(Locale.ROOT))) throw invalid("FORBIDDEN_PARAMETER");
         }
         rejectExecutableText(parameters);
-        JsonObject properties = definition.parameterSchema().getAsJsonObject("properties");
-        if (properties != null && !properties.keySet().containsAll(parameters.keySet())) {
+        JsonObject schema = definition.parameterSchema();
+        JsonObject properties = schema.getAsJsonObject("properties");
+        if (schema.has("additionalProperties") && !schema.get("additionalProperties").getAsBoolean()
+                && properties != null && !properties.keySet().containsAll(parameters.keySet())) {
             throw invalid("UNDECLARED_PARAMETER_" + definition.id());
+        }
+        JsonArray required = schema.getAsJsonArray("required");
+        if (required != null) {
+            for (JsonElement value : required) {
+                String key = value.getAsString();
+                if (!parameters.has(key)) throw invalid("MISSING_REQUIRED_PARAMETER_" + key);
+            }
         }
         for (String key : parameters.keySet()) {
             JsonObject property = properties == null ? null : properties.getAsJsonObject(key);
@@ -181,40 +191,42 @@ public final class WishProgramJson {
     private static void validateProperty(String actionId, String key, JsonObject property,
                                          JsonElement value) {
         String type = property.has("type") ? property.get("type").getAsString() : null;
-        if (value.isJsonPrimitive()) {
-            JsonElement primitive = value.getAsJsonPrimitive();
-            if (primitive.getAsJsonPrimitive().isNumber()) {
-                if ("integer".equals(type) && !value.getAsString().matches("-?(0|[1-9][0-9]*)")) {
-                    throw invalid("PARAMETER_TYPE_" + key);
-                }
-                if (property.has("minimum")) {
-                    double minimum = property.get("minimum").getAsDouble();
-                    if (value.getAsDouble() < minimum) throw invalid("PARAMETER_MIN_" + key);
-                }
-                if (property.has("maximum")) {
-                    double maximum = property.get("maximum").getAsDouble();
-                    if (value.getAsDouble() > maximum) throw invalid("PARAMETER_MAX_" + key);
-                }
-            } else if (primitive.getAsJsonPrimitive().isString()) {
-                if ("integer".equals(type) || "number".equals(type)) {
-                    throw invalid("PARAMETER_TYPE_" + key);
-                }
-                if (property.has("enum")) {
-                    String candidate = value.getAsString();
-                    boolean matched = false;
-                    for (JsonElement allowed : property.getAsJsonArray("enum")) {
-                        if (allowed.getAsString().equalsIgnoreCase(candidate)) { matched = true; break; }
-                    }
-                    if (!matched) throw invalid("PARAMETER_ENUM_" + key);
-                }
-            } else if (primitive.getAsJsonPrimitive().isBoolean() && !"boolean".equals(type)) {
-                throw invalid("PARAMETER_TYPE_" + key);
+        boolean typeMatches = switch (type == null ? "" : type) {
+            case "string" -> value.isJsonPrimitive() && value.getAsJsonPrimitive().isString();
+            case "integer" -> value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()
+                    && integral(value.getAsString());
+            case "number" -> value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber();
+            case "boolean" -> value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean();
+            case "array" -> value.isJsonArray();
+            case "object" -> value.isJsonObject();
+            default -> false;
+        };
+        if (!typeMatches) throw invalid("PARAMETER_TYPE_" + key);
+        if (("integer".equals(type) || "number".equals(type)) && value.isJsonPrimitive()) {
+            BigDecimal number;
+            try { number = new BigDecimal(value.getAsString()); }
+            catch (NumberFormatException error) { throw invalid("PARAMETER_TYPE_" + key); }
+            if (property.has("minimum")
+                    && number.compareTo(new BigDecimal(property.get("minimum").getAsString())) < 0) {
+                throw invalid("PARAMETER_MIN_" + key);
             }
-        } else if (value.isJsonArray() && !"array".equals(type)) {
-            throw invalid("PARAMETER_TYPE_" + key);
-        } else if (value.isJsonObject() && !"object".equals(type)) {
-            throw invalid("PARAMETER_TYPE_" + key);
+            if (property.has("maximum")
+                    && number.compareTo(new BigDecimal(property.get("maximum").getAsString())) > 0) {
+                throw invalid("PARAMETER_MAX_" + key);
+            }
         }
+        if (property.has("enum")) {
+            boolean matched = false;
+            for (JsonElement allowed : property.getAsJsonArray("enum")) {
+                if (allowed.equals(value)) { matched = true; break; }
+            }
+            if (!matched) throw invalid("PARAMETER_ENUM_" + key);
+        }
+    }
+
+    private static boolean integral(String value) {
+        try { return new BigDecimal(value).stripTrailingZeros().scale() <= 0; }
+        catch (NumberFormatException error) { return false; }
     }
 
     private static int countExpanded(List<WishProgramAction> actions, int depth) {
@@ -279,7 +291,7 @@ public final class WishProgramJson {
     private static int integer(JsonObject object, String name) {
         JsonElement value = object.get(name);
         if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
-                || !value.getAsString().matches("-?(0|[1-9][0-9]*)")) throw invalid("INTEGER_" + name);
+                || !integral(value.getAsString())) throw invalid("INTEGER_" + name);
         try { return value.getAsInt(); } catch (RuntimeException error) { throw invalid("INTEGER_" + name); }
     }
 

@@ -62,21 +62,22 @@ public final class WishProgramValidator {
             throw error(WishProgramError.INVALID_ACTION, leaf.actionId());
         }
         JsonObject parameters = canonicalize(definition.legacyType(), leaf.parameters());
-        String resource = resource(parameters, definition.legacyType());
+        String resource = resource(parameters, definition);
         WishTargetType target = target(parameters, definition.legacyType());
         WishCapability capability = definition.capabilities().isEmpty()
                 ? WishCapability.WORLD_EVENT : definition.capabilities().iterator().next();
-        policy(definition, parameters, resource);
-        CandidateReference candidate = candidate(definition.legacyType(), capability, parameters,
+        policy(definition, parameters, resource, resolver);
+        CandidateReference candidate = candidate(definition, capability, parameters,
                 resource, target, resolver);
         return new ProgramAction(leaf.actionId(), parameters, leaf.presentation(), leaf.group(),
                 leaf.delayTicks(), target, capability, candidate, leaf.stepIndex());
     }
 
-    private static CandidateReference candidate(WishActionType type, WishCapability capability,
+    private static CandidateReference candidate(WishActionDefinition definition, WishCapability capability,
                                                 JsonObject parameters, String resource,
                                                 WishTargetType target,
                                                 WishProgramResourceResolver resolver) {
+        WishActionType type = definition.legacyType();
         String candidateId = "program-" + type.name().toLowerCase(Locale.ROOT);
         if (type == WishActionType.START_PREDEFINED_EVENT) {
             if (!resolver.containsPredefinedEvent(resource)) {
@@ -86,7 +87,13 @@ public final class WishProgramValidator {
                     CandidateSourceKind.MOD_FEATURE, WishingWillow.MOD_ID, "",
                     resource, FeatureType.WORLD_SYSTEM, null, 100, 20);
         }
-        RegistryEntryType registryType = registryType(type);
+        if (type == WishActionType.TELEPORT
+                && !"CANDIDATE_DIMENSION".equals(parameters.get("mode").getAsString())) {
+            return new CandidateReference(candidateId, capability, capability, MatchType.EXACT,
+                    CandidateSourceKind.VANILLA_BUILTIN, "minecraft", "1.20.1",
+                    capability.name(), FeatureType.WORLD_SYSTEM, null, 100, 25);
+        }
+        RegistryEntryType registryType = definition.resourceKind();
         if (registryType == null) {
             return new CandidateReference(candidateId, capability, capability, MatchType.EXACT,
                     CandidateSourceKind.VANILLA_BUILTIN, "minecraft", "1.20.1",
@@ -103,6 +110,14 @@ public final class WishProgramValidator {
         } else {
             resolved = resolver.resolve(registryType, resource);
             if (resolved == null) {
+                RegistryEntryType actual = actualRegistryType(resolver, resource, registryType);
+                if (actual != null) {
+                    String detail = "action=" + definition.id() + " parameter="
+                            + definition.resourceParameter() + " resource=" + resource
+                            + " expected=" + registryType + " actual=" + actual;
+                    WishingWillow.LOGGER.warn("RESOURCE_KIND_MISMATCH {}", detail);
+                    throw error(WishProgramError.RESOURCE_KIND_MISMATCH, detail);
+                }
                 throw error(WishProgramError.INVALID_REGISTRY,
                         type.name().toLowerCase(Locale.ROOT) + "=" + resource);
             }
@@ -118,7 +133,7 @@ public final class WishProgramValidator {
 
     /** Server-side policy gates + hard budget checks (client input is never trusted). */
     private static void policy(WishActionDefinition definition, JsonObject parameters,
-                               String resource) {
+                               String resource, WishProgramResourceResolver resolver) {
         WishActionType type = definition.legacyType();
         if (type == WishActionType.GIVE_ITEM || type == WishActionType.REMOVE_ITEM) {
             int count = parameters.get("count").getAsInt();
@@ -136,6 +151,19 @@ public final class WishProgramValidator {
             int count = parameters.get("count").getAsInt();
             if (count < 1 || count > WishPlanBudget.MAX_FALLING_BLOCKS) {
                 throw error(WishProgramError.BUDGET_EXCEEDED, "count=" + count);
+            }
+        }
+        if (type == WishActionType.ITEM_RAIN) {
+            int count = parameters.get("count").getAsInt();
+            if (count < 1 || count > WishPlanBudget.MAX_ITEM_UNITS) {
+                throw error(WishProgramError.BUDGET_EXCEEDED, "count=" + count);
+            }
+            if (resolver.resolve(RegistryEntryType.ITEM, resource) != null) {
+                int stackSize = Math.max(1, resolver.maxStackSize(RegistryEntryType.ITEM, resource));
+                int entities = (count + stackSize - 1) / stackSize;
+                if (entities > WishPlanBudget.MAX_ACTIVE_ITEM_RAIN_ENTITIES) {
+                    throw error(WishProgramError.BUDGET_EXCEEDED, "item_entities=" + entities);
+                }
             }
         }
         if (type == WishActionType.EXPLOSION) {
@@ -236,6 +264,19 @@ public final class WishProgramValidator {
                         "SELF".equals(target) ? "DELIVER_TO_PLAYER" : "PLACE_OR_DROP");
             }
         }
+        if (type == WishActionType.ITEM_RAIN) {
+            rename(parameters, "height", "spawn_height");
+            rename(parameters, "horizontal_radius", "radius");
+            rename(parameters, "delivery", "delivery_mode");
+            defaultInt(parameters, "spawn_height", 24);
+            defaultInt(parameters, "radius", 8);
+            defaultInt(parameters, "interval_ticks", 2);
+            defaultString(parameters, "delivery_mode", "WORLD_ITEMS");
+            upper(parameters, "delivery_mode");
+            clampInt(parameters, "spawn_height", 8, 64);
+            clampInt(parameters, "radius", 1, 32);
+            clampInt(parameters, "interval_ticks", 1, 20);
+        }
         if (type == WishActionType.TELEPORT && parameters.has("dimension")) {
             parameters.addProperty("mode", "CANDIDATE_DIMENSION");
         } else if (type == WishActionType.TELEPORT) {
@@ -248,18 +289,9 @@ public final class WishProgramValidator {
         return parameters;
     }
 
-    private static String resource(JsonObject parameters, WishActionType type) {
-        String key = switch (type) {
-            case GIVE_ITEM, REMOVE_ITEM -> "item";
-            case APPLY_EFFECT, REMOVE_EFFECT -> "effect";
-            case SPAWN_ENTITY, DESPAWN_ENTITY -> "entity";
-            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER -> "block";
-            case PLAY_SOUND -> "sound";
-            case SPAWN_PARTICLE -> "particle";
-            case TELEPORT -> "dimension";
-            case START_PREDEFINED_EVENT -> "event";
-            default -> "";
-        };
+    private static String resource(JsonObject parameters, WishActionDefinition definition) {
+        String key = definition.legacyType() == WishActionType.START_PREDEFINED_EVENT
+                ? "event" : definition.resourceParameter();
         return key.isEmpty() || !parameters.has(key) ? "" : parameters.get(key).getAsString();
     }
 
@@ -279,17 +311,15 @@ public final class WishProgramValidator {
     }
 
     @Nullable
-    private static RegistryEntryType registryType(WishActionType type) {
-        return switch (type) {
-            case GIVE_ITEM, REMOVE_ITEM -> RegistryEntryType.ITEM;
-            case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
-            case SPAWN_ENTITY, DESPAWN_ENTITY -> RegistryEntryType.ENTITY;
-            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER -> RegistryEntryType.BLOCK;
-            case PLAY_SOUND -> RegistryEntryType.SOUND;
-            case SPAWN_PARTICLE -> RegistryEntryType.PARTICLE;
-            case TELEPORT -> RegistryEntryType.DIMENSION;
-            default -> null;
-        };
+    private static RegistryEntryType actualRegistryType(WishProgramResourceResolver resolver,
+                                                        String resource,
+                                                        RegistryEntryType expected) {
+        for (RegistryEntryType type : List.of(RegistryEntryType.ITEM, RegistryEntryType.BLOCK,
+                RegistryEntryType.ENTITY, RegistryEntryType.EFFECT, RegistryEntryType.SOUND,
+                RegistryEntryType.PARTICLE)) {
+            if (type != expected && resolver.resolve(type, resource) != null) return type;
+        }
+        return null;
     }
 
     private static FeatureType feature(RegistryEntryType type) {

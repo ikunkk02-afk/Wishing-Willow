@@ -79,9 +79,8 @@ public final class WishSkillRegistry {
     private static WishSkillRegistry defaultsInternal() {
         List<WishSkillDefinition> values = new ArrayList<>();
         values.add(new WishSkillDefinition("block_rain",
-                "Physical rain made from real falling blocks around a target.",
-                Set.of("block rain", "fall from sky", "blocks from above",
-                        "\u65b9\u5757\u96e8", "\u4ece\u5929\u800c\u964d", "\u50cf\u96e8\u4e00\u6837\u6389"),
+                "Physical rain made only from real registered blocks around a target.",
+                Set.of("block rain", "falling blocks", "blocks from above", "\u65b9\u5757\u96e8"),
                 Set.of("spawn_falling_block"),
                 "Resolve block id; clamp count; call spawn_falling_block with gravity, spread and bounded interval.",
                 List.of("\u8ba9100\u4e2a\u94bb\u77f3\u5757\u4ece\u5929\u800c\u964d",

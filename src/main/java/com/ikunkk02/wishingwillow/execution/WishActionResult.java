@@ -4,17 +4,22 @@ import com.ikunkk02.wishingwillow.execution.action.ActionResult;
 import com.ikunkk02.wishingwillow.execution.action.ActionStatus;
 
 public record WishActionResult(Status status, String code, int affected) {
+    public static final String ACTION_BATCH_CONTINUE = "ACTION_BATCH_CONTINUE";
     public enum Status { SUCCESS, PARTIAL_SUCCESS, RETRY, FAILED, TIMEOUT, UNSUPPORTED, STALE }
 
     public static WishActionResult success(int affected) { return new WishActionResult(Status.SUCCESS, "OK", affected); }
     public static WishActionResult partial(String code, int affected) { return new WishActionResult(Status.PARTIAL_SUCCESS, code, affected); }
     public static WishActionResult retry(String code) { return new WishActionResult(Status.RETRY, code, 0); }
+    public static WishActionResult retryNextTick() { return retry(ACTION_BATCH_CONTINUE); }
     public static WishActionResult failed(String code) { return new WishActionResult(Status.FAILED, code, 0); }
     public static WishActionResult timeout(String code, int affected) { return new WishActionResult(Status.TIMEOUT, code, affected); }
     public static WishActionResult unsupported(String code) { return new WishActionResult(Status.UNSUPPORTED, code, 0); }
     public static WishActionResult stale(String code) { return new WishActionResult(Status.STALE, code, 0); }
 
     public boolean successful() { return status == Status.SUCCESS || status == Status.PARTIAL_SUCCESS; }
+    public boolean shouldRetryNextTick() {
+        return status == Status.RETRY && ACTION_BATCH_CONTINUE.equals(code);
+    }
 
     public ActionResult toActionResult(int requested) {
         int total = Math.max(0, requested);

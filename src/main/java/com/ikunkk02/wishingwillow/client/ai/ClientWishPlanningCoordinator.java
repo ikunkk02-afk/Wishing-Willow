@@ -18,6 +18,7 @@ import com.ikunkk02.wishingwillow.planning.direct.WishAbsurdityStyle;
 import com.ikunkk02.wishingwillow.program.WishProgram;
 import com.ikunkk02.wishingwillow.program.WishProgramError;
 import com.ikunkk02.wishingwillow.program.WishProgramJson;
+import com.ikunkk02.wishingwillow.program.WishProgramResourceKindValidator;
 import com.ikunkk02.wishingwillow.program.skill.WishSkillRegistry;
 import com.ikunkk02.wishingwillow.research.KnowledgeBaseSnapshot;
 import com.ikunkk02.wishingwillow.research.ModResearchManager;
@@ -99,6 +100,7 @@ public final class ClientWishPlanningCoordinator {
             try {
                 WishProgramJson.validate(packet.program(),
                         com.ikunkk02.wishingwillow.execution.action.WishActionRegistry.defaults());
+                WishProgramResourceKindValidator.validate(packet.program(), registry);
                 WishSkillRegistry.defaults().validateSelection(packet.program());
                 if (packet.program().requiresAgent()) throw new IllegalArgumentException("UNKNOWN_CAPABILITY");
                 LOGGER.info("Wish program accepted session={} program={} coreActions={} presentationActions={}",
@@ -107,12 +109,15 @@ public final class ClientWishPlanningCoordinator {
                         packet.program().presentationActions().stream().map(a -> a.action()).toList());
                 if (packet.program().usesSkill()) LOGGER.info("Skill selected session={} id={}",
                         packet.sessionId(), packet.program().skill());
+                logProgramResources(packet.sessionId(), packet.program());
                 planning = CompletableFuture.completedFuture(programOutcome(packet, route));
             } catch (RuntimeException error) {
                 LOGGER.warn("Wish program validation failed session={} detail={}",
                         packet.sessionId(), error.getMessage());
+                WishProgramError programError = WishProgramError.fromMessage(error.getMessage());
                 planning = CompletableFuture.completedFuture(
-                        failedOutcome(packet, WishProgramError.INVALID_PROGRAM));
+                        failedOutcome(packet, programError == WishProgramError.UNKNOWN
+                                ? WishProgramError.INVALID_PROGRAM : programError));
             }
         } else {
             planning = complexPlanning(packet, token, knowledge, registry, frozenPlatform, provider,
@@ -150,7 +155,7 @@ public final class ClientWishPlanningCoordinator {
                     }
                     return CompletableFuture.supplyAsync(() -> runAgent(packet, token, knowledge,
                                     registry, catalog, platform, provider), AI_EXECUTOR)
-                            .thenApply(result -> toProgramOutcome(packet, result));
+                            .thenApply(result -> toProgramOutcome(packet, result, registry));
                 });
     }
 
@@ -159,7 +164,8 @@ public final class ClientWishPlanningCoordinator {
      * the result runs on the same native server executor as every other wish.
      */
     private static ProgramOutcome toProgramOutcome(WishPlanningRequestPacket packet,
-                                                   WishAgentRunResult result) {
+                                                   WishAgentRunResult result,
+                                                   RegistrySnapshot registry) {
         WishAgentDebugSnapshot debug = result.debug();
         if (result.result().draft() == null || debug == null) {
             WishPlanError error = result.result().error() == WishPlanError.NONE
@@ -171,11 +177,13 @@ public final class ClientWishPlanningCoordinator {
                     packet.program().goal());
             WishProgramJson.validate(program,
                     com.ikunkk02.wishingwillow.execution.action.WishActionRegistry.defaults());
+            WishProgramResourceKindValidator.validate(program, registry);
             WishSkillRegistry.defaults().validateSelection(program);
             LOGGER.info("Agent program accepted session={} coreActions={} presentationActions={}",
                     packet.sessionId(),
                     program.coreActions().stream().map(a -> a.action()).toList(),
                     program.presentationActions().stream().map(a -> a.action()).toList());
+            logProgramResources(packet.sessionId(), program);
             return new ProgramOutcome(program, debug, null);
         } catch (IllegalArgumentException error) {
             LOGGER.warn("Agent program conversion failed session={} detail={}",
@@ -197,6 +205,14 @@ public final class ClientWishPlanningCoordinator {
                         packet.program().presentationActions().stream().map(value -> "PRESENTATION:" + value.action()))
                         .toList());
         return new ProgramOutcome(packet.program(), debug, null);
+    }
+
+    private static void logProgramResources(java.util.UUID sessionId, WishProgram program) {
+        for (WishProgramResourceKindValidator.ResourceUse use
+                : WishProgramResourceKindValidator.resources(program)) {
+            LOGGER.info("Wish program resource session={} action={} resource={} expectedRegistry={} count={}",
+                    sessionId, use.action(), use.resource(), use.expected(), use.count());
+        }
     }
 
     private static WishAgentDebugSnapshot routeSnapshot(WishPlanningRequestPacket packet,

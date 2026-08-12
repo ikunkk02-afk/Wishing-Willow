@@ -32,9 +32,12 @@ class WishProgramArchitectureTest {
     static Stream<Arguments> knownWishPrograms() {
         return Stream.of(
                 Arguments.of("give 64 diamonds", "give_item", "{\"item\":\"minecraft:diamond\",\"count\":64}"),
+                Arguments.of("64 diamonds fall from the sky as items", "spawn_item_rain", "{\"item\":\"minecraft:diamond\",\"count\":64,\"target\":\"self\"}"),
+                Arguments.of("100 apples rain from the sky", "spawn_item_rain", "{\"item\":\"minecraft:apple\",\"count\":100,\"target\":\"self\"}"),
                 Arguments.of("all beneficial effects", "apply_effect_group", "{\"group\":\"beneficial\",\"duration_seconds\":600}"),
                 Arguments.of("speed five for ten minutes", "apply_effect", "{\"effect\":\"minecraft:speed\",\"duration_seconds\":600,\"amplifier\":4}"),
                 Arguments.of("100 diamond blocks from the sky", "spawn_falling_block", "{\"block\":\"minecraft:diamond_block\",\"target\":\"self\",\"height\":30,\"horizontal_radius\":10,\"count\":100,\"interval_ticks\":2,\"landing\":\"place_or_drop\"}"),
+                Arguments.of("100 sand blocks fall from above", "spawn_falling_block", "{\"block\":\"minecraft:sand\",\"count\":100,\"target\":\"self\"}"),
                 Arguments.of("gold block rain", "spawn_falling_block", "{\"block\":\"minecraft:gold_block\",\"count\":32}"),
                 Arguments.of("summon ten chickens", "spawn_entity", "{\"entity\":\"minecraft:chicken\",\"count\":10}"),
                 Arguments.of("thunder weather", "set_weather", "{\"weather\":\"thunder\"}"),

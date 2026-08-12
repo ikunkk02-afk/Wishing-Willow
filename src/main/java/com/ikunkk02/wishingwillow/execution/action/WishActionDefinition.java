@@ -3,6 +3,7 @@ package com.ikunkk02.wishingwillow.execution.action;
 import com.google.gson.JsonObject;
 import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.planning.WishActionType;
+import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 
 import javax.annotation.Nullable;
 import java.time.Duration;
@@ -21,6 +22,8 @@ public record WishActionDefinition(
         String description,
         JsonObject parameterSchema,
         Set<WishCapability> capabilities,
+        @Nullable RegistryEntryType resourceKind,
+        String resourceParameter,
         @Nullable WishActionType legacyType,
         @Nullable WishActionExecutor executor,
         Duration timeout,
@@ -32,6 +35,7 @@ public record WishActionDefinition(
         description = Objects.requireNonNull(description).strip();
         parameterSchema = Objects.requireNonNull(parameterSchema).deepCopy();
         capabilities = Set.copyOf(capabilities);
+        resourceParameter = Objects.requireNonNull(resourceParameter).strip();
         timeout = Objects.requireNonNull(timeout);
         resultType = Objects.requireNonNull(resultType).strip();
         if (!id.matches("[a-z][a-z0-9_]{0,63}")) throw new IllegalArgumentException("INVALID_ACTION_ID");
@@ -40,6 +44,10 @@ public record WishActionDefinition(
         }
         if (!flowControl && (legacyType == null || executor == null)) {
             throw new IllegalArgumentException("ACTION_EXECUTOR_REQUIRED");
+        }
+        if ((resourceKind == null) != resourceParameter.isBlank()
+                || !resourceParameter.isBlank() && !resourceParameter.matches("[a-z][a-z0-9_]{0,63}")) {
+            throw new IllegalArgumentException("INVALID_ACTION_RESOURCE_METADATA");
         }
     }
 

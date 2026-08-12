@@ -79,7 +79,7 @@ final class FallingBlockShowerExecutor implements WishActionExecutor {
                     ? WishActionResult.success(progress.delivered())
                     : WishActionResult.partial("FALLING_BLOCK_DELIVERY_INCOMPLETE", progress.delivered());
         }
-        return WishActionResult.retry("BLOCK_BATCH_CONTINUE");
+        return WishActionResult.retryNextTick();
     }
 
     private static void settleFinished(WishExecutionContext context, Block block,

@@ -49,6 +49,15 @@ public final class ForgeWishProgramResourceResolver implements WishProgramResour
     }
 
     @Override
+    public int maxStackSize(RegistryEntryType type, String id) {
+        if (type != RegistryEntryType.ITEM || id == null || id.isBlank()) return 1;
+        String exact = id.contains(":") ? id : "minecraft:" + id;
+        ResourceLocation location = ResourceLocation.tryParse(exact);
+        var item = location == null ? null : ForgeRegistries.ITEMS.getValue(location);
+        return item == null ? 1 : Math.max(1, item.getMaxStackSize());
+    }
+
+    @Override
     public boolean containsPredefinedEvent(String event) {
         return event != null && PredefinedWishEventRegistry.contains(event);
     }

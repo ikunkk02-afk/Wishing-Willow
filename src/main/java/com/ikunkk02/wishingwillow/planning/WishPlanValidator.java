@@ -232,6 +232,9 @@ public final class WishPlanValidator {
             case GIVE_ITEM -> capability == WishCapability.GIVE_ITEM || capability == WishCapability.STRONG_WEAPON
                     || capability == WishCapability.INVENTORY_CHANGE;
             case REMOVE_ITEM -> capability == WishCapability.REMOVE_ITEM || capability == WishCapability.INVENTORY_CHANGE;
+            case ITEM_RAIN -> capability == WishCapability.GIVE_ITEM
+                    || capability == WishCapability.INVENTORY_CHANGE
+                    || capability == WishCapability.WORLD_EVENT;
             case SPAWN_ENTITY -> Set.of(WishCapability.SPAWN_ENTITY, WishCapability.HOSTILE_ENTITY,
                     WishCapability.FRIENDLY_ENTITY, WishCapability.STALKING_ENTITY,
                     WishCapability.PERSISTENT_FOLLOWER, WishCapability.MIMIC_ENTITY,
@@ -277,7 +280,7 @@ public final class WishPlanValidator {
 
     private static RegistryEntryType resourceType(WishActionType action) {
         return switch (action) {
-            case GIVE_ITEM, REMOVE_ITEM -> RegistryEntryType.ITEM;
+            case GIVE_ITEM, REMOVE_ITEM, ITEM_RAIN -> RegistryEntryType.ITEM;
             case SPAWN_ENTITY, DESPAWN_ENTITY, CHANGE_MOB_TARGET, FOLLOW_PLAYER, AVOID_PLAYER -> RegistryEntryType.ENTITY;
             case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
             case PLAY_SOUND -> RegistryEntryType.SOUND;
@@ -340,6 +343,14 @@ public final class WishPlanValidator {
                 rangeInt(p,"interval_ticks",1,20);
                 oneOf(p,"landing_mode",Set.of("PLACE","DROP_ITEM","PLACE_OR_DROP","DELIVER_TO_PLAYER"));
                 oneOf(p,"spread",Set.of("RANDOM"));
+            }
+            case ITEM_RAIN -> {
+                keys(p, Set.of("count","spawn_height","radius","interval_ticks","delivery_mode"),
+                        Set.of("count","spawn_height","radius","interval_ticks","delivery_mode"));
+                rangeInt(p,"count",1,WishPlanBudget.MAX_ITEM_UNITS);
+                rangeInt(p,"spawn_height",8,64); rangeInt(p,"radius",1,32);
+                rangeInt(p,"interval_ticks",1,20);
+                oneOf(p,"delivery_mode",Set.of("WORLD_ITEMS","DELIVER_TO_PLAYER"));
             }
             case CREATE_STRUCTURE -> { keys(p,Set.of("template"),Set.of("template")); oneOf(p,"template",Set.of("SIMPLE_HOUSE")); }
             case MODIFY_HEALTH -> { keys(p,Set.of("delta","allow_lethal"),Set.of("delta","allow_lethal")); range(p,"delta",-40,40); if(bool(p,"allow_lethal")&&severity<81) throw invalid(WishPlanError.BUDGET_EXCEEDED); }

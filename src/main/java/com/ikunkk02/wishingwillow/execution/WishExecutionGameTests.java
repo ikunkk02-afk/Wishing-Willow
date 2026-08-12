@@ -39,6 +39,7 @@ import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.FallingBlockEntity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Items;
@@ -278,6 +279,136 @@ public final class WishExecutionGameTests {
             if(!ok){helper.fail("Native falling shower failed state="
                     +(execution==null?"none":execution.state()+" "+execution.lastError())
                     +" delivered="+delivered+" sawEntity="+sawPhysicalEntity[0]);return;}
+            helper.succeed();
+        });
+    }
+
+    /** ITEM rain uses real ItemEntity gravity and count means total item units, not entity count. */
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=240)
+    public static void itemRainSpawnsExactlySixtyFourDiamondUnits(GameTestHelper helper){
+        ServerPlayer player=serverPlayer(helper);place(player,helper.absolutePos(new BlockPos(1,4,1)));prepareFloor(helper);
+        UUID execution=UUID.randomUUID(),session=UUID.randomUUID();
+        VerifiedRegistryResource resource=new VerifiedRegistryResource(RegistryEntryType.ITEM,"minecraft:diamond");
+        CandidateReference candidate=new CandidateReference("program-item-rain",WishCapability.GIVE_ITEM,
+                WishCapability.GIVE_ITEM,MatchType.EXACT,CandidateSourceKind.VANILLA_REGISTRY,"minecraft","1.20.1",
+                "minecraft:diamond",FeatureType.ITEM,resource,100,20);
+        WishExecutionRecord record=new WishExecutionRecord(execution,execution,session,player.getUUID(),1,
+                helper.getLevel().getGameTime(),ExecutionSource.WISH_PROGRAM,1);
+        WishExecutionContext context=new WishExecutionContext(helper.getLevel(),player,session,"spawn_item_rain",
+                JsonParser.parseString("{\"item\":\"minecraft:diamond\",\"count\":64,\"spawn_height\":12,"
+                        + "\"radius\":3,\"interval_ticks\":1,\"delivery_mode\":\"WORLD_ITEMS\"}").getAsJsonObject(),
+                WishTargetType.PLAYER,WishCapability.GIVE_ITEM,0,candidate,record);
+        var executor=WishActionRegistry.defaults().get(WishActionType.ITEM_RAIN);
+        boolean[] finished={false},sawItemEntity={false},actionComplete={false};
+        WishActionResult[] terminal={null};
+        helper.onEachTick(()->{
+            if(finished[0])return;
+            AABB area=new AABB(player.blockPosition()).inflate(16,40,16);
+            List<ItemEntity> entities=helper.getLevel().getEntitiesOfClass(ItemEntity.class,area,
+                    entity->entity.getItem().is(Items.DIAMOND)
+                            &&entity.getPersistentData().hasUUID(ItemRainProgress.ENTITY_SESSION_TAG)
+                            &&entity.getPersistentData().getUUID(ItemRainProgress.ENTITY_SESSION_TAG).equals(session));
+            if(!entities.isEmpty())sawItemEntity[0]=true;
+            if(actionComplete[0]){
+                finished[0]=true;
+                if(terminal[0]==null||!terminal[0].successful()||terminal[0].affected()!=64
+                        ||record.itemRain(0).spawnedUnits()!=64||record.itemRain(0).spawnedEntities()!=64
+                        ||!sawItemEntity[0]||entities.isEmpty()){
+                    helper.fail("Item rain failed result="+terminal[0]
+                            +" spawnedUnits="+record.itemRain(0).spawnedUnits()
+                            +" spawnedEntities="+record.itemRain(0).spawnedEntities()
+                            +" liveEntities="+entities.size());return;
+                }
+                helper.succeed();return;
+            }
+            WishActionResult result=executor.execute(context);
+            if(result.status()==WishActionResult.Status.RETRY)return;
+            terminal[0]=result;
+            actionComplete[0]=true;
+        });
+    }
+
+    /** NEW path: validator and generic next-tick scheduler complete a real ItemEntity rain. */
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=360)
+    public static void nativeProgramItemRainExecutesThroughTickLoop(GameTestHelper helper){
+        var server=helper.getLevel().getServer();UUID session=UUID.randomUUID(),owner=UUID.randomUUID();
+        ServerPlayer player=ownerPlayer(helper,owner);place(player,helper.absolutePos(new BlockPos(1,4,1)));prepareFloor(helper);
+        registerPlayer(server,player);
+        WishProgram program=WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"64 diamonds fall from the sky as items","core_actions":[
+                 {"action":"spawn_item_rain","parameters":{"item":"minecraft:diamond","count":64,
+                  "target":"self","height":12,"horizontal_radius":3,"interval_ticks":1,"delivery":"world_items"}}],
+                 "presentation_actions":[],"skill":"","unknown_capability":""}""");
+        WishInterpretation interpretation=new WishInterpretation(1,"item_rain","64 diamonds as falling items","",
+                "64 diamonds physically fall","GameTest",WishTone.ABSURD,50,WishDelivery.IMMEDIATE,
+                List.of(WishCapability.GIVE_ITEM));
+        WishRecord wish=new WishRecord(session,owner,"64 diamonds fall from the sky as items",
+                helper.getLevel().dimension().location(),helper.getLevel().getGameTime(),System.currentTimeMillis(),
+                WishState.FINISHED,InterpretationState.SUCCESS,AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,
+                AiProviderType.CUSTOM,"gametest",System.currentTimeMillis(),interpretation).withProgram(program);
+        WishSavedData.get(server).update(wish);
+        ValidatedWishProgram validated=WishProgramValidator.validate(program,new ForgeWishProgramResourceResolver(server));
+        WishExecutionAcceptResult accepted=WishActionManager.startProgram(player,wish,validated);
+        if(!accepted.accepted()){unregisterPlayer(server,player);helper.fail("Program start failed: "+accepted);return;}
+        boolean[] sawItemEntity={false};
+        helper.onEachTick(()->{
+            AABB area=new AABB(player.blockPosition()).inflate(16,40,16);
+            if(!helper.getLevel().getEntitiesOfClass(ItemEntity.class,area,
+                    entity->entity.getPersistentData().hasUUID(ItemRainProgress.ENTITY_SESSION_TAG)
+                            &&entity.getPersistentData().getUUID(ItemRainProgress.ENTITY_SESSION_TAG).equals(session)).isEmpty()){
+                sawItemEntity[0]=true;
+            }
+        });
+        helper.runAfterDelay(240,()->{
+            WishRecord stored=WishSavedData.get(server).getBySession(session);
+            WishExecutionRecord execution=stored==null||stored.executionId()==null?null:
+                    WishExecutionSavedData.get(server).get(stored.executionId());
+            boolean ok=execution!=null&&execution.source()==ExecutionSource.WISH_PROGRAM&&stored.plan()==null
+                    &&execution.state()==WishExecutionState.COMPLETED&&execution.itemRain(0).spawnedUnits()==64
+                    &&execution.itemRain(0).spawnedEntities()==64&&sawItemEntity[0];
+            unregisterPlayer(server,player);
+            if(!ok){helper.fail("Native item rain failed state="
+                    +(execution==null?"none":execution.state()+" "+execution.lastError())
+                    +" spawnedUnits="+(execution==null?0:execution.itemRain(0).spawnedUnits())
+                    +" sawEntity="+sawItemEntity[0]);return;}
+            helper.succeed();
+        });
+    }
+
+    /** deliver_to_player still shows physical falling first, then guarantees all requested units. */
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=220)
+    public static void itemRainDeliveryGuaranteesRequestedUnits(GameTestHelper helper){
+        ServerPlayer player=serverPlayer(helper);place(player,helper.absolutePos(new BlockPos(1,4,1)));prepareFloor(helper);
+        UUID execution=UUID.randomUUID(),session=UUID.randomUUID();
+        VerifiedRegistryResource resource=new VerifiedRegistryResource(RegistryEntryType.ITEM,"minecraft:diamond");
+        CandidateReference candidate=new CandidateReference("program-item-rain-delivery",WishCapability.GIVE_ITEM,
+                WishCapability.GIVE_ITEM,MatchType.EXACT,CandidateSourceKind.VANILLA_REGISTRY,"minecraft","1.20.1",
+                "minecraft:diamond",FeatureType.ITEM,resource,100,20);
+        WishExecutionRecord record=new WishExecutionRecord(execution,execution,session,player.getUUID(),1,
+                helper.getLevel().getGameTime(),ExecutionSource.WISH_PROGRAM,1);
+        WishExecutionContext context=new WishExecutionContext(helper.getLevel(),player,session,"spawn_item_rain",
+                JsonParser.parseString("{\"item\":\"minecraft:diamond\",\"count\":8,\"spawn_height\":8,"
+                        + "\"radius\":1,\"interval_ticks\":1,\"delivery_mode\":\"DELIVER_TO_PLAYER\"}").getAsJsonObject(),
+                WishTargetType.PLAYER,WishCapability.GIVE_ITEM,0,candidate,record);
+        var executor=WishActionRegistry.defaults().get(WishActionType.ITEM_RAIN);
+        boolean[] finished={false},sawItemEntity={false};
+        helper.onEachTick(()->{
+            if(finished[0])return;
+            if(!helper.getLevel().getEntitiesOfClass(ItemEntity.class,
+                    new AABB(player.blockPosition()).inflate(8,24,8),
+                    entity->entity.getPersistentData().hasUUID(ItemRainProgress.ENTITY_SESSION_TAG)
+                            &&entity.getPersistentData().getUUID(ItemRainProgress.ENTITY_SESSION_TAG).equals(session)).isEmpty()){
+                sawItemEntity[0]=true;
+            }
+            WishActionResult result=executor.execute(context);
+            if(result.status()==WishActionResult.Status.RETRY)return;
+            finished[0]=true;
+            if(!result.successful()||result.affected()!=8||player.getInventory().countItem(Items.DIAMOND)!=8
+                    ||record.itemRain(0).deliveredUnits()!=8||!sawItemEntity[0]){
+                helper.fail("Guaranteed item rain delivery failed result="+result
+                        +" inventory="+player.getInventory().countItem(Items.DIAMOND)
+                        +" sawEntity="+sawItemEntity[0]);return;
+            }
             helper.succeed();
         });
     }

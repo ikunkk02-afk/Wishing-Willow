@@ -11,6 +11,9 @@ public final class WishPlanBudget {
     public static final int MAX_FALLING_BLOCKS = 256;
     public static final int MAX_FALLING_BLOCKS_PER_TICK = 4;
     public static final int MAX_ACTIVE_FALLING_BLOCKS = 128;
+    public static final int MAX_ITEM_UNITS = 4096;
+    public static final int MAX_ACTIVE_ITEM_RAIN_ENTITIES = 96;
+    public static final int MAX_ITEM_ENTITIES_PER_TICK = 8;
     private WishPlanBudget() { }
 
     public static int maxSteps(int severity) {

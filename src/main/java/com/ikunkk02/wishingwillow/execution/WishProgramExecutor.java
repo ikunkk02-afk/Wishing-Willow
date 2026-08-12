@@ -41,8 +41,9 @@ public final class WishProgramExecutor {
     private static final int CINEMATIC_START_DELAY_TICKS = 110;
     private static final long PROGRAM_TIMEOUT_TICKS = 1800L;   // 90s
     private static final long SKILL_TIMEOUT_TICKS = 1200L;     // 60s
-    private static final Set<String> BLOCK_ACTIONS = Set.of(
-            "place_block", "replace_blocks", "place_pattern", "spawn_falling_block", "create_structure");
+    private static final Set<String> BOUNDED_WORLD_ACTIONS = Set.of(
+            "place_block", "replace_blocks", "place_pattern", "spawn_falling_block",
+            "spawn_item_rain", "create_structure");
     private static final WishActionRegistry ACTIONS = WishActionRegistry.defaults();
 
     private WishProgramExecutor() { }
@@ -173,16 +174,16 @@ public final class WishProgramExecutor {
         if (result.successful()) {
             step.transition(WishStepExecutionState.SUCCEEDED, now);
         } else if (result.status() == WishActionResult.Status.RETRY) {
-            boolean blockBatch = "BLOCK_BATCH_CONTINUE".equals(result.code());
-            if (!blockBatch && step.retryCount() >= 1) {
+            boolean batchContinuation = result.shouldRetryNextTick();
+            if (!batchContinuation && step.retryCount() >= 1) {
                 step.retry("LOOP_DETECTED");
                 step.result(WishActionResult.failed("LOOP_DETECTED"));
                 step.transition(WishStepExecutionState.FAILED, now);
             } else {
                 step.retry(result.code());
-                step.transition(blockBatch ? WishStepExecutionState.WAITING_DELAY
+                step.transition(batchContinuation ? WishStepExecutionState.WAITING_DELAY
                         : WishStepExecutionState.WAITING_TARGET, now);
-                long next = now + (blockBatch ? 1 : 20);
+                long next = now + (batchContinuation ? 1 : 20);
                 step.schedule(next);
                 WishExecutionManager.scheduler().delay(new StepKey(record.executionId(), stepIndex), next);
             }
@@ -363,14 +364,14 @@ public final class WishProgramExecutor {
         WishExecutionManager.changed(server, record);
     }
 
-    public static boolean isBlockStep(MinecraftServer server, WishExecutionRecord record,
-                                      int stepIndex) {
+    public static boolean isBoundedWorldStep(MinecraftServer server, WishExecutionRecord record,
+                                             int stepIndex) {
         WishRecord wish = WishSavedData.get(server).getBySession(record.wishSessionId());
         if (wish == null || wish.program() == null) return false;
         try {
             List<ProgramAction> leaves = validated(server, wish).allLeaves();
             if (stepIndex < 0 || stepIndex >= leaves.size()) return false;
-            return BLOCK_ACTIONS.contains(leaves.get(stepIndex).actionId());
+            return BOUNDED_WORLD_ACTIONS.contains(leaves.get(stepIndex).actionId());
         } catch (IllegalArgumentException error) {
             return false;
         }

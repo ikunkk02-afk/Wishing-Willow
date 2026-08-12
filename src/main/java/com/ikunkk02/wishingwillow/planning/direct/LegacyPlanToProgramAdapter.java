@@ -57,7 +57,7 @@ public final class LegacyPlanToProgramAdapter {
 
     private static String resourceKey(WishPlanStep step) {
         return switch (step.action()) {
-            case GIVE_ITEM, REMOVE_ITEM -> "item";
+            case GIVE_ITEM, REMOVE_ITEM, ITEM_RAIN -> "item";
             case APPLY_EFFECT, REMOVE_EFFECT -> "effect";
             case SPAWN_ENTITY, DESPAWN_ENTITY -> "entity";
             case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER -> "block";

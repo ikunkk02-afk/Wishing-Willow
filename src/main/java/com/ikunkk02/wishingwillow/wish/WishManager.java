@@ -372,6 +372,13 @@ public final class WishManager {
             data.update(stored.withProgram(program));
             ValidatedWishProgram validated = WishProgramValidator.validate(program,
                     new ForgeWishProgramResourceResolver(player.server));
+            validated.allLeaves().stream()
+                    .filter(leaf -> leaf.candidate() != null
+                            && leaf.candidate().registryResource() != null)
+                    .forEach(leaf -> WishingWillow.LOGGER.info(
+                            "Program resource resolved action={} resource={} registry={} status=SUCCESS",
+                            leaf.actionId(), leaf.candidate().registryResource().id(),
+                            leaf.candidate().registryResource().type()));
             WishingWillow.LOGGER.info(
                     "Wish program accepted session={} program={} coreActions={} presentationActions={}",
                     sessionId, WishProgramJson.toJson(program).length(),

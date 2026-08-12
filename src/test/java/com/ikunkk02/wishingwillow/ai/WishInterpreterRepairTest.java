@@ -88,6 +88,24 @@ class WishInterpreterRepairTest {
                 .contains("repairing one previous invalid response"));
     }
 
+    @Test
+    void firstPromptSeparatesResourceKindFromPhysicalDelivery() {
+        SequenceProvider provider = new SequenceProvider(VALID);
+        new WishInterpreter(config -> provider)
+                .interpret(config(), "让64个钻石从天而降").join();
+
+        String prompt = provider.requests.get(0).systemMessage();
+        assertTrue(prompt.contains("RESOURCE KIND MATTERS"));
+        assertTrue(prompt.contains("ITEM + physical falling from above -> spawn_item_rain"));
+        assertTrue(prompt.contains("BLOCK + physical falling from above -> spawn_falling_block"));
+        assertTrue(prompt.contains("minecraft:diamond != minecraft:diamond_block"));
+        assertTrue(prompt.contains("Never put an item registry id into a block parameter"));
+        assertTrue(prompt.contains("group=beneficial"));
+        assertTrue(prompt.contains("\"resource_kind\":\"item\""));
+        assertTrue(prompt.contains("\"resource_kind\":\"block\""));
+        assertTrue(!prompt.contains("group=BENEFICIAL"));
+    }
+
     private static AiConfig config() {
         return new AiConfig(AiExecutionMode.PLAYER_PROVIDED, AiProviderType.CUSTOM,
                 "https://example.invalid/v1", "", "test-model");

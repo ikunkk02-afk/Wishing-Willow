@@ -23,6 +23,7 @@ public final class WishExecutionRecord {
     private final Map<UUID, BehaviorLease> behaviorLeases;
     private final Map<String, Long> eventLeases;
     private final Map<Integer, FallingBlockShowerProgress> fallingBlockShowers;
+    private final Map<Integer, ItemRainProgress> itemRains;
     private final long createdGameTime;
     private long updatedGameTime;
     private String lastError;
@@ -45,6 +46,7 @@ public final class WishExecutionRecord {
         this.journals = new HashMap<>(); this.attributeLeases = new HashMap<>();
         this.behaviorLeases = new HashMap<>(); this.eventLeases = new HashMap<>();
         this.fallingBlockShowers = new HashMap<>();
+        this.itemRains = new HashMap<>();
         this.createdGameTime = gameTime; this.updatedGameTime = gameTime; this.lastError = "";
     }
 
@@ -55,10 +57,11 @@ public final class WishExecutionRecord {
                                 Map<Integer,WishWorldChangeJournal> journals,Map<Integer,AttributeLease> leases,
                                 Map<UUID,BehaviorLease> behaviorLeases,Map<String,Long> eventLeases,
                                 Map<Integer,FallingBlockShowerProgress> fallingBlockShowers,
+                                Map<Integer,ItemRainProgress> itemRains,
                                 long created, long updated, String error) {
         this.executionId=executionId;this.planId=planId;this.wishSessionId=wishSessionId;this.ownerId=ownerId;
         this.source=source;this.coreActionCount=coreActionCount;
-        this.state=state;this.steps=steps;this.entityBindings=bindings;this.selectedResources=resources;this.journals=journals;this.attributeLeases=leases;this.behaviorLeases=behaviorLeases;this.eventLeases=eventLeases;this.fallingBlockShowers=fallingBlockShowers;
+        this.state=state;this.steps=steps;this.entityBindings=bindings;this.selectedResources=resources;this.journals=journals;this.attributeLeases=leases;this.behaviorLeases=behaviorLeases;this.eventLeases=eventLeases;this.fallingBlockShowers=fallingBlockShowers;this.itemRains=itemRains;
         this.createdGameTime=created;this.updatedGameTime=updated;this.lastError=error;
     }
 
@@ -92,6 +95,8 @@ public final class WishExecutionRecord {
     public void removeEventLease(String id){eventLeases.remove(id);}
     public FallingBlockShowerProgress fallingBlockShower(int step){return fallingBlockShowers.computeIfAbsent(step,key->new FallingBlockShowerProgress());}
     public Map<Integer,FallingBlockShowerProgress> fallingBlockShowers(){return Map.copyOf(fallingBlockShowers);}
+    public ItemRainProgress itemRain(int step){return itemRains.computeIfAbsent(step,key->new ItemRainProgress());}
+    public Map<Integer,ItemRainProgress> itemRains(){return Map.copyOf(itemRains);}
 
     public CompoundTag save(){
         CompoundTag tag=new CompoundTag();tag.putUUID("ExecutionId",executionId);tag.putUUID("PlanId",planId);
@@ -106,6 +111,7 @@ public final class WishExecutionRecord {
         ListTag behaviors=new ListTag();behaviorLeases.forEach((id,lease)->{CompoundTag v=new CompoundTag();v.putUUID("Entity",id);v.putString("Mode",lease.mode);v.putDouble("Speed",lease.speed);v.putDouble("MinDistance",lease.minDistance);v.putLong("Expires",lease.expires);behaviors.add(v);});tag.put("BehaviorLeases",behaviors);
         ListTag events=new ListTag();eventLeases.forEach((id,expires)->{CompoundTag v=new CompoundTag();v.putString("Id",id);v.putLong("Expires",expires);events.add(v);});tag.put("EventLeases",events);
         ListTag showers=new ListTag();fallingBlockShowers.forEach((index,progress)->{CompoundTag v=progress.save();v.putInt("Step",index);showers.add(v);});tag.put("FallingBlockShowers",showers);
+        ListTag rains=new ListTag();itemRains.forEach((index,progress)->{CompoundTag v=progress.save();v.putInt("Step",index);rains.add(v);});tag.put("ItemRains",rains);
         return tag;
     }
 
@@ -118,15 +124,16 @@ public final class WishExecutionRecord {
         Map<UUID,BehaviorLease> behaviors=new HashMap<>();for(Tag value:tag.getList("BehaviorLeases",Tag.TAG_COMPOUND)){CompoundTag v=(CompoundTag)value;if(v.hasUUID("Entity")){UUID id=v.getUUID("Entity");behaviors.put(id,new BehaviorLease(id,v.getString("Mode"),v.getDouble("Speed"),v.getDouble("MinDistance"),v.getLong("Expires")));}}
         Map<String,Long> events=new HashMap<>();for(Tag value:tag.getList("EventLeases",Tag.TAG_COMPOUND)){CompoundTag v=(CompoundTag)value;events.put(v.getString("Id"),v.getLong("Expires"));}
         Map<Integer,FallingBlockShowerProgress> showers=new HashMap<>();for(Tag value:tag.getList("FallingBlockShowers",Tag.TAG_COMPOUND)){CompoundTag v=(CompoundTag)value;showers.put(v.getInt("Step"),FallingBlockShowerProgress.load(v));}
+        Map<Integer,ItemRainProgress> rains=new HashMap<>();for(Tag value:tag.getList("ItemRains",Tag.TAG_COMPOUND)){CompoundTag v=(CompoundTag)value;rains.put(v.getInt("Step"),ItemRainProgress.load(v));}
         WishExecutionState state;try{state=WishExecutionState.valueOf(tag.getString("State"));}catch(IllegalArgumentException ignored){state=WishExecutionState.STALE;}
         ExecutionSource source;
         try { source = ExecutionSource.valueOf(tag.getString("Source")); }
         catch (IllegalArgumentException ignored) { source = ExecutionSource.LEGACY_WISH_PLAN; }
         int coreCount = tag.contains("CoreActionCount") ? tag.getInt("CoreActionCount") : 0;
         boolean hasRunning=steps.stream().anyMatch(step->step.state()==WishStepExecutionState.RUNNING);
-        if(state==WishExecutionState.RUNNING){boolean resumable=false;for(WishStepExecution step:steps)if(step.state()==WishStepExecutionState.RUNNING&&(journals.containsKey(step.stepIndex())||showers.containsKey(step.stepIndex()))){step.recoverBlockBatch();resumable=true;}if(!resumable)for(WishStepExecution step:steps)step.markStale();state=resumable?WishExecutionState.SCHEDULED:WishExecutionState.STALE;}
+        if(state==WishExecutionState.RUNNING){boolean resumable=false;for(WishStepExecution step:steps)if(step.state()==WishStepExecutionState.RUNNING&&(journals.containsKey(step.stepIndex())||showers.containsKey(step.stepIndex())||rains.containsKey(step.stepIndex()))){step.recoverActionBatch();resumable=true;}if(!resumable)for(WishStepExecution step:steps)step.markStale();state=resumable?WishExecutionState.SCHEDULED:WishExecutionState.STALE;}
         else if(hasRunning){for(WishStepExecution step:steps)step.markStale();if(!state.terminal())state=WishExecutionState.STALE;}
-        return new WishExecutionRecord(tag.getUUID("ExecutionId"),tag.getUUID("PlanId"),tag.getUUID("WishSessionId"),tag.getUUID("OwnerId"),source,coreCount,state,steps,bindings,resources,journals,leases,behaviors,events,showers,tag.getLong("CreatedGameTime"),tag.getLong("UpdatedGameTime"),tag.getString("LastError"));
+        return new WishExecutionRecord(tag.getUUID("ExecutionId"),tag.getUUID("PlanId"),tag.getUUID("WishSessionId"),tag.getUUID("OwnerId"),source,coreCount,state,steps,bindings,resources,journals,leases,behaviors,events,showers,rains,tag.getLong("CreatedGameTime"),tag.getLong("UpdatedGameTime"),tag.getString("LastError"));
     }
     public record AttributeLease(String attribute,UUID modifier,long expires){}
     public record BehaviorLease(UUID entity,String mode,double speed,double minDistance,long expires){}

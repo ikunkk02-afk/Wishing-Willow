@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.planning.WishActionType;
+import com.ikunkk02.wishingwillow.research.RegistryEntryType;
 
 import javax.annotation.Nullable;
 import java.time.Duration;
@@ -59,8 +60,13 @@ public final class WishActionRegistry {
             value.addProperty("id", definition.id());
             value.addProperty("description", definition.description());
             value.add("parameters", definition.parameterSchema());
+            if (definition.resourceKind() != null) {
+                value.addProperty("resource_kind", definition.resourceKind().name().toLowerCase(java.util.Locale.ROOT));
+                value.addProperty("resource_parameter", definition.resourceParameter());
+            }
             JsonArray capabilities = new JsonArray();
-            definition.capabilities().stream().map(Enum::name).sorted().forEach(capabilities::add);
+            definition.capabilities().stream().map(capability -> capability.name().toLowerCase(java.util.Locale.ROOT))
+                    .sorted().forEach(capabilities::add);
             value.add("capabilities", capabilities);
             value.addProperty("timeout_ms", definition.timeout().toMillis());
             value.addProperty("result_type", definition.resultType());
@@ -98,7 +104,7 @@ public final class WishActionRegistry {
                 schema(p("group", "string", true, null, null, "beneficial", "harmful"),
                         p("duration_seconds", "integer", false, 1d, 72000d),
                         p("amplifier", "integer", false, 0d, 255d)),
-                description("apply every live-registry effect in BENEFICIAL or HARMFUL group", "one named effect is requested", "给我所有正面效果 | all beneficial effects", "apply_effect"));
+                description("apply every live-registry effect in beneficial or harmful group", "one named effect is requested", "给我所有正面效果 | all beneficial effects", "apply_effect"));
         add(values, "modify_health", WishActionType.MODIFY_HEALTH, StandardWishActionExecutors.modifyHealth(), 2,
                 Set.of(WishCapability.HEALING, WishCapability.DAMAGE),
                 schema(p("delta", "number", true, -20d, 20d), p("allow_lethal", "boolean", false)),
@@ -147,7 +153,17 @@ public final class WishActionRegistry {
                         p("count", "integer", true, 1d, 256d),
                         p("interval_ticks", "integer", false, 1d, 20d),
                         p("landing", "string", false, null, null, "place", "drop_item", "place_or_drop", "deliver_to_player")),
-                description("blocks must physically fall under gravity; block rain; drop blocks from above a player/location", "the player only wants an inventory item or static placement", "让100个钻石块从天而降 | 天空下金块雨 | 让沙子从头顶砸下来", "place_block, give_item"));
+                description("ONLY use resources registered as BLOCKS. Spawns real FallingBlockEntity objects; block MUST be a minecraft:block registry id such as minecraft:diamond_block, minecraft:gold_block, or minecraft:sand", "ordinary item resources such as minecraft:diamond, minecraft:apple, or minecraft:iron_ingot; use spawn_item_rain for those", "make 64 diamond blocks fall from the sky | rain sand blocks", "spawn_item_rain, place_block, give_item"));
+        add(values, "spawn_item_rain", WishActionType.ITEM_RAIN, new ItemRainExecutor(), 60,
+                Set.of(WishCapability.GIVE_ITEM),
+                schema(p("item", "string", true),
+                        p("count", "integer", true, 1d, 4096d),
+                        p("target", "string", false, null, null, "self", "area"),
+                        p("height", "integer", false, 8d, 64d),
+                        p("horizontal_radius", "integer", false, 1d, 32d),
+                        p("interval_ticks", "integer", false, 1d, 20d),
+                        p("delivery", "string", false, null, null, "world_items", "deliver_to_player")),
+                description("actual item resources physically falling from above as real ItemEntity objects; item MUST be a minecraft:item registry id such as minecraft:diamond, minecraft:apple, or minecraft:iron_ingot", "actual blocks that should fall as blocks; use spawn_falling_block for those", "make 64 diamonds fall from the sky as items | rain apples", "spawn_falling_block, give_item"));
         add(values, "spawn_entity", WishActionType.SPAWN_ENTITY, StandardWishActionExecutors.spawnEntity(), 5,
                 Set.of(WishCapability.SPAWN_ENTITY, WishCapability.FRIENDLY_ENTITY, WishCapability.HOSTILE_ENTITY),
                 schema(p("entity", "string", true), p("count", "integer", false, 1d, 64d),
@@ -224,15 +240,34 @@ public final class WishActionRegistry {
     private static void add(List<WishActionDefinition> values, String id, WishActionType type,
                             WishActionExecutor executor, long timeoutSeconds, Set<WishCapability> capabilities,
                             JsonObject schema, String description) {
-        values.add(new WishActionDefinition(id, description, schema, capabilities, type, executor,
+        ResourceMetadata resource = resource(type);
+        values.add(new WishActionDefinition(id, description, schema, capabilities,
+                resource == null ? null : resource.kind(), resource == null ? "" : resource.parameter(), type, executor,
                 Duration.ofSeconds(timeoutSeconds), "ActionResult", false));
     }
 
     private static void addFlow(List<WishActionDefinition> values, String id, long timeoutSeconds,
                                 JsonObject schema, String description) {
-        values.add(new WishActionDefinition(id, description, schema, Set.of(), null, null,
+        values.add(new WishActionDefinition(id, description, schema, Set.of(), null, "", null, null,
                 Duration.ofSeconds(timeoutSeconds), "ActionResult", true));
     }
+
+    @Nullable
+    private static ResourceMetadata resource(WishActionType type) {
+        return switch (type) {
+            case GIVE_ITEM, REMOVE_ITEM, ITEM_RAIN -> new ResourceMetadata(RegistryEntryType.ITEM, "item");
+            case APPLY_EFFECT, REMOVE_EFFECT -> new ResourceMetadata(RegistryEntryType.EFFECT, "effect");
+            case SPAWN_ENTITY, DESPAWN_ENTITY -> new ResourceMetadata(RegistryEntryType.ENTITY, "entity");
+            case CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, FALLING_BLOCK_SHOWER ->
+                    new ResourceMetadata(RegistryEntryType.BLOCK, "block");
+            case PLAY_SOUND -> new ResourceMetadata(RegistryEntryType.SOUND, "sound");
+            case SPAWN_PARTICLE -> new ResourceMetadata(RegistryEntryType.PARTICLE, "particle");
+            case TELEPORT -> new ResourceMetadata(RegistryEntryType.DIMENSION, "dimension");
+            default -> null;
+        };
+    }
+
+    private record ResourceMetadata(RegistryEntryType kind, String parameter) { }
 
     private static String description(String use, String doNotUse, String examples, String related) {
         String safeExamples = examples.chars().allMatch(value -> value >= 32 && value < 127)

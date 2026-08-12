@@ -86,6 +86,51 @@ class NewProgramMustNotUseLegacyPlanningTest {
     }
 
     @Test
+    void itemRainProgramCanonicalizesAndResolvesAgainstTheItemRegistry() {
+        WishProgram program = program("64 diamonds fall from the sky as items",
+                "{\"action\":\"spawn_item_rain\",\"parameters\":{\"item\":\"minecraft:diamond\","
+                        + "\"count\":64,\"target\":\"self\"}}");
+        ValidatedWishProgram validated = WishProgramValidator.validate(program, RESOLVER);
+
+        ProgramAction leaf = validated.coreActions().get(0);
+        assertEquals("spawn_item_rain", leaf.actionId());
+        assertEquals(64, leaf.parameters().get("count").getAsInt());
+        assertEquals(24, leaf.parameters().get("spawn_height").getAsInt());
+        assertEquals(8, leaf.parameters().get("radius").getAsInt());
+        assertEquals(2, leaf.parameters().get("interval_ticks").getAsInt());
+        assertEquals("WORLD_ITEMS", leaf.parameters().get("delivery_mode").getAsString());
+        assertEquals(RegistryEntryType.ITEM, leaf.candidate().registryResource().type());
+        assertEquals("minecraft:diamond", leaf.candidate().registryResource().id());
+        assertEquals(WishTargetType.PLAYER, leaf.target());
+
+        assertLegacyCountersZero();
+    }
+
+    @Test
+    void itemIdCannotBeSubmittedAsAFallingBlockOrSilentlyConverted() {
+        WishProgram program = program("64 diamonds fall from the sky as items",
+                "{\"action\":\"spawn_falling_block\",\"parameters\":{\"block\":\"minecraft:diamond\","
+                        + "\"count\":64,\"target\":\"self\"}}");
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> WishProgramValidator.validate(program, RESOLVER));
+        assertEquals("RESOURCE_KIND_MISMATCH:action=spawn_falling_block parameter=block "
+                + "resource=minecraft:diamond expected=BLOCK actual=ITEM", error.getMessage());
+        assertFalse(error.getMessage().contains("diamond_block"));
+        assertLegacyCountersZero();
+    }
+
+    @Test
+    void itemRainEntityBudgetRejectsTooManyNonStackableItems() {
+        WishProgram program = program("97 swords fall from the sky",
+                "{\"action\":\"spawn_item_rain\",\"parameters\":{\"item\":\"minecraft:wooden_sword\","
+                        + "\"count\":97}}");
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> WishProgramValidator.validate(program, RESOLVER));
+        assertEquals("BUDGET_EXCEEDED:item_entities=97", error.getMessage());
+        assertLegacyCountersZero();
+    }
+
+    @Test
     void spawnEntityProgramNeverTouchesLegacyPlanning() {
         WishProgram program = program("summon ten chickens",
                 "{\"action\":\"spawn_entity\",\"parameters\":{\"entity\":\"minecraft:chicken\",\"count\":10}}");
@@ -124,6 +169,17 @@ class NewProgramMustNotUseLegacyPlanningTest {
         assertLegacyCountersZero();
     }
 
+    @Test
+    void unknownItemRainResourceReportsRegistryFailureBeforeEntityBudget() {
+        WishProgram program = program("unknown items fall from the sky",
+                "{\"action\":\"spawn_item_rain\",\"parameters\":{\"item\":\"evil:not_registered\","
+                        + "\"count\":100}}");
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> WishProgramValidator.validate(program, RESOLVER));
+        assertEquals("INVALID_REGISTRY:item_rain=evil:not_registered", error.getMessage());
+        assertLegacyCountersZero();
+    }
+
     private static void assertLegacyCountersZero() {
         assertEquals(0, WishPipelineProbe.legacyPlanCompileCount(),
                 "DirectActionPlanCompiler/WishProgramCompiler legacy lowering must not run");
@@ -144,8 +200,8 @@ class NewProgramMustNotUseLegacyPlanningTest {
 
     private static final class FakeResolver implements WishProgramResourceResolver {
         private final Map<RegistryEntryType, Set<String>> entries = Map.of(
-                RegistryEntryType.ITEM, Set.of("minecraft:diamond"),
-                RegistryEntryType.BLOCK, Set.of("minecraft:diamond_block"),
+                RegistryEntryType.ITEM, Set.of("minecraft:diamond", "minecraft:apple", "minecraft:wooden_sword"),
+                RegistryEntryType.BLOCK, Set.of("minecraft:diamond_block", "minecraft:sand"),
                 RegistryEntryType.ENTITY, Set.of("minecraft:chicken"),
                 RegistryEntryType.EFFECT, Set.of("minecraft:speed"));
 
@@ -158,6 +214,11 @@ class NewProgramMustNotUseLegacyPlanningTest {
 
         @Override
         public String resolveDimension(String id) { return null; }
+
+        @Override
+        public int maxStackSize(RegistryEntryType type, String id) {
+            return "minecraft:wooden_sword".equals(id) ? 1 : 64;
+        }
 
         @Override
         public boolean containsPredefinedEvent(String event) { return false; }

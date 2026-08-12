@@ -9,6 +9,7 @@ import com.ikunkk02.wishingwillow.planning.CandidateSourceKind;
 import com.ikunkk02.wishingwillow.planning.CapabilityRelationGraph;
 import com.ikunkk02.wishingwillow.planning.MatchType;
 import com.ikunkk02.wishingwillow.planning.WishActionType;
+import com.ikunkk02.wishingwillow.planning.WishPlanBudget;
 import com.ikunkk02.wishingwillow.planning.WishStepTiming;
 import com.ikunkk02.wishingwillow.planning.WishTargetType;
 import com.ikunkk02.wishingwillow.planning.WishTriggerType;
@@ -41,7 +42,7 @@ public final class WishActionPolicy {
     @Nullable
     public static RegistryEntryType expectedResource(WishActionType action) {
         return switch (action) {
-            case GIVE_ITEM, REMOVE_ITEM -> RegistryEntryType.ITEM;
+            case GIVE_ITEM, REMOVE_ITEM, ITEM_RAIN -> RegistryEntryType.ITEM;
             case SPAWN_ENTITY, DESPAWN_ENTITY, CHANGE_MOB_TARGET, FOLLOW_PLAYER, AVOID_PLAYER -> RegistryEntryType.ENTITY;
             case APPLY_EFFECT, REMOVE_EFFECT -> RegistryEntryType.EFFECT;
             case PLAY_SOUND -> RegistryEntryType.SOUND;
@@ -57,6 +58,9 @@ public final class WishActionPolicy {
             case GIVE_ITEM -> Set.of(WishCapability.GIVE_ITEM, WishCapability.STRONG_WEAPON,
                     WishCapability.INVENTORY_CHANGE).contains(provided);
             case REMOVE_ITEM -> Set.of(WishCapability.REMOVE_ITEM, WishCapability.INVENTORY_CHANGE).contains(provided);
+            case ITEM_RAIN -> provided == WishCapability.GIVE_ITEM
+                    || provided == WishCapability.INVENTORY_CHANGE
+                    || provided == WishCapability.WORLD_EVENT;
             case SPAWN_ENTITY, DESPAWN_ENTITY -> Set.of(WishCapability.SPAWN_ENTITY,
                     WishCapability.HOSTILE_ENTITY, WishCapability.FRIENDLY_ENTITY,
                     WishCapability.STALKING_ENTITY, WishCapability.PERSISTENT_FOLLOWER,
@@ -206,6 +210,14 @@ public final class WishActionPolicy {
                 rangeInt(p, "interval_ticks", 1, 20);
                 oneOf(p, "landing_mode", Set.of("PLACE", "DROP_ITEM", "PLACE_OR_DROP", "DELIVER_TO_PLAYER"));
                 oneOf(p, "spread", Set.of("RANDOM"));
+            }
+            case ITEM_RAIN -> {
+                keys(p, Set.of("count", "spawn_height", "radius", "interval_ticks", "delivery_mode"));
+                rangeInt(p, "count", 1, WishPlanBudget.MAX_ITEM_UNITS);
+                rangeInt(p, "spawn_height", 8, 64);
+                rangeInt(p, "radius", 1, 32);
+                rangeInt(p, "interval_ticks", 1, 20);
+                oneOf(p, "delivery_mode", Set.of("WORLD_ITEMS", "DELIVER_TO_PLAYER"));
             }
             case CREATE_STRUCTURE -> {
                 keys(p, Set.of("template"));

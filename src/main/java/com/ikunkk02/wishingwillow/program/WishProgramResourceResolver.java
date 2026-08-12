@@ -19,6 +19,9 @@ public interface WishProgramResourceResolver {
     /** Resolves a dimension id against the server's loaded level keys. */
     @Nullable String resolveDimension(String id);
 
+    /** Maximum legal stack size for the resolved resource; used for bounded item-entity budgets. */
+    default int maxStackSize(RegistryEntryType type, String id) { return 1; }
+
     /** Whether a built-in predefined event is registered. */
     boolean containsPredefinedEvent(String event);
 }

@@ -51,7 +51,7 @@ public final class WishStepExecution {
     }
     public void schedule(long time) { executeAtGameTime = time; }
     public void retry(String error) { retryCount++; lastError = safe(error); }
-    void recoverBlockBatch() {
+    void recoverActionBatch() {
         if (state == WishStepExecutionState.RUNNING) state = WishStepExecutionState.WAITING_DELAY;
     }
     void markStale() {
