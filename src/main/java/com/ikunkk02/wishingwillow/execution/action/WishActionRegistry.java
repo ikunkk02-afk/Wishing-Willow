@@ -183,15 +183,17 @@ public final class WishActionRegistry {
                 description("set a generic mob target using vanilla behavior controls", "the request requires a third-party mod's unique AI implementation", "让附近僵尸攻击我", "follow_player, avoid_player"));
         add(values, "follow_player", WishActionType.FOLLOW_PLAYER, StandardWishActionExecutors.followPlayer(), 5,
                 Set.of(WishCapability.PERSISTENT_FOLLOWER, WishCapability.MOB_BEHAVIOR),
-                schema(pd("max_entities", "integer", 8, 1d, 16d),
+                schema(pd("max_entities", "integer", 8, 1d, 32d),
                         pd("radius", "integer", 16, 2d, 64d),
-                        pd("duration_seconds", "integer", 600, 1d, 3600d)),
+                        pd("duration_seconds", "integer", 600, 1d, 2147483647d),
+                        pd("permanent", "boolean", false, null, null)),
                 description("make selected vanilla mobs follow the player", "a named mod-specific tracking AI must be preserved", "让狼一直跟着我", "set_entity_target, avoid_player"));
         add(values, "avoid_player", WishActionType.AVOID_PLAYER, StandardWishActionExecutors.avoidPlayer(), 5,
                 Set.of(WishCapability.MOB_BEHAVIOR),
-                schema(pd("max_entities", "integer", 8, 1d, 16d),
+                schema(pd("max_entities", "integer", 8, 1d, 32d),
                         pd("radius", "integer", 16, 2d, 64d),
-                        pd("duration_seconds", "integer", 600, 1d, 3600d)),
+                        pd("duration_seconds", "integer", 600, 1d, 2147483647d),
+                        pd("permanent", "boolean", false, null, null)),
                 description("make selected mobs keep away from the player", "the entity should attack or follow", "make creepers avoid me", "follow_player, set_entity_target"));
         add(values, "modify_reputation", WishActionType.CHANGE_REPUTATION, StandardWishActionExecutors.changeReputation(), 3,
                 Set.of(WishCapability.REPUTATION),
@@ -229,6 +231,16 @@ public final class WishActionRegistry {
                 schema(p("particle", "string", true), p("count", "integer", false, 1d, 512d),
                         p("radius", "number", false, 0d, 64d)),
                 description("spawn validated presentation particles", "particles would substitute for a required physical outcome", "spawn a ring of firework particles", "play_sound"));
+        add(values, "entity_attraction_aura", WishActionType.ENTITY_ATTRACTION_AURA, StandardWishActionExecutors.entityAttractionAura(), 3,
+                Set.of(WishCapability.WORLD_EVENT),
+                schema(p("radius", "number", false, 8d, 256d), p("strength", "number", false, 0.1d, 3d),
+                        p("permanent", "boolean", false), p("include_hostile", "boolean", false),
+                        p("include_passive", "boolean", false), p("include_villagers", "boolean", false),
+                        p("include_modded", "boolean", false)),
+                description("create a permanent or long-lasting attraction aura that pulls all nearby living entities toward the player",
+                        "each entity should be handled individually by a follow action",
+                        "make all nearby creatures gather around me forever", "follow_player, avoid_player"));
+
         addFlow(values, "repeat", 30, schema(p("count", "integer", true, 1d, 16d),
                         p("actions", "array", true)),
                 description("repeat a bounded action composition; count is clamped by policy", "an unbounded loop or one action already has a count parameter", "repeat a sound three times", "sequence, parallel"));

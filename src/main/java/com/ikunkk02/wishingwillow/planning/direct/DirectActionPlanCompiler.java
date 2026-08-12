@@ -410,7 +410,7 @@ public final class DirectActionPlanCompiler {
             if (type == null) return switch (action) {
                 case APPLY_EFFECT_CATEGORY, CLEAR_EFFECTS, MODIFY_ATTRIBUTE -> FeatureType.PLAYER_SYSTEM;
                 case CHANGE_WEATHER -> FeatureType.WEATHER;
-                case START_PREDEFINED_EVENT -> FeatureType.WORLD_SYSTEM;
+                case START_PREDEFINED_EVENT, ENTITY_ATTRACTION_AURA -> FeatureType.WORLD_SYSTEM;
                 default -> FeatureType.WORLD_SYSTEM;
             };
             return switch (type) {

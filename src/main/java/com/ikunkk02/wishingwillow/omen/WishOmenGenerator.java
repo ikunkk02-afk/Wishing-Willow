@@ -127,7 +127,7 @@ public final class WishOmenGenerator {
             case CHANGE_REPUTATION -> WishOmenCategory.REPUTATION;
             case FOLLOW_PLAYER, CHANGE_MOB_TARGET, SPAWN_ENTITY -> WishOmenCategory.HOSTILE;
             case SPAWN_PARTICLE -> WishOmenCategory.HALLUCINATION;
-            case EXPLOSION, CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, CREATE_STRUCTURE, START_PREDEFINED_EVENT -> WishOmenCategory.WORLD;
+            case EXPLOSION, CHANGE_BLOCK, REPLACE_BLOCK_AREA, PLACE_BLOCK_PATTERN, CREATE_STRUCTURE, START_PREDEFINED_EVENT, ENTITY_ATTRACTION_AURA -> WishOmenCategory.WORLD;
             default -> WishOmenCategory.GENERAL;
         };
     }

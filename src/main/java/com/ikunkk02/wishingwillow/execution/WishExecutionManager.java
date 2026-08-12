@@ -49,7 +49,7 @@ public final class WishExecutionManager {
     private static boolean registered;
     private WishExecutionManager(){}
 
-    public static void register(){if(registered)return;registered=true;WishPersistentSocialRules.register();MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onTick);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onStarted);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onStopped);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onDimension);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onDeath);MinecraftForge.EVENT_BUS.addListener(WishExecutionCommands::register);}
+    public static void register(){if(registered)return;registered=true;WishPersistentSocialRules.register();WishAttractionSavedData.register();MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onTick);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onStarted);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onStopped);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onDimension);MinecraftForge.EVENT_BUS.addListener(WishExecutionManager::onDeath);MinecraftForge.EVENT_BUS.addListener(WishExecutionCommands::register);}
 
     public static WishExecutionAcceptResult accept(ServerPlayer sender,WishPlan plan){
         if(sender==null)return WishExecutionAcceptResult.rejected(WishExecutionAcceptError.INVALID_OWNER,"missing player");

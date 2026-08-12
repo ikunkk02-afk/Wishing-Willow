@@ -60,7 +60,7 @@ class WishInterpreterRepairTest {
         assertEquals(InterpretationState.SUCCESS, result.state());
         assertEquals(1, provider.requests.size());
         assertEquals("follow_player", result.program().coreActions().get(0).action());
-        assertEquals(16, result.program().coreActions().get(0).parameters()
+        assertEquals(32, result.program().coreActions().get(0).parameters()
                 .get("max_entities").getAsInt());
     }
 

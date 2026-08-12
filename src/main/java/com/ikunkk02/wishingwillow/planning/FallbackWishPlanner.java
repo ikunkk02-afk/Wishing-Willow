@@ -203,7 +203,7 @@ public final class FallbackWishPlanner {
                 boolean harmful = candidate.providedCapability() == WishCapability.DAMAGE;
                 p.addProperty("delta", harmful ? -4 : 20); p.addProperty("allow_lethal", false);
             }
-            case START_PREDEFINED_EVENT -> p.addProperty("intensity", 1);
+            case START_PREDEFINED_EVENT, ENTITY_ATTRACTION_AURA -> p.addProperty("intensity", 1);
             default -> { return null; }
         }
         return p;

@@ -54,7 +54,8 @@ public final class ClientAiWishCoordinator {
     public static void updateState(WishStatePacket packet) {
         if (packet.state() == WishState.SNAPPED) {
             begin(packet.correlationId());
-        } else if (packet.state() == WishState.CANCELLED) {
+        } else if (packet.state() == WishState.CANCELLED
+                || packet.state() == WishState.FINISHED) {
             PENDING.remove(packet.correlationId());
             ClientWishProcessingHints.stop();
         }

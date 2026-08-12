@@ -93,7 +93,7 @@ public final class WishActionPolicy {
                     WishCapability.POWER_DEBUFF).contains(provided);
             case MODIFY_HUNGER, MODIFY_ATTRIBUTE -> Set.of(WishCapability.PLAYER_ATTRIBUTE,
                     WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF).contains(provided);
-            case CHANGE_MOB_TARGET, FOLLOW_PLAYER, AVOID_PLAYER -> Set.of(WishCapability.MOB_BEHAVIOR,
+            case CHANGE_MOB_TARGET, FOLLOW_PLAYER, AVOID_PLAYER, ENTITY_ATTRACTION_AURA -> Set.of(WishCapability.MOB_BEHAVIOR,
                     WishCapability.STALKING_ENTITY, WishCapability.PERSISTENT_FOLLOWER,
                     WishCapability.FRIENDLY_ENTITY, WishCapability.HOSTILE_ENTITY).contains(provided);
             case CHANGE_REPUTATION -> provided == WishCapability.REPUTATION;
@@ -241,6 +241,11 @@ public final class WishActionPolicy {
             case FOLLOW_PLAYER, AVOID_PLAYER -> { keys(p, Set.of("radius", "max_entities", "duration_seconds")); schemaRangeInt(action, p, "radius"); schemaRangeInt(action, p, "max_entities"); schemaRangeInt(action, p, "duration_seconds"); }
             case CHANGE_REPUTATION -> { keys(p, Set.of("delta", "radius")); rangeInt(p, "delta", -100, 100); rangeInt(p, "radius", 2, 64); }
             case START_PREDEFINED_EVENT -> { keys(p, Set.of("intensity")); rangeInt(p, "intensity", 1, 5); }
+            case ENTITY_ATTRACTION_AURA -> {
+                keys(p, Set.of("radius", "strength", "permanent", "include_hostile", "include_passive", "include_villagers", "include_modded"));
+                range(p, "radius", 8, 256);
+                range(p, "strength", 0.1, 3);
+            }
         }
         if ((action == WishActionType.CHANGE_TIME || action == WishActionType.CHANGE_WEATHER)
                 && target != WishTargetType.WORLD) {

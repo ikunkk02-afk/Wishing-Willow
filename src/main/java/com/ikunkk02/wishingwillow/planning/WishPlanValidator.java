@@ -272,7 +272,7 @@ public final class WishPlanValidator {
                     WishCapability.STALKING_ENTITY, WishCapability.PERSISTENT_FOLLOWER,
                     WishCapability.FRIENDLY_ENTITY, WishCapability.HOSTILE_ENTITY).contains(capability);
             case CHANGE_REPUTATION -> capability == WishCapability.REPUTATION;
-            case START_PREDEFINED_EVENT -> capability == WishCapability.WORLD_EVENT
+            case START_PREDEFINED_EVENT, ENTITY_ATTRACTION_AURA -> capability == WishCapability.WORLD_EVENT
                     || capability == WishCapability.MEMORY_RELATED_EVENT
                     || capability == WishCapability.POWER_BUFF;
         };

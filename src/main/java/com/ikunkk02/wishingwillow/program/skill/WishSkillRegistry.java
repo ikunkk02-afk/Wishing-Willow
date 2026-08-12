@@ -94,6 +94,30 @@ public final class WishSkillRegistry {
                 "give_item is core; sound/particle/lightning are presentation actions.",
                 List.of("\u7ed9\u621164\u9897\u94bb\u77f3\u7136\u540e\u5e86\u795d",
                         "reward me with emeralds and effects"), Duration.ofSeconds(30)));
+        values.add(new WishSkillDefinition("absurd_wish_realization",
+                "Realize abstract, emotional, exaggerated, or extreme wishes through narrative escalation, absurd literalization, and global rules instead of minimal single-entity satisfaction. For wishes containing words like \"never\", \"forever\", \"always\", \"everyone\", \"the whole world\", \"all living things\", \"never be alone\", \"everybody loves me\", \"become the luckiest\", etc.",
+                Set.of("forever", "never", "always", "everlasting", "eternal", "permanent",
+                        "\u6c38\u8fdc", "\u6c38\u4e45", "\u4e00\u76f4", "\u6c38\u4e0d\u505c\u6b62",
+                        "\u6c38\u8fdc\u4e0d", "\u4ece\u6b64\u4ee5\u540e", "\u60f3\u8981\u4e00\u4e2a\u670b\u53cb",
+                        "\u5b64\u5355", "\u4e0d\u5b64\u5355", "\u966a\u4f34",
+                        "everyone loves", "the whole world", "all creatures",
+                        "never be lonely", "never alone", "never lonely",
+                        "always with me", "stay with me forever",
+                        "absurd realization", "extreme consequence",
+                        "narrative escalation", "literal wish",
+                        "\u5168\u4e16\u754c", "\u6240\u6709\u751f\u7269", "\u6240\u6709\u4eba",
+                        "become the luckiest", "world peace", "everybody",
+                        "all animals", "all monsters", "attract everything",
+                        "\u5438\u5f15\u6240\u6709", "\u5168\u90e8\u9760\u8fd1"),
+                Set.of("entity_attraction_aura", "follow_player", "spawn_entity", "play_sound"),
+                "Use entity_attraction_aura with permanent=true for wishes about \"never being alone\" or \"all creatures coming to me\". Use follow_player with permanent=true for a single dedicated follower. Always prefer global rules over single-entity spawns for abstract wishes. Set permanent=true and use large radius. Include ALL entity types (hostile, passive, villagers, modded). The absurdity is that the wish IS fulfilled literally: the player truly is NEVER alone, but the consequence is overwhelming.",
+                List.of("I wish I would never be lonely",
+                        "\u6211\u5e0c\u671b\u6c38\u8fdc\u4e0d\u5b64\u5355",
+                        "\u8ba9\u6240\u6709\u751f\u7269\u90fd\u88ab\u6211\u5438\u5f15",
+                        "make the whole world come to me",
+                        "every living thing should follow me forever"),
+                Duration.ofSeconds(120)));
+        
         return new WishSkillRegistry(values);
     }
 

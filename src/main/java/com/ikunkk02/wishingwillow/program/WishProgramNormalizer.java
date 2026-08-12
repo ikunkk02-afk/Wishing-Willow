@@ -253,7 +253,7 @@ public final class WishProgramNormalizer {
                 state.change(action, key, ignored, null, WishNormalizationReason.UNKNOWN_FIELD_IGNORED);
                 continue;
             }
-            parameters.add(key, normalizeProperty(action, key, parameters.get(key), property, state));
+            parameters.add(key, normalizeProperty(action, key, parameters.get(key), property, state, parameters));
         }
         for (String key : properties.keySet()) {
             if (parameters.has(key)) continue;
@@ -278,7 +278,7 @@ public final class WishProgramNormalizer {
     }
 
     private static JsonElement normalizeProperty(String action, String key, JsonElement raw,
-                                                 JsonObject property, State state) {
+                                                 JsonObject property, State state, JsonObject parameters) {
         if (raw == null || raw.isJsonNull()) {
             throw failure("INVALID_WISH_PROGRAM:PARAMETER_TYPE_" + key, action, key, raw,
                     property.get("minimum"), property.get("maximum"), false, "null cannot be coerced safely");
@@ -286,8 +286,8 @@ public final class WishProgramNormalizer {
         String type = property.has("type") ? property.get("type").getAsString() : "";
         JsonElement value = raw.deepCopy();
         switch (type) {
-            case "integer" -> value = normalizeNumber(action, key, value, property, true, state);
-            case "number" -> value = normalizeNumber(action, key, value, property, false, state);
+            case "integer" -> value = normalizeNumber(action, key, value, property, true, state, parameters);
+            case "number" -> value = normalizeNumber(action, key, value, property, false, state, parameters);
             case "boolean" -> {
                 if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isBoolean()) break;
                 if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
@@ -334,7 +334,8 @@ public final class WishProgramNormalizer {
     }
 
     private static JsonElement normalizeNumber(String action, String key, JsonElement raw,
-                                               JsonObject property, boolean integer, State state) {
+                                               JsonObject property, boolean integer, State state,
+                                               JsonObject parameters) {
         BigDecimal number;
         boolean coerced = false;
         if (!raw.isJsonPrimitive()) {
@@ -373,7 +374,9 @@ public final class WishProgramNormalizer {
         }
         if (property.has("maximum")) {
             BigDecimal maximum = new BigDecimal(property.get("maximum").getAsString());
-            if (number.compareTo(maximum) > 0) {
+            // When permanent is true, skip duration clamping (e.g. "forever" wishes)
+            boolean skipMaxClamp = "duration_seconds".equals(key) && parameters != null && isPermanent(parameters);
+            if (!skipMaxClamp && number.compareTo(maximum) > 0) {
                 JsonElement normalized = integer
                         ? new JsonPrimitive(maximum.toBigIntegerExact()) : new JsonPrimitive(maximum.stripTrailingZeros());
                 state.change(action, key, value, normalized, WishNormalizationReason.MAX_CLAMP);
@@ -419,7 +422,7 @@ public final class WishProgramNormalizer {
         }
         JsonObject schema = new JsonObject();
         schema.addProperty("type", "integer");
-        JsonElement normalized = normalizeProperty("", key, root.get(key), schema, state);
+        JsonElement normalized = normalizeProperty("", key, root.get(key), schema, state, null);
         root.add(key, normalized);
         try {
             return normalized.getAsInt();
@@ -580,5 +583,9 @@ public final class WishProgramNormalizer {
             super(issue.validationError());
             this.issue = issue;
         }
+    }
+
+    private static boolean isPermanent(JsonObject parameters) {
+        return parameters.has("permanent") && parameters.get("permanent").getAsBoolean();
     }
 }

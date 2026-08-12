@@ -19,7 +19,7 @@ class WishProgramNormalizerTest {
                 """);
 
         assertEquals(WishProgramValidationStatus.REPAIRABLE, result.status());
-        assertEquals(16, first(result).parameters().get("max_entities").getAsInt());
+        assertEquals(32, first(result).parameters().get("max_entities").getAsInt());
         assertEquals(16, first(result).parameters().get("radius").getAsInt());
         assertEquals(600, first(result).parameters().get("duration_seconds").getAsInt());
         assertTrue(result.changes().stream().anyMatch(change ->

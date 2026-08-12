@@ -6,12 +6,16 @@ import com.ikunkk02.wishingwillow.execution.WishExecutionScheduler.StepKey;
 import com.ikunkk02.wishingwillow.execution.action.WishActionDefinition;
 import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
 import com.ikunkk02.wishingwillow.execution.action.WishExecutionContext;
+import com.ikunkk02.wishingwillow.network.ModNetworking;
+import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
 import com.ikunkk02.wishingwillow.planning.WishTargetType;
 import com.ikunkk02.wishingwillow.program.ProgramAction;
 import com.ikunkk02.wishingwillow.program.ValidatedWishProgram;
 import com.ikunkk02.wishingwillow.program.WishProgramValidator;
 import com.ikunkk02.wishingwillow.wish.WishRecord;
+import com.ikunkk02.wishingwillow.wish.WishRejectionReason;
 import com.ikunkk02.wishingwillow.wish.WishSavedData;
+import com.ikunkk02.wishingwillow.wish.WishState;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -38,12 +42,25 @@ import java.util.Set;
  * fails the whole program after 90s (60s for skill programs).</p>
  */
 public final class WishProgramExecutor {
-    private static final int CINEMATIC_START_DELAY_TICKS = 110;
+    /** Minimal delay between logic actions so entity state settles. */
+    private static final int LOGIC_STEP_DELAY_TICKS = 2;
+    /** Cinematic delay reserved for presentation (play_sound, particle, camera, etc). */
+    private static final int PRESENTATION_START_DELAY_TICKS = 110;
     private static final long PROGRAM_TIMEOUT_TICKS = 1800L;   // 90s
     private static final long SKILL_TIMEOUT_TICKS = 1200L;     // 60s
     private static final Set<String> BOUNDED_WORLD_ACTIONS = Set.of(
             "place_block", "replace_blocks", "place_pattern", "spawn_falling_block",
             "spawn_item_rain", "create_structure");
+    /** Actions that should run immediately (logic), not wait for cinematic pacing. */
+    private static final Set<String> LOGIC_ACTIONS = Set.of(
+            "spawn_entity", "follow_player", "avoid_player", "set_entity_target",
+            "give_item", "apply_effect", "teleport_player", "modify_attribute",
+            "change_ai", "set_world_time", "set_weather", "entity_attraction_aura");
+    /** Actions that benefit from cinematic pacing (presentation). */
+    private static final Set<String> PRESENTATION_ACTIONS = Set.of(
+            "play_sound", "spawn_particle", "camera_effect", "screen_effect",
+            "title", "animation", "lightning_visual", "spawn_falling_block",
+            "spawn_item_rain");
     private static final WishActionRegistry ACTIONS = WishActionRegistry.defaults();
 
     private WishProgramExecutor() { }
@@ -65,6 +82,7 @@ public final class WishProgramExecutor {
             WishStepExecution step = record.step(index);
             if (step == null || step.state() != WishStepExecutionState.PENDING) continue;
             StepKey key = new StepKey(record.executionId(), index);
+            int delayTicks = stepDelayTicks(leaf);
             if (leaf.delayTicks() > 0) {
                 long at = now + leaf.delayTicks();
                 step.schedule(at);
@@ -72,11 +90,19 @@ public final class WishProgramExecutor {
                 WishExecutionManager.scheduler().delay(key, at);
             } else {
                 step.transition(WishStepExecutionState.READY, now);
-                step.schedule(now + CINEMATIC_START_DELAY_TICKS);
-                WishExecutionManager.scheduler().delay(key, now + CINEMATIC_START_DELAY_TICKS);
+                step.schedule(now + delayTicks);
+                WishExecutionManager.scheduler().delay(key, now + delayTicks);
             }
         }
         WishExecutionManager.changed(server, record);
+    }
+
+    /** Returns the appropriate step delay for the given action type. */
+    private static int stepDelayTicks(ProgramAction leaf) {
+        if (LOGIC_ACTIONS.contains(leaf.actionId())) return LOGIC_STEP_DELAY_TICKS;
+        if (PRESENTATION_ACTIONS.contains(leaf.actionId())) return PRESENTATION_START_DELAY_TICKS;
+        // Unknown actions: use minimal delay for safety but keep tight
+        return LOGIC_STEP_DELAY_TICKS;
     }
 
     /** Recomputes validated leaves from the stored program (deterministic; re-resolves registries). */
@@ -268,6 +294,7 @@ public final class WishProgramExecutor {
                     if (step == null || step.state() != WishStepExecutionState.PENDING) continue;
                     StepKey key = new StepKey(record.executionId(), index);
                     ProgramAction leaf = leaves.get(index);
+                    int delayTicks = stepDelayTicks(leaf);
                     if (leaf.delayTicks() > 0) {
                         long at = now + leaf.delayTicks();
                         step.schedule(at);
@@ -275,8 +302,8 @@ public final class WishProgramExecutor {
                         WishExecutionManager.scheduler().delay(key, at);
                     } else {
                         step.transition(WishStepExecutionState.READY, now);
-                        step.schedule(now + CINEMATIC_START_DELAY_TICKS);
-                        WishExecutionManager.scheduler().delay(key, now + CINEMATIC_START_DELAY_TICKS);
+                        step.schedule(now + delayTicks);
+                        WishExecutionManager.scheduler().delay(key, now + delayTicks);
                     }
                 }
                 record.transition(WishExecutionState.SCHEDULED, now);
@@ -301,11 +328,26 @@ public final class WishProgramExecutor {
                 WishingWillow.LOGGER.info("Wish program completed session={} status={}",
                         record.wishSessionId(), record.state());
             }
+            // Send completion notification to the client so processing hints stop.
+            notifyCompletion(server, record);
             WishExecutionManager.changed(server, record);
             return;
         }
         record.transition(WishExecutionState.SCHEDULED, now);
         WishExecutionManager.changed(server, record);
+    }
+
+    private static void notifyCompletion(MinecraftServer server, WishExecutionRecord record) {
+        ServerPlayer player = server.getPlayerList().getPlayer(record.ownerId());
+        if (player == null) return;
+        WishRecord wish = WishSavedData.get(server).getBySession(record.wishSessionId());
+        if (wish == null) return;
+        ModNetworking.sendToPlayer(player,
+                new WishStatePacket(wish.sessionId(), WishState.FINISHED,
+                        record.state() == WishExecutionState.COMPLETED
+                                ? WishRejectionReason.NONE : WishRejectionReason.INTERRUPTED));
+        WishingWillow.LOGGER.info("Wish completion notified session={} state={}",
+                record.wishSessionId(), record.state());
     }
 
     /** Server-start recovery for stored program executions. */

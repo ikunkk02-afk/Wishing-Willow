@@ -31,8 +31,8 @@ class WishActionRegistryTest {
     @Test
     void behaviorPolicyConsumesTheSameSchemaLimits() {
         var registry = WishActionRegistry.defaults();
-        assertBehaviorLimit(registry, "follow_player", WishActionType.FOLLOW_PLAYER, 16);
-        assertBehaviorLimit(registry, "avoid_player", WishActionType.AVOID_PLAYER, 16);
+        assertBehaviorLimit(registry, "follow_player", WishActionType.FOLLOW_PLAYER, 32);
+        assertBehaviorLimit(registry, "avoid_player", WishActionType.AVOID_PLAYER, 32);
         assertBehaviorLimit(registry, "set_entity_target", WishActionType.CHANGE_MOB_TARGET, 32);
     }
 
