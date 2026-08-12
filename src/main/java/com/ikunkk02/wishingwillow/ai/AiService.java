@@ -13,6 +13,10 @@ import com.google.gson.JsonObject;
 
 public final class AiService {
     private static final AiService INSTANCE = new AiService(true);
+    private static final int AI_WORKER_THREADS = 4;
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration PROVIDER_REQUEST_TIMEOUT = Duration.ofSeconds(25);
+    private static final long PROVIDER_RETRY_DELAY_MS = 1000L;
 
     private final ScheduledExecutorService executor;
     private final HttpClient httpClient;
@@ -31,9 +35,9 @@ public final class AiService {
             thread.setDaemon(true);
             return thread;
         };
-        executor = Executors.newScheduledThreadPool(2, threadFactory);
+        executor = Executors.newScheduledThreadPool(AI_WORKER_THREADS, threadFactory);
         httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(CONNECT_TIMEOUT)
                 .executor(executor)
                 .version(HttpClient.Version.HTTP_1_1)
                 .build();
@@ -44,7 +48,13 @@ public final class AiService {
     }
 
     public AiProvider provider(AiConfig config) {
-        return new OpenAiCompatibleProvider(config, httpClient, executor);
+        return new OpenAiCompatibleProvider(
+                config,
+                httpClient,
+                executor,
+                PROVIDER_REQUEST_TIMEOUT,
+                PROVIDER_RETRY_DELAY_MS
+        );
     }
 
     public CompletableFuture<AiConnectionResult> testConnection(AiConfig config) {
