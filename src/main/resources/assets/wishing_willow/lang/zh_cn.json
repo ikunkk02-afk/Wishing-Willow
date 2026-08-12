@@ -189,112 +189,127 @@
   "screen.wishing_willow.knowledge.field.capabilities": "可用能力",
   "screen.wishing_willow.knowledge.field.summary": "功能摘要",
   "screen.wishing_willow.knowledge.field.verified_resources": "已验证资源",
-  "screen.wishing_willow.knowledge.field.registry": "Registry 统计"
-  ,"screen.wishing_willow.knowledge.field.identity": "Mod 身份"
-  ,"screen.wishing_willow.knowledge.field.identity_confidence": "身份置信度"
-  ,"screen.wishing_willow.knowledge.field.selected_url": "选中页面"
-  ,"screen.wishing_willow.knowledge.field.source_status": "研究来源状态"
-  ,"screen.wishing_willow.knowledge.field.identity_debug": "身份匹配调试因素"
-  ,"screen.wishing_willow.ai.test.result.plan": "测试规划"
-  ,"screen.wishing_willow.plan_preview.title": "愿望计划预览"
-  ,"screen.wishing_willow.knowledge.manual_url": "手动指定页面"
-  ,"screen.wishing_willow.knowledge.manual_url.title": "手动指定研究页面"
-  ,"screen.wishing_willow.knowledge.manual_url.help": "粘贴 CurseForge、GitHub、Modrinth、Wiki 或官网 HTTPS 页面。"
-  ,"screen.wishing_willow.knowledge.manual_url.submit": "开始研究"
-  ,"screen.wishing_willow.knowledge.manual_url.invalid": "请输入有效 HTTPS 页面；程序仍会执行完整安全检查。"
-  ,"screen.wishing_willow.settings.execution": "愿望执行设置"
-  ,"screen.wishing_willow.execution.title": "愿望执行设置"
-  ,"screen.wishing_willow.execution.enabled": "启用愿望执行"
-  ,"screen.wishing_willow.execution.third_party": "允许第三方模组实体"
-  ,"screen.wishing_willow.execution.blocks": "允许方块修改"
-  ,"screen.wishing_willow.execution.explosions": "允许爆炸"
-  ,"screen.wishing_willow.execution.destructive": "允许破坏型爆炸"
-  ,"screen.wishing_willow.execution.cross_dimension": "允许跨维度传送"
-  ,"screen.wishing_willow.execution.safe_mode": "调试安全模式"
-  ,"screen.wishing_willow.execution.max_severity": "最大破坏等级"
-  ,"screen.wishing_willow.execution.save": "保存服务器设置"
-  ,"screen.wishing_willow.execution.read_only": "只有服务器管理员可以修改这些设置。"
-  ,"omen.wishing_willow.capability.stalking.1": "你总觉得身后多了一道脚步声。"
-  ,"omen.wishing_willow.capability.stalking.2": "附近好像有什么东西停下来了。"
-  ,"omen.wishing_willow.capability.stalking.3": "你忽然有种被注视的感觉。"
-  ,"omen.wishing_willow.capability.stalking.4": "肩膀后面的空气，好像被什么占据了。"
-  ,"omen.wishing_willow.capability.hostile.1": "远处似乎有什么东西醒了。"
-  ,"omen.wishing_willow.capability.hostile.2": "有那么一瞬间，周围安静得不太自然。"
-  ,"omen.wishing_willow.capability.hostile.3": "很远的地方传来了一声低响。"
-  ,"omen.wishing_willow.capability.hostile.4": "黑暗突然显得不再空旷。"
-  ,"omen.wishing_willow.capability.gift.1": "你得到的，似乎并不完全属于你。"
-  ,"omen.wishing_willow.capability.gift.2": "这份礼物好像比想象中沉了一点。"
-  ,"omen.wishing_willow.capability.gift.3": "手里的重量，有一种借来的感觉。"
-  ,"omen.wishing_willow.capability.gift.4": "它来得太过顺利了。"
-  ,"omen.wishing_willow.capability.loss.1": "你好像忘记了什么东西。"
-  ,"omen.wishing_willow.capability.loss.2": "你的口袋似乎轻了一点。"
-  ,"omen.wishing_willow.capability.loss.3": "某件熟悉的事，忽然变得难以想起。"
-  ,"omen.wishing_willow.capability.loss.4": "你察觉到一处无法说清的空缺。"
-  ,"omen.wishing_willow.capability.darkness.1": "天色似乎比刚才暗了一些。"
-  ,"omen.wishing_willow.capability.darkness.2": "太阳看起来有些遥远。"
-  ,"omen.wishing_willow.capability.darkness.3": "一道没有来处的长影掠了过去。"
-  ,"omen.wishing_willow.capability.darkness.4": "现在好像比本该有的时间更晚。"
-  ,"omen.wishing_willow.capability.weather.1": "空气中突然有了一点潮湿的味道。"
-  ,"omen.wishing_willow.capability.weather.2": "远处传来了很轻的雷声。"
-  ,"omen.wishing_willow.capability.weather.3": "空气擦过皮肤时带着微微刺痛。"
-  ,"omen.wishing_willow.capability.weather.4": "原本静止的地方起了一阵风。"
-  ,"omen.wishing_willow.capability.teleport.1": "这里忽然显得有些陌生。"
-  ,"omen.wishing_willow.capability.teleport.2": "你有一瞬间分不清自己在哪里。"
-  ,"omen.wishing_willow.capability.teleport.3": "脚下的地面像是稍稍错了位置。"
-  ,"omen.wishing_willow.capability.teleport.4": "远处的地平线和记忆里不太一样。"
-  ,"omen.wishing_willow.capability.damage.1": "你忽然打了个寒颤。"
-  ,"omen.wishing_willow.capability.damage.2": "身体里好像少了点什么。"
-  ,"omen.wishing_willow.capability.damage.3": "你的呼吸无缘无故地停顿了一下。"
-  ,"omen.wishing_willow.capability.damage.4": "有一个心跳那么久，你觉得身体是空的。"
-  ,"omen.wishing_willow.capability.power.1": "你感觉自己发生了一点变化。"
-  ,"omen.wishing_willow.capability.power.2": "这一切似乎比想象中更容易。"
-  ,"omen.wishing_willow.capability.power.3": "自己的力量忽然显得有些陌生。"
-  ,"omen.wishing_willow.capability.power.4": "这种变化适合得有些过分。"
-  ,"omen.wishing_willow.capability.reputation.1": "附近的人看你的眼神似乎变了。"
-  ,"omen.wishing_willow.capability.reputation.2": "一道熟悉的目光停留得太久了。"
-  ,"omen.wishing_willow.capability.reputation.3": "有人在你看过去时移开了视线。"
-  ,"omen.wishing_willow.capability.reputation.4": "你的名字从别人嘴里说出来时不太一样。"
-  ,"omen.wishing_willow.capability.hallucination.1": "刚才……有什么东西闪过去了吗？"
-  ,"omen.wishing_willow.capability.hallucination.2": "世界仿佛跳过了短短一瞬。"
-  ,"omen.wishing_willow.capability.hallucination.3": "一个影子在你看清之前消失了。"
-  ,"omen.wishing_willow.capability.hallucination.4": "你眨了眨眼，那道残影却还在。"
-  ,"omen.wishing_willow.capability.world.1": "世界似乎听见了。"
-  ,"omen.wishing_willow.capability.world.2": "脚下很深的地方，有什么落定了。"
-  ,"omen.wishing_willow.capability.world.3": "世界发生了一次几乎无法察觉的颤动。"
-  ,"omen.wishing_willow.capability.world.4": "有一瞬间，一切都像被重新摆放过。"
-  ,"omen.wishing_willow.capability.general.1": "有什么改变了，只是你说不出是什么。"
-  ,"omen.wishing_willow.capability.general.2": "之后的寂静持续得有些太久。"
-  ,"omen.wishing_willow.capability.general.3": "你隐约觉得，有什么东西注意到了。"
-  ,"omen.wishing_willow.capability.general.4": "什么都没有变化。这并不能让人安心。"
-  ,"omen.wishing_willow.capability.general.5": "这一刻过去了，却没有完全过去。"
-  ,"omen.wishing_willow.delivery.hidden.1": "什么都没有发生。至少现在没有。"
-  ,"omen.wishing_willow.delivery.hidden.2": "世界没有给出任何看得见的回答。"
-  ,"omen.wishing_willow.delivery.hidden.3": "眼下，一切仍原封不动。"
-  ,"omen.wishing_willow.delivery.hidden.4": "无论是什么听见了，都没有给出迹象。"
-  ,"omen.wishing_willow.delivery.delayed.1": "愿望似乎还在等待什么。"
-  ,"omen.wishing_willow.delivery.delayed.2": "回答还没有到来。"
-  ,"omen.wishing_willow.delivery.delayed.3": "某件事被留到了以后。"
-  ,"omen.wishing_willow.delivery.delayed.4": "你觉得这一刻只是被推迟了。"
-  ,"omen.wishing_willow.delivery.progressive.1": "这好像才刚刚开始。"
-  ,"omen.wishing_willow.delivery.progressive.2": "有什么东西开始缓慢地运转了。"
-  ,"omen.wishing_willow.delivery.progressive.3": "这种变化还没有结束。"
-  ,"omen.wishing_willow.delivery.progressive.4": "某个地方迈出了第一步。"
-  ,"omen.wishing_willow.delivery.conditional.1": "某件事似乎还没有发生。"
-  ,"omen.wishing_willow.delivery.conditional.2": "愿望好像在等待合适的时刻。"
-  ,"omen.wishing_willow.delivery.conditional.3": "一道尚未打开的门后面，藏着回答。"
-  ,"omen.wishing_willow.delivery.conditional.4": "眼下，还有一个小小的条件没有满足。"
-  ,"screen.wishing_willow.knowledge.search": "搜索模组……"
-  ,"screen.wishing_willow.knowledge.filter.category": "全部分类"
-  ,"screen.wishing_willow.knowledge.filter.status.all": "全部状态"
-  ,"screen.wishing_willow.knowledge.filter.status.ready": "已就绪"
-  ,"screen.wishing_willow.knowledge.filter.status.active": "研究中"
-  ,"screen.wishing_willow.knowledge.filter.status.attention": "需要处理"
-  ,"screen.wishing_willow.knowledge.filter.status.ignored": "已忽略"
-  ,"screen.wishing_willow.knowledge.empty": "没有符合筛选条件的模组。"
-  ,"screen.wishing_willow.research.progress": "已研究 %s / %s"
-  ,"screen.wishing_willow.execution.warning.blocks": "允许愿望替换或破坏世界中的方块。"
-  ,"screen.wishing_willow.execution.warning.explosions": "允许愿望制造爆炸。"
-  ,"screen.wishing_willow.execution.warning.destructive": "允许爆炸破坏方块与地形。"
-  ,"screen.wishing_willow.execution.warning.cross_dimension": "允许愿望把玩家移动到其他维度。"
-  ,"screen.wishing_willow.execution.warning.severity": "设置允许执行的最高破坏等级。"
+  "screen.wishing_willow.knowledge.field.registry": "Registry 统计",
+  "screen.wishing_willow.knowledge.field.identity": "Mod 身份",
+  "screen.wishing_willow.knowledge.field.identity_confidence": "身份置信度",
+  "screen.wishing_willow.knowledge.field.selected_url": "选中页面",
+  "screen.wishing_willow.knowledge.field.source_status": "研究来源状态",
+  "screen.wishing_willow.knowledge.field.identity_debug": "身份匹配调试因素",
+  "screen.wishing_willow.ai.test.result.plan": "测试规划",
+  "screen.wishing_willow.plan_preview.title": "愿望计划预览",
+  "screen.wishing_willow.knowledge.manual_url": "手动指定页面",
+  "screen.wishing_willow.knowledge.manual_url.title": "手动指定研究页面",
+  "screen.wishing_willow.knowledge.manual_url.help": "粘贴 CurseForge、GitHub、Modrinth、Wiki 或官网 HTTPS 页面。",
+  "screen.wishing_willow.knowledge.manual_url.submit": "开始研究",
+  "screen.wishing_willow.knowledge.manual_url.invalid": "请输入有效 HTTPS 页面；程序仍会执行完整安全检查。",
+  "screen.wishing_willow.settings.execution": "愿望执行设置",
+  "screen.wishing_willow.execution.title": "愿望执行设置",
+  "screen.wishing_willow.execution.enabled": "启用愿望执行",
+  "screen.wishing_willow.execution.third_party": "允许第三方模组实体",
+  "screen.wishing_willow.execution.blocks": "允许方块修改",
+  "screen.wishing_willow.execution.explosions": "允许爆炸",
+  "screen.wishing_willow.execution.destructive": "允许破坏型爆炸",
+  "screen.wishing_willow.execution.cross_dimension": "允许跨维度传送",
+  "screen.wishing_willow.execution.safe_mode": "调试安全模式",
+  "screen.wishing_willow.execution.max_severity": "最大破坏等级",
+  "screen.wishing_willow.execution.save": "保存服务器设置",
+  "screen.wishing_willow.execution.read_only": "只有服务器管理员可以修改这些设置。",
+  "omen.wishing_willow.capability.stalking.1": "你总觉得身后多了一道脚步声。",
+  "omen.wishing_willow.capability.stalking.2": "附近好像有什么东西停下来了。",
+  "omen.wishing_willow.capability.stalking.3": "你忽然有种被注视的感觉。",
+  "omen.wishing_willow.capability.stalking.4": "肩膀后面的空气，好像被什么占据了。",
+  "omen.wishing_willow.capability.hostile.1": "远处似乎有什么东西醒了。",
+  "omen.wishing_willow.capability.hostile.2": "有那么一瞬间，周围安静得不太自然。",
+  "omen.wishing_willow.capability.hostile.3": "很远的地方传来了一声低响。",
+  "omen.wishing_willow.capability.hostile.4": "黑暗突然显得不再空旷。",
+  "omen.wishing_willow.capability.gift.1": "你得到的，似乎并不完全属于你。",
+  "omen.wishing_willow.capability.gift.2": "这份礼物好像比想象中沉了一点。",
+  "omen.wishing_willow.capability.gift.3": "手里的重量，有一种借来的感觉。",
+  "omen.wishing_willow.capability.gift.4": "它来得太过顺利了。",
+  "omen.wishing_willow.capability.loss.1": "你好像忘记了什么东西。",
+  "omen.wishing_willow.capability.loss.2": "你的口袋似乎轻了一点。",
+  "omen.wishing_willow.capability.loss.3": "某件熟悉的事，忽然变得难以想起。",
+  "omen.wishing_willow.capability.loss.4": "你察觉到一处无法说清的空缺。",
+  "omen.wishing_willow.capability.darkness.1": "天色似乎比刚才暗了一些。",
+  "omen.wishing_willow.capability.darkness.2": "太阳看起来有些遥远。",
+  "omen.wishing_willow.capability.darkness.3": "一道没有来处的长影掠了过去。",
+  "omen.wishing_willow.capability.darkness.4": "现在好像比本该有的时间更晚。",
+  "omen.wishing_willow.capability.weather.1": "空气中突然有了一点潮湿的味道。",
+  "omen.wishing_willow.capability.weather.2": "远处传来了很轻的雷声。",
+  "omen.wishing_willow.capability.weather.3": "空气擦过皮肤时带着微微刺痛。",
+  "omen.wishing_willow.capability.weather.4": "原本静止的地方起了一阵风。",
+  "omen.wishing_willow.capability.teleport.1": "这里忽然显得有些陌生。",
+  "omen.wishing_willow.capability.teleport.2": "你有一瞬间分不清自己在哪里。",
+  "omen.wishing_willow.capability.teleport.3": "脚下的地面像是稍稍错了位置。",
+  "omen.wishing_willow.capability.teleport.4": "远处的地平线和记忆里不太一样。",
+  "omen.wishing_willow.capability.damage.1": "你忽然打了个寒颤。",
+  "omen.wishing_willow.capability.damage.2": "身体里好像少了点什么。",
+  "omen.wishing_willow.capability.damage.3": "你的呼吸无缘无故地停顿了一下。",
+  "omen.wishing_willow.capability.damage.4": "有一个心跳那么久，你觉得身体是空的。",
+  "omen.wishing_willow.capability.power.1": "你感觉自己发生了一点变化。",
+  "omen.wishing_willow.capability.power.2": "这一切似乎比想象中更容易。",
+  "omen.wishing_willow.capability.power.3": "自己的力量忽然显得有些陌生。",
+  "omen.wishing_willow.capability.power.4": "这种变化适合得有些过分。",
+  "omen.wishing_willow.capability.reputation.1": "附近的人看你的眼神似乎变了。",
+  "omen.wishing_willow.capability.reputation.2": "一道熟悉的目光停留得太久了。",
+  "omen.wishing_willow.capability.reputation.3": "有人在你看过去时移开了视线。",
+  "omen.wishing_willow.capability.reputation.4": "你的名字从别人嘴里说出来时不太一样。",
+  "omen.wishing_willow.capability.hallucination.1": "刚才……有什么东西闪过去了吗？",
+  "omen.wishing_willow.capability.hallucination.2": "世界仿佛跳过了短短一瞬。",
+  "omen.wishing_willow.capability.hallucination.3": "一个影子在你看清之前消失了。",
+  "omen.wishing_willow.capability.hallucination.4": "你眨了眨眼，那道残影却还在。",
+  "omen.wishing_willow.capability.world.1": "世界似乎听见了。",
+  "omen.wishing_willow.capability.world.2": "脚下很深的地方，有什么落定了。",
+  "omen.wishing_willow.capability.world.3": "世界发生了一次几乎无法察觉的颤动。",
+  "omen.wishing_willow.capability.world.4": "有一瞬间，一切都像被重新摆放过。",
+  "omen.wishing_willow.capability.general.1": "有什么改变了，只是你说不出是什么。",
+  "omen.wishing_willow.capability.general.2": "之后的寂静持续得有些太久。",
+  "omen.wishing_willow.capability.general.3": "你隐约觉得，有什么东西注意到了。",
+  "omen.wishing_willow.capability.general.4": "什么都没有变化。这并不能让人安心。",
+  "omen.wishing_willow.capability.general.5": "这一刻过去了，却没有完全过去。",
+  "omen.wishing_willow.delivery.hidden.1": "什么都没有发生。至少现在没有。",
+  "omen.wishing_willow.delivery.hidden.2": "世界没有给出任何看得见的回答。",
+  "omen.wishing_willow.delivery.hidden.3": "眼下，一切仍原封不动。",
+  "omen.wishing_willow.delivery.hidden.4": "无论是什么听见了，都没有给出迹象。",
+  "omen.wishing_willow.delivery.delayed.1": "愿望似乎还在等待什么。",
+  "omen.wishing_willow.delivery.delayed.2": "回答还没有到来。",
+  "omen.wishing_willow.delivery.delayed.3": "某件事被留到了以后。",
+  "omen.wishing_willow.delivery.delayed.4": "你觉得这一刻只是被推迟了。",
+  "omen.wishing_willow.delivery.progressive.1": "这好像才刚刚开始。",
+  "omen.wishing_willow.delivery.progressive.2": "有什么东西开始缓慢地运转了。",
+  "omen.wishing_willow.delivery.progressive.3": "这种变化还没有结束。",
+  "omen.wishing_willow.delivery.progressive.4": "某个地方迈出了第一步。",
+  "omen.wishing_willow.delivery.conditional.1": "某件事似乎还没有发生。",
+  "omen.wishing_willow.delivery.conditional.2": "愿望好像在等待合适的时刻。",
+  "omen.wishing_willow.delivery.conditional.3": "一道尚未打开的门后面，藏着回答。",
+  "omen.wishing_willow.delivery.conditional.4": "眼下，还有一个小小的条件没有满足。",
+  "screen.wishing_willow.knowledge.search": "搜索模组……",
+  "screen.wishing_willow.knowledge.filter.category": "全部分类",
+  "screen.wishing_willow.knowledge.filter.status.all": "全部状态",
+  "screen.wishing_willow.knowledge.filter.status.ready": "已就绪",
+  "screen.wishing_willow.knowledge.filter.status.active": "研究中",
+  "screen.wishing_willow.knowledge.filter.status.attention": "需要处理",
+  "screen.wishing_willow.knowledge.filter.status.ignored": "已忽略",
+  "screen.wishing_willow.knowledge.empty": "没有符合筛选条件的模组。",
+  "screen.wishing_willow.research.progress": "已研究 %s / %s",
+  "screen.wishing_willow.execution.warning.blocks": "允许愿望替换或破坏世界中的方块。",
+  "screen.wishing_willow.execution.warning.explosions": "允许愿望制造爆炸。",
+  "screen.wishing_willow.execution.warning.destructive": "允许爆炸破坏方块与地形。",
+  "screen.wishing_willow.execution.warning.cross_dimension": "允许愿望把玩家移动到其他维度。",
+  "screen.wishing_willow.execution.warning.severity": "设置允许执行的最高破坏等级。",
+  "message.wishing_willow.wish_already_processing": "✦ 上一个愿望仍在实现中，请稍候。",
+  "message.wishing_willow.wish_interpreting_1": "✦ 许愿柳正在聆听你的愿望……",
+  "message.wishing_willow.wish_interpreting_2": "✦ 你的话语正在被理解，请稍候……",
+  "message.wishing_willow.wish_interpreting_3": "✦ 许愿柳在思考你的愿望……",
+  "message.wishing_willow.wish_planning_1": "✦ 愿望正在被编织，请稍候……",
+  "message.wishing_willow.wish_planning_2": "✦ 命运正在发生改变……",
+  "message.wishing_willow.wish_planning_3": "✦ 愿望正在实现中，请不要离开这里……",
+  "message.wishing_willow.wish_researching_1": "✦ 许愿柳正在寻找实现愿望的方法……",
+  "message.wishing_willow.wish_researching_2": "✦ 愿望的实现方式正在被探明……",
+  "message.wishing_willow.wish_preparing": "✦ 愿望即将实现……",
+  "message.wishing_willow.wish_executing": "✦ 你的愿望即将实现。",
+  "message.wishing_willow.wish_failed": "✦ 许愿柳无法实现这个愿望。",
+  "message.wishing_willow.wish_please_wait": "✦ 这个愿望需要一些时间，请稍候……",
+  "message.wishing_willow.wish_long_wait": "✦ 许愿柳仍在实现你的愿望，请不要离开这里。",
+  "message.wishing_willow.wish_distance_warning": "⚠ 不要离开许愿柳太远，愿望仍在实现中。"
 }

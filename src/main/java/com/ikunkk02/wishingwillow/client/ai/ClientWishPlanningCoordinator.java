@@ -6,6 +6,8 @@ import com.ikunkk02.wishingwillow.agent.ai.WishingWillowChatModelAdapter;
 import com.ikunkk02.wishingwillow.agent.core.*;
 import com.ikunkk02.wishingwillow.agent.tool.WishAgentToolRuntime;
 import com.ikunkk02.wishingwillow.client.agent.ForgeMinecraftToolPlatform;
+import com.ikunkk02.wishingwillow.client.hints.ClientWishProcessingHints;
+import com.ikunkk02.wishingwillow.client.hints.WishProcessingPhase;
 import com.ikunkk02.wishingwillow.contract.WishContractReviewer;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.SubmitWishProgramPacket;
@@ -122,6 +124,7 @@ public final class ClientWishPlanningCoordinator {
         } else {
             planning = complexPlanning(packet, token, knowledge, registry, frozenPlatform, provider,
                     config, service, route.reason());
+            ClientWishProcessingHints.setPhase(WishProcessingPhase.RESEARCHING);
         }
         planning = planning.exceptionally(error -> token.cancelled()
                 ? failedOutcome(packet, WishProgramError.UNKNOWN)
@@ -288,8 +291,10 @@ public final class ClientWishPlanningCoordinator {
                         packet.sessionId(), packet.attemptId(), error, totalElapsed);
                 ModNetworking.sendToServer(SubmitWishProgramPacket.failure(packet.sessionId(),
                         packet.attemptId(), packet.program().schemaVersion(), error));
+                ClientWishProcessingHints.setPhase(WishProcessingPhase.FAILED);
                 return;
             }
+            ClientWishProcessingHints.setPhase(WishProcessingPhase.PREPARING);
             ModNetworking.sendToServer(SubmitWishProgramPacket.success(packet.sessionId(),
                     packet.attemptId(), packet.program().schemaVersion(),
                     WishProgramJson.toJson(outcome.program())));

@@ -37,6 +37,7 @@ import com.ikunkk02.wishingwillow.program.WishProgramJson;
 import com.ikunkk02.wishingwillow.program.WishProgramValidator;
 import com.ikunkk02.wishingwillow.program.ValidatedWishProgram;
 import com.ikunkk02.wishingwillow.registry.ModItems;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -164,11 +165,13 @@ public final class WishManager {
 
         session.transitionTo(WishState.ANIMATING, gameTime);
         persist(player.server, session);
+        BlockPos willowPos = player.blockPosition();
         ModNetworking.sendToPlayer(
                 player,
                 new WishStartedPacket(
                         session.sessionId(), hand, itemInstanceId, stack.copy(),
-                        session.rawWish(), session.providerType(), session.model()
+                        session.rawWish(), session.providerType(), session.model(),
+                        willowPos
                 )
         );
         ((WishingWillowItem) stack.getItem()).triggerWishAnimation(player, itemInstanceId);

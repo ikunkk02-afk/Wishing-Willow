@@ -6,6 +6,7 @@ import com.ikunkk02.wishingwillow.client.animation.ClientWishSequence;
 import com.ikunkk02.wishingwillow.ai.AiConfigManager;
 import com.ikunkk02.wishingwillow.client.gui.AiNotConfiguredScreen;
 import com.ikunkk02.wishingwillow.client.gui.WishScreen;
+import com.ikunkk02.wishingwillow.client.hints.ClientWishProcessingHints;
 import com.ikunkk02.wishingwillow.network.packet.OpenWishScreenPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
@@ -38,6 +39,7 @@ public final class ClientPacketHandlers {
         minecraft.setScreen(null);
         ClientAiWishCoordinator.register(packet);
         ClientWishSequence.start(packet);
+        ClientWishProcessingHints.start(packet.sessionId(), packet.willowPos());
     }
 
     public static void updateWishState(WishStatePacket packet) {
@@ -47,6 +49,8 @@ public final class ClientPacketHandlers {
 
     public static void startPlanning(WishPlanningRequestPacket packet) {
         ClientWishPlanningCoordinator.start(packet);
+        ClientWishProcessingHints.setPhase(
+                com.ikunkk02.wishingwillow.client.hints.WishProcessingPhase.PLANNING);
     }
 
     public static void executionSettings(ExecutionSettingsSnapshot settings) {

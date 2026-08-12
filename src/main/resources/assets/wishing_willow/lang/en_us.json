@@ -296,5 +296,20 @@
   "screen.wishing_willow.execution.warning.explosions": "Allows wishes to create explosions.",
   "screen.wishing_willow.execution.warning.destructive": "Allows explosions that can destroy blocks and terrain.",
   "screen.wishing_willow.execution.warning.cross_dimension": "Allows wishes to move players between dimensions.",
-  "screen.wishing_willow.execution.warning.severity": "Sets the maximum permitted destructive severity."
+  "screen.wishing_willow.execution.warning.severity": "Sets the maximum permitted destructive severity.",
+  "message.wishing_willow.wish_already_processing": "✦ A wish is already being fulfilled. Please wait.",
+  "message.wishing_willow.wish_interpreting_1": "✦ The willow is listening to your wish...",
+  "message.wishing_willow.wish_interpreting_2": "✦ Your words are being understood, please wait...",
+  "message.wishing_willow.wish_interpreting_3": "✦ The willow ponders your wish...",
+  "message.wishing_willow.wish_planning_1": "✦ Your wish is being woven, please wait...",
+  "message.wishing_willow.wish_planning_2": "✦ Fate is shifting...",
+  "message.wishing_willow.wish_planning_3": "✦ The wish is taking shape, please stay nearby...",
+  "message.wishing_willow.wish_researching_1": "✦ The willow is seeking the means to grant your wish...",
+  "message.wishing_willow.wish_researching_2": "✦ A way to fulfil your wish is being discovered...",
+  "message.wishing_willow.wish_preparing": "✦ Your wish is about to come true...",
+  "message.wishing_willow.wish_executing": "✦ Your wish will be granted now.",
+  "message.wishing_willow.wish_failed": "✦ The willow cannot grant this wish.",
+  "message.wishing_willow.wish_please_wait": "✦ This wish needs a moment, please wait...",
+  "message.wishing_willow.wish_long_wait": "✦ The willow is still fulfilling your wish. Please stay nearby.",
+  "message.wishing_willow.wish_distance_warning": "⚠ Do not stray too far from the willow while your wish is being fulfilled."
 }

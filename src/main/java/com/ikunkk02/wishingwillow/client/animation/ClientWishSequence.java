@@ -1,6 +1,7 @@
 package com.ikunkk02.wishingwillow.client.animation;
 
 import com.ikunkk02.wishingwillow.WishingWillow;
+import com.ikunkk02.wishingwillow.client.hints.ClientWishProcessingHints;
 import com.ikunkk02.wishingwillow.network.ModNetworking;
 import com.ikunkk02.wishingwillow.network.packet.WishAnimationEventPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
@@ -125,6 +126,7 @@ public final class ClientWishSequence {
                 || !processedOmens.accept(packet.sessionId())) {
             return;
         }
+        ClientWishProcessingHints.stop();
         if (packet.sessionId().equals(completionSessionId) && completionStart != Long.MIN_VALUE) {
             scheduleOmen(packet);
         } else {

@@ -4,6 +4,7 @@ import com.ikunkk02.wishingwillow.ai.AiConfig;
 import com.ikunkk02.wishingwillow.ai.AiProviderType;
 import com.ikunkk02.wishingwillow.client.network.ClientPacketHandlers;
 import com.ikunkk02.wishingwillow.wish.WishTextValidator;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
@@ -21,7 +22,8 @@ public record WishStartedPacket(
         ItemStack stackSnapshot,
         String originalWish,
         AiProviderType providerType,
-        String model
+        String model,
+        BlockPos willowPos
 ) {
     public static void encode(WishStartedPacket packet, FriendlyByteBuf buffer) {
         buffer.writeUUID(packet.sessionId);
@@ -31,6 +33,7 @@ public record WishStartedPacket(
         buffer.writeUtf(packet.originalWish, WishTextValidator.MAX_LENGTH);
         buffer.writeEnum(packet.providerType);
         buffer.writeUtf(packet.model, AiConfig.MAX_MODEL_LENGTH);
+        buffer.writeBlockPos(packet.willowPos);
     }
 
     public static WishStartedPacket decode(FriendlyByteBuf buffer) {
@@ -41,7 +44,8 @@ public record WishStartedPacket(
                 buffer.readItem(),
                 buffer.readUtf(WishTextValidator.MAX_LENGTH),
                 buffer.readEnum(AiProviderType.class),
-                buffer.readUtf(AiConfig.MAX_MODEL_LENGTH)
+                buffer.readUtf(AiConfig.MAX_MODEL_LENGTH),
+                buffer.readBlockPos()
         );
     }
 

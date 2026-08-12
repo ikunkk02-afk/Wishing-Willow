@@ -13,6 +13,8 @@ import com.ikunkk02.wishingwillow.network.packet.SubmitWishInterpretationPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStartedPacket;
 import com.ikunkk02.wishingwillow.network.packet.WishStatePacket;
 import com.ikunkk02.wishingwillow.wish.WishState;
+import com.ikunkk02.wishingwillow.client.hints.ClientWishProcessingHints;
+import com.ikunkk02.wishingwillow.client.hints.WishProcessingPhase;
 import com.ikunkk02.wishingwillow.config.WishingWillowClientConfig;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
@@ -54,6 +56,7 @@ public final class ClientAiWishCoordinator {
             begin(packet.correlationId());
         } else if (packet.state() == WishState.CANCELLED) {
             PENDING.remove(packet.correlationId());
+            ClientWishProcessingHints.stop();
         }
     }
 
@@ -63,6 +66,7 @@ public final class ClientAiWishCoordinator {
             return;
         }
         pending.started = true;
+        ClientWishProcessingHints.setPhase(WishProcessingPhase.INTERPRETING);
         if (pending.config == null) {
             COMPLETED.add(new CompletedWish(
                     sessionId,
