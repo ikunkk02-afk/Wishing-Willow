@@ -297,6 +297,17 @@ Please include:
 
 ---
 
+## 🔗 Links · 链接
+
+| Platform | 链接 |
+|---|---|
+| 📺 **哔哩哔哩** | [space.bilibili.com/1832031043](https://space.bilibili.com/1832031043) |
+| 🎵 **抖音** | [douyin.com/user/MS4wLjABAAA...](https://www.douyin.com/user/MS4wLjABAAAAXPEr9Q0OnMztYvgDTXt6H3g9_626CRAmMbX1L64pBkxbvbHR2ACMWmL55mIL0-Gi) |
+
+> 发布视频、更新动态都会发在这里，欢迎关注。
+
+---
+
 ## 📄 License · 许可证
 
 [MIT](LICENSE) © 2026 寿云 ([ikunkk02-afk](https://github.com/ikunkk02-afk))
