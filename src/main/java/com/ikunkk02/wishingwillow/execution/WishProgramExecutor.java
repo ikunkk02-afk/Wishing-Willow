@@ -265,30 +265,7 @@ public final class WishProgramExecutor {
             return;
         }
         List<ProgramAction> leaves = validated.allLeaves();
-        boolean coreFailed = false;
         int coreCount = Math.min(record.coreActionCount(), leaves.size());
-        for (int index = 0; index < coreCount; index++) {
-            WishStepExecution step = record.step(index);
-            if (step != null && (step.state() == WishStepExecutionState.FAILED
-                    || step.state() == WishStepExecutionState.STALE
-                    || step.state() == WishStepExecutionState.CANCELLED
-                    || "PARTIAL_SUCCESS".equals(step.lastResult()))) {
-                coreFailed = true;
-                break;
-            }
-        }
-        if (coreFailed) {
-            for (WishStepExecution step : record.steps()) {
-                if (!step.state().terminal()) {
-                    WishExecutionManager.scheduler().remove(
-                            new StepKey(record.executionId(), step.stepIndex()));
-                    step.transition(WishStepExecutionState.CANCELLED, now);
-                }
-            }
-            record.fail("CORE_ACTION_FAILED", now);
-            WishExecutionManager.changed(server, record);
-            return;
-        }
         boolean active = record.steps().stream().anyMatch(step ->
                 step.state() != WishStepExecutionState.PENDING && !step.state().terminal());
         if (!active) {
@@ -326,7 +303,7 @@ public final class WishProgramExecutor {
             for (int index = 0; index < record.steps().size(); index++) {
                 (index < coreCount ? core : presentation).add(record.step(index).state());
             }
-            record.transition(WishProgramResultPolicy.reduce(core, presentation), now);
+            record.transition(WishProgramResultPolicy.reduceSteps(record.steps(), coreCount), now);
             if (record.state() == WishExecutionState.COMPLETED && !presentation.isEmpty()
                     && presentation.stream().anyMatch(state -> state == WishStepExecutionState.FAILED
                     || state == WishStepExecutionState.STALE)) {

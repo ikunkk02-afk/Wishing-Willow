@@ -12,11 +12,14 @@ public enum WishPipelineState {
     PROGRAM_SENT,
     EXECUTING,
     COMPLETED,
+    PARTIAL_SUCCESS,
+    UNEXECUTABLE,
     REJECTED,
     FAILED,
     CANCELLED;
 
     public boolean terminal() {
-        return this == COMPLETED || this == REJECTED || this == FAILED || this == CANCELLED;
+        return this == COMPLETED || this == PARTIAL_SUCCESS || this == UNEXECUTABLE
+                || this == REJECTED || this == FAILED || this == CANCELLED;
     }
 }

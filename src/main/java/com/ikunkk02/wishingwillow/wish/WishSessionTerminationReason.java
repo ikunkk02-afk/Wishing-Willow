@@ -4,6 +4,8 @@ package com.ikunkk02.wishingwillow.wish;
 public enum WishSessionTerminationReason {
     NONE,
     EXECUTION_COMPLETE,
+    EXECUTION_PARTIAL,
+    EXECUTION_UNEXECUTABLE,
     EXECUTION_FAILED,
     AI_FAILED,
     WISH_REJECTED,

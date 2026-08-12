@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import com.ikunkk02.wishingwillow.execution.WishActionLoopDetector;
 import com.ikunkk02.wishingwillow.execution.WishExecutionState;
 import com.ikunkk02.wishingwillow.execution.WishProgramResultPolicy;
+import com.ikunkk02.wishingwillow.execution.WishExecutionOutcome;
 import com.ikunkk02.wishingwillow.execution.WishStepExecutionState;
 import com.ikunkk02.wishingwillow.execution.action.ActionResult;
 import com.ikunkk02.wishingwillow.execution.action.ActionStatus;
@@ -187,8 +188,48 @@ class WishProgramArchitectureTest {
 
     @Test
     void coreFailureCannotDisplaySuccess() {
-        assertEquals(WishExecutionState.FAILED, WishProgramResultPolicy.reduce(
+        assertEquals(WishExecutionState.UNEXECUTABLE, WishProgramResultPolicy.reduce(
                 List.of(WishStepExecutionState.FAILED), List.of(WishStepExecutionState.SUCCEEDED)));
+    }
+
+    @Test
+    void mixedCoreResultsArePartialSuccessAndPresentationIsCountedSeparately() {
+        WishProgramResultPolicy.Summary summary = WishProgramResultPolicy.summarize(
+                List.of(WishStepExecutionState.SUCCEEDED, WishStepExecutionState.FAILED),
+                List.of(WishStepExecutionState.SUCCEEDED, WishStepExecutionState.FAILED));
+        assertEquals(WishExecutionOutcome.PARTIAL_SUCCESS, summary.outcome());
+        assertEquals(1, summary.coreSuccess());
+        assertEquals(1, summary.coreFailed());
+        assertEquals(1, summary.presentationSuccess());
+        assertEquals(1, summary.presentationFailed());
+    }
+
+    @Test
+    void allHardLimitedCoreFailuresAreUnexecutable() {
+        assertEquals(WishExecutionOutcome.UNEXECUTABLE, WishProgramResultPolicy.summarize(
+                List.of(WishStepExecutionState.FAILED), List.of()).outcome());
+    }
+
+    @Test
+    void runtimeExceptionFailureRemainsFailed() {
+        assertEquals(WishExecutionOutcome.FAILED, WishProgramResultPolicy.outcomeForFailure("ACTION_EXCEPTION_NPE"));
+    }
+
+    @Test
+    void internalCoreFailureProducesFailedRatherThanUnexecutable() {
+        var record = new com.ikunkk02.wishingwillow.execution.WishExecutionRecord(
+                java.util.UUID.randomUUID(), java.util.UUID.randomUUID(), java.util.UUID.randomUUID(),
+                java.util.UUID.randomUUID(), 1, 0,
+                com.ikunkk02.wishingwillow.execution.ExecutionSource.WISH_PROGRAM, 1);
+        record.step(0).result(com.ikunkk02.wishingwillow.execution.WishActionResult.failed("ACTION_EXCEPTION_NPE"));
+        record.step(0).transition(WishStepExecutionState.FAILED, 0);
+        assertEquals(WishExecutionState.FAILED, WishProgramResultPolicy.reduceSteps(record.steps(), 1));
+    }
+
+    @Test
+    void presentationOnlyProgramCannotPretendToSucceed() {
+        assertEquals(WishExecutionOutcome.UNEXECUTABLE, WishProgramResultPolicy.summarize(
+                List.of(), List.of(WishStepExecutionState.SUCCEEDED)).outcome());
     }
 
     @Test

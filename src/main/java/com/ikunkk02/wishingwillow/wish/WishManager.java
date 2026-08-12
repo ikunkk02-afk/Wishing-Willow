@@ -477,17 +477,25 @@ public final class WishManager {
                                              WishProgramError error, String detail) {
         WishRecord record = WishSavedData.get(player.server).getBySession(sessionId);
         if (record == null) return;
+        boolean unexecutable = error == WishProgramError.UNKNOWN_CAPABILITY
+                || error == WishProgramError.INVALID_ACTION || error == WishProgramError.INVALID_REGISTRY
+                || error == WishProgramError.RESOURCE_KIND_MISMATCH;
         WishSavedData.get(player.server).update(record.withExecution(null,
-                com.ikunkk02.wishingwillow.execution.WishExecutionState.FAILED,
+                unexecutable ? com.ikunkk02.wishingwillow.execution.WishExecutionState.UNEXECUTABLE
+                        : com.ikunkk02.wishingwillow.execution.WishExecutionState.FAILED,
                 WishExecutionAcceptError.VALIDATION_FAILED,
                 "program=" + error.name() + " " + sanitize(detail)));
         WishPipelineAudit.failure(sessionId, "PROGRAM_SUBMIT", error.name(), detail);
         WishLifecycleLog.event(sessionId, "SESSION_TERMINATED",
                 "reason=PROGRAM_REJECTED error=" + error + " detail=" + sanitize(detail));
         ModNetworking.sendToPlayer(player, WishPipelineStatePacket.terminal(sessionId,
-                WishPipelineState.FAILED, WishSessionTerminationReason.PROGRAM_REJECTED,
+                unexecutable ? WishPipelineState.UNEXECUTABLE : WishPipelineState.FAILED,
+                unexecutable ? WishSessionTerminationReason.EXECUTION_UNEXECUTABLE
+                        : WishSessionTerminationReason.PROGRAM_REJECTED,
                 "error=" + error + " detail=" + sanitize(detail)));
-        sendPlanningFailure(player, sessionId);
+        player.sendSystemMessage(Component.translatable(unexecutable
+                ? "message.wishing_willow.wish_unexecutable"
+                : "message.wishing_willow.wish_failed"));
     }
 
     private static String sanitize(String value) {

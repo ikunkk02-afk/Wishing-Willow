@@ -22,7 +22,7 @@ public final class WishExecutionConfig {
         DESTRUCTIVE_EXPLOSIONS=b.define("allowDestructiveExplosions",false);
         CROSS_DIMENSION_TELEPORT=b.define("allowCrossDimensionTeleport",false);
         MAX_DESTRUCTIVE_SEVERITY=b.defineInRange("maximumDestructiveSeverity",80,0,100);
-        DEBUG_SAFE_MODE=b.define("debugSafeMode",!FMLEnvironment.production);
+        DEBUG_SAFE_MODE=b.define("debugSafeMode",false);
         b.pop();SPEC=b.build();
     }
     private WishExecutionConfig(){}

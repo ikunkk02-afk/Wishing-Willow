@@ -83,6 +83,8 @@ final class PendingWishSession {
         terminalReason = reason == null ? WishSessionTerminationReason.STALE : reason;
         pipelineState = switch (terminalReason) {
             case EXECUTION_COMPLETE -> WishPipelineState.COMPLETED;
+            case EXECUTION_PARTIAL -> WishPipelineState.PARTIAL_SUCCESS;
+            case EXECUTION_UNEXECUTABLE -> WishPipelineState.UNEXECUTABLE;
             case USER_CANCELLED, PLAYER_DISCONNECT, WORLD_UNLOAD, SUPERSEDED -> WishPipelineState.CANCELLED;
             default -> WishPipelineState.FAILED;
         };

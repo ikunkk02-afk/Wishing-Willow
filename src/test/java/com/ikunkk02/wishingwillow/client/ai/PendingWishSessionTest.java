@@ -68,6 +68,18 @@ class PendingWishSessionTest {
     }
 
     @Test
+    void partialAndUnexecutableExecutionOutcomesRemainDistinctTerminalStates() {
+        PendingWishSession partial = session(UUID.randomUUID());
+        PendingWishSession unavailable = session(UUID.randomUUID());
+
+        assertTrue(partial.terminate(WishSessionTerminationReason.EXECUTION_PARTIAL, 2_000L));
+        assertTrue(unavailable.terminate(WishSessionTerminationReason.EXECUTION_UNEXECUTABLE, 2_000L));
+
+        assertEquals(WishPipelineState.PARTIAL_SUCCESS, partial.pipelineState());
+        assertEquals(WishPipelineState.UNEXECUTABLE, unavailable.pipelineState());
+    }
+
+    @Test
     void aiFailureIsTerminalAndCancelsOutstandingFuture() {
         PendingWishSessionRegistry registry = new PendingWishSessionRegistry();
         PendingWishSession session = session(UUID.randomUUID());
