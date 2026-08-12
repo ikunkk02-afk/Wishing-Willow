@@ -1,108 +1,128 @@
-# Wishing Willow (许愿柳)
+# 许愿柳 · Wishing Willow
 
 [![Forge](https://img.shields.io/badge/Forge-47.4.22-orange)](https://files.minecraftforge.net/)
-[![Minecraft](https://img.shields.io/badge/MC-1.20.1-green)](https://www.minecraft.net/)
-[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1-green)](https://www.minecraft.net/)
 [![Java](https://img.shields.io/badge/Java-17-red)](https://adoptium.net/)
-[![Version](https://img.shields.io/badge/version-1.0.1-brightgreen)](https://github.com/ikunkk02-afk/Wishing-Willow/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-1.0.1-brightgreen)](https://github.com/ikunkk02-afk/Wishing-Willow/releases)
 
-A mysterious Forge mod centered on the Wishing Willow — an AI-powered wish fulfillment system. Speak your wish, crack the willow branch in two, and watch as your words reshape the world.
+一个基于 AI 的 Minecraft Forge 模组。拿起柳枝，说出你的愿望，然后「啪」地一声将它折断——愿望会以意想不到的方式被实现。
 
-## ✨ Features
+An AI-powered Minecraft Forge mod. Hold the willow branch, speak your wish, then crack it in two — and watch as your wish reshapes the world, sometimes faithfully, sometimes literally, sometimes absurdly. **Be careful what you wish for.**
 
-- 🪄 **Make wishes** — hold the Wishing Willow, type your wish, and crack it in two
-- 🤖 **AI-powered interpretation** — wishes are understood by an LLM via OpenAI-compatible API
-- 🧠 **Agent-based planning** — complex wishes use LangChain4j tool-calling agents to plan actions
-- 🎬 **Cinematic sequences** — immersive camera effects and music during wish fulfillment
-- 📚 **Mod knowledge base** — automatic research of installed mods for cross-mod wish support
-- 🎵 **Immersive soundtrack** — original music and dynamic audio during trade reveals and wishes
-- 🌐 **Multi-provider support** — DeepSeek, Ollama, LM Studio, or any OpenAI-compatible endpoint
+---
 
-## 📦 Dependencies
+> 🎬 **灵感来源 / Inspired by**：2026 年电影《痴迷》（*Obsession*）中的道具「许愿柳 / Wishing Willow」。本模组将这一电影道具还原为一个完整可玩的 Minecraft 模组。
+>
+> This mod is inspired by the "Wishing Willow" prop from the 2026 film ***Obsession* (痴迷)**.
 
-### Minecraft Mod Dependencies (required)
+---
 
-| Mod | Version | Purpose |
-|-----|---------|---------|
-| [GeckoLib](https://www.curseforge.com/minecraft/mc-mods/geckolib) | 4.8.4 | Entity and item animations |
+## 目录 / Table of Contents
 
-### Java Embedded Dependencies (bundled — no separate install needed)
+- [功能特性](#功能特性-features)
+- [依赖关系](#依赖关系-dependencies)
+- [AI 服务配置](#ai-服务配置-ai-provider-configuration)
+- [安装](#安装-installation)
+- [开发](#开发-development)
+- [联系方式](#联系方式-links)
+- [许可证](#许可证-license)
 
-The following libraries are bundled inside Wishing Willow via [Forge JarJar](https://docs.minecraftforge.net/en/1.20.x/advanced/jarjar/). **Players do not need to download or install any of these.**
+## 功能特性 / Features
 
-| Library | Version | Purpose |
-|---------|---------|---------|
-| `dev.langchain4j:langchain4j` | 1.18.1 | AI orchestration framework |
-| `dev.langchain4j:langchain4j-core` | 1.18.1 | Core model, message, and tool-calling APIs |
-| `dev.langchain4j:langchain4j-skills` | 1.18.1-beta28 | Skill-based agent tool routing |
-| `com.fasterxml.jackson.core:jackson-annotations` | 2.22 | JSON annotations |
-| `com.fasterxml.jackson.core:jackson-core` | 2.22.1 | JSON processing |
-| `com.fasterxml.jackson.core:jackson-databind` | 2.22.1 | JSON data binding |
-| `org.jsoup:jsoup` | 1.23.1 | HTML parsing for web research |
-| `org.apache.opennlp:opennlp-tools` | 2.5.9 | NLP for skill matching |
-| `org.commonmark:commonmark` | 0.28.0 | Markdown parsing |
-| `org.commonmark:commonmark-ext-yaml-front-matter` | 0.28.0 | YAML front matter in skill files |
-| `org.jspecify:jspecify` | 1.0.0 | Nullability annotations |
+- **许愿系统**：手持许愿柳，输入愿望并折断柳枝即可许愿。
+- **AI 理解愿望**：通过 OpenAI 兼容接口由大语言模型理解玩家愿望。
+- **智能体规划**：复杂愿望由 LangChain4j 工具调用智能体规划执行动作。
+- **电影级演出**：许愿过程中包含沉浸式镜头效果与配乐。
+- **模组知识库**：自动调研已安装模组，支持跨模组的愿望实现。
+- **多服务商支持**：支持 DeepSeek、Ollama、LM Studio 或任意 OpenAI 兼容接口。
 
-> ⚡ **LangChain4j, Jackson, Jsoup, OpenNLP, and CommonMark are all bundled with Wishing Willow. Players install only the Wishing Willow JAR and GeckoLib.**
+## 依赖关系 / Dependencies
 
-### Optional Mods
+### Minecraft 模组前置（必须安装）
 
-| Mod | Notes |
-|-----|-------|
-| [JEI](https://www.curseforge.com/minecraft/mc-mods/jei) | Recipe viewing (not required for functionality) |
+| 模组 | 版本 | 用途 |
+|------|------|------|
+| [GeckoLib](https://www.curseforge.com/minecraft/mc-mods/geckolib) | 4.8.4 | 实体与物品动画 |
 
-## ⚙️ AI Provider Configuration
+### Java 内置依赖（已打包，无需单独安装）
 
-Wishing Willow requires an OpenAI-compatible API endpoint. Configure it in-game:
+以下依赖已通过 [Forge JarJar](https://docs.minecraftforge.net/en/1.20.x/advanced/jarjar/) 内置在模组 JAR 内，**玩家无需额外下载或安装**。
 
-1. Open Mods → Wishing Willow → Config → AI Provider, or use `/wishingwillow ai`
-2. Or open `/wishingwillow settings`
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| `dev.langchain4j:langchain4j` | 1.18.1 | AI 编排框架 |
+| `dev.langchain4j:langchain4j-core` | 1.18.1 | 模型、消息与工具调用核心 API |
+| `dev.langchain4j:langchain4j-skills` | 1.18.1-beta28 | 基于技能的智能体工具路由 |
+| `com.fasterxml.jackson.core:jackson-annotations` | 2.22 | JSON 注解 |
+| `com.fasterxml.jackson.core:jackson-core` | 2.22.1 | JSON 处理 |
+| `com.fasterxml.jackson.core:jackson-databind` | 2.22.1 | JSON 数据绑定 |
+| `org.jsoup:jsoup` | 1.23.1 | 网页调研的 HTML 解析 |
+| `org.apache.opennlp:opennlp-tools` | 2.5.9 | 技能匹配的自然语言处理 |
+| `org.commonmark:commonmark` | 0.28.0 | Markdown 解析 |
+| `org.commonmark:commonmark-ext-yaml-front-matter` | 0.28.0 | 技能文件的 YAML 前置元数据 |
+| `org.jspecify:jspecify` | 1.0.0 | 可空性注解 |
 
-**Supported providers:**
+> **LangChain4j、Jackson、Jsoup、OpenNLP 与 CommonMark 均已内置。玩家只需安装 Wishing Willow 本体与 GeckoLib。**
 
-| Provider | Base URL | Notes |
-|----------|----------|-------|
-| DeepSeek | `https://api.deepseek.com/v1` | Built-in preset |
-| Ollama | `http://localhost:11434/v1` | Local, built-in preset |
-| LM Studio | `http://localhost:1234/v1` | Local, built-in preset |
-| Custom | Any URL | Any OpenAI-compatible endpoint (vLLM, LiteLLM, etc.) |
+### 可选模组
 
-### AI Error Messages
+| 模组 | 说明 |
+|------|------|
+| [JEI](https://www.curseforge.com/minecraft/mc-mods/jei) | 配方查看（非必需） |
 
-When AI requests fail, Wishing Willow shows specific error messages instead of a generic "wish cannot be granted":
+## AI 服务配置 / AI Provider Configuration
 
-| Error | Player Message |
-|-------|---------------|
-| Timeout | "The wish's power did not respond... Please check your AI network connection and try again." |
-| DNS Failure | "Cannot reach the AI service. Please check your network or server address." |
-| Unauthorized | "The AI API key is invalid. Please update it in settings." |
-| Forbidden | "The AI service refused the request." |
-| Model Unavailable | "The selected AI model is unavailable. Try another model in settings." |
-| Rate Limited | "AI requests are too frequent. Please wait a moment and wish again." |
-| Invalid Response | "The AI returned an unreadable wish result. Please try again." |
-| Server Error | "The AI service encountered an error. Please try again later." |
-| Connection Refused | "Could not connect to the AI service. Please check your server address and network." |
+Wishing Willow 需要一个 OpenAI 兼容接口。在游戏内配置：
 
-## 🚀 Quick Start
+1. 打开 模组 → Wishing Willow → 配置 → AI 服务，或使用 `/wishingwillow ai`；
+2. 或使用 `/wishingwillow settings`。
 
-1. Install Minecraft 1.20.1 with Forge 47.4.22
-2. Download `wishing_willow-1.0.1.jar` from [Releases](https://github.com/ikunkk02-afk/Wishing-Willow/releases)
-3. Install [GeckoLib 4.8.4](https://www.curseforge.com/minecraft/mc-mods/geckolib)
-4. Place both JARs in your `mods/` folder
-5. Launch the game
-6. Acquire a One Wish Willow™ (trade with villagers or creative menu)
-7. Hold the willow, type `/wishingwillow wish`, speak your wish, and crack it in two
+支持的服务商：
 
-> 💡 **LangChain4j is bundled.** You do NOT need to download any Java libraries separately.
+| 服务商 | 接口地址 | 说明 |
+|--------|----------|------|
+| DeepSeek | `https://api.deepseek.com/v1` | 内置预设 |
+| Ollama | `http://localhost:11434/v1` | 本地部署，内置预设 |
+| LM Studio | `http://localhost:1234/v1` | 本地部署，内置预设 |
+| 自定义 | 任意地址 | 任意 OpenAI 兼容接口（vLLM、LiteLLM 等） |
 
-## 🛠️ Development
+### AI 错误提示
 
-### Prerequisites
+AI 请求失败时，Wishing Willow 会显示具体错误信息，而非笼统的「愿望无法实现」：
+
+| 错误 | 提示信息 |
+|------|----------|
+| 超时 | 愿望的力量没有回应……请检查 AI 网络连接后重试。 |
+| DNS 失败 | 无法连接到 AI 服务，请检查网络或接口地址。 |
+| 未授权 | AI API 密钥无效，请在设置中更新。 |
+| 禁止访问 | AI 服务拒绝了请求。 |
+| 模型不可用 | 当前选择的 AI 模型不可用，请在设置中更换模型。 |
+| 请求过频 | AI 请求过于频繁，请稍后再次许愿。 |
+| 响应无法解析 | AI 返回了无法解析的愿望结果，请重新尝试。 |
+| 服务器错误 | AI 服务出现了故障，请稍后再试。 |
+| 连接被拒 | 无法连接到 AI 服务，请检查服务地址与网络。 |
+
+## 安装 / Installation
+
+1. 安装 Minecraft 1.20.1 与 Forge 47.4.22；
+2. 从 [Releases](https://github.com/ikunkk02-afk/Wishing-Willow/releases) 下载 `wishing_willow-1.0.1.jar`；
+3. 安装 [GeckoLib 4.8.4](https://www.curseforge.com/minecraft/mc-mods/geckolib)；
+4. 将两个 JAR 文件放入 `mods/` 文件夹；
+5. 启动游戏；
+6. 获得一枝「许愿柳」（与村民交易或创造模式获取）；
+7. 手持柳枝，输入愿望，然后折断它。
+
+> LangChain4j 已内置，**无需**单独下载任何 Java 库。
+
+## 开发 / Development
+
+### 环境要求
+
 - Java 17 JDK
 - Git
 
-### Building
+### 构建
 
 ```bash
 git clone https://github.com/ikunkk02-afk/Wishing-Willow.git
@@ -110,58 +130,50 @@ cd Wishing-Willow
 ./gradlew build
 ```
 
-The player-facing JAR is at `build/libs/wishing_willow-1.0.1.jar` (~9.1 MB, all deps bundled).
+面向玩家的正式 JAR 位于 `build/libs/wishing_willow-1.0.1.jar`（约 9.1 MB，已内置全部依赖）。
 
-> ℹ️ The build also produces `wishing_willow-1.0.1-slim.jar` (~4 MB, no bundled deps) for development reference only.
+> 构建同时会生成 `wishing_willow-1.0.1-slim.jar`（约 4 MB，不含内置依赖），仅用于开发参考。
 
-### Dev Commands
+### 开发命令
+
 ```bash
-./gradlew runClient      # Launch Minecraft client
-./gradlew runServer      # Launch dedicated server
-./gradlew test           # Run JUnit tests (~355 tests)
-./gradlew build          # Full build including JarJar
+./gradlew runClient      # 启动 Minecraft 客户端
+./gradlew runServer      # 启动专用服务器
+./gradlew test           # 运行单元测试（约 355 项）
+./gradlew build          # 完整构建（含 JarJar）
 ```
 
-### Architecture
+### 架构
 
 ```
-WishingWillow (@Mod entry)
- ├── Registry (Blocks, Items, Sounds)
- ├── Network (ModNetworking)
- ├── Events (CommonModEvents, VillagerTradeEvents)
+WishingWillow (@Mod 入口)
+ ├── Registry（方块、物品、音效）
+ ├── Network（ModNetworking）
+ ├── Events（CommonModEvents、VillagerTradeEvents）
  ├── Client
- │   ├── GUI (AiSettingsScreen, WishingWillowSettingsScreen)
- │   ├── Animation (Unboxing, Wish cinematic sequences)
- │   ├── Music (WishingWillowMusicController)
+ │   ├── GUI（AiSettingsScreen、WishingWillowSettingsScreen）
+ │   ├── Animation（开箱与许愿电影级演出）
+ │   ├── Music（WishingWillowMusicController）
  │   └── AI
- │       ├── ClientAiWishCoordinator (wish lifecycle)
- │       ├── ClientWishPlanningCoordinator (agent planning)
- │       └── ClientWishPlanningEvents (Forge subscriber — LangChain4j-free)
+ │       ├── ClientAiWishCoordinator（愿望生命周期）
+ │       ├── ClientWishPlanningCoordinator（智能体规划）
+ │       └── ClientWishPlanningEvents（Forge 订阅者，不引用 LangChain4j）
  └── AI
-     ├── AiService (HttpClient pool, thread management)
-     ├── OpenAiCompatibleProvider (HTTP, retry, streaming)
-     ├── WishInterpreter (prompt → interpretation)
-     ├── Prompt (WishingWillowPrompt, assembler, runtime context)
-     └── WishManager (server-side wish lifecycle)
+     ├── AiService（HttpClient 池、线程管理）
+     ├── OpenAiCompatibleProvider（HTTP、重试、流式）
+     ├── WishInterpreter（提示词 → 解析）
+     ├── Prompt（WishingWillowPrompt、组装器、运行时上下文）
+     └── WishManager（服务端愿望生命周期）
 ```
 
-> ⚠️ **Important:** `ClientWishPlanningEvents` is the ONLY class annotated with `@EventBusSubscriber` in the AI module. It deliberately imports zero LangChain4j types, ensuring Forge's automatic subscriber registration never triggers a `NoClassDefFoundError` during mod loading. All AI logic is lazily loaded when a wish is actually submitted.
+> `ClientWishPlanningEvents` 是 AI 模块中唯一标注 `@EventBusSubscriber` 的类，且刻意不引用任何 LangChain4j 类型，从而确保 Forge 自动订阅者注册时不会触发 `NoClassDefFoundError`。所有 AI 逻辑均在真正提交愿望时才延迟加载。
 
-## 📊 Project Stats
+## 联系方式 / Links
 
-- **355+ unit tests** — comprehensive coverage for AI, research, execution, and client logic
-- **~9.1 MB** player JAR — 11 dependency JARs bundled via Forge JarJar
-- **Java 17** — no module system issues with `--add-opens` for Forge's SecureJarHandler
-- **47.4.22** — tested against Forge's recommended 1.20.1 build
+- **GitHub**：[ikunkk02-afk/Wishing-Willow](https://github.com/ikunkk02-afk/Wishing-Willow)
+- **哔哩哔哩**：[space.bilibili.com/1832031043](https://space.bilibili.com/1832031043)
+- **抖音**：[douyin.com/user/MS4wLjABAAAAXPEr9Q0OnMztYvgDTXt6H3g9_626CRAmMbX1L64pBkxbvbHR2ACMWmL55mIL0-Gi](https://www.douyin.com/user/MS4wLjABAAAAXPEr9Q0OnMztYvgDTXt6H3g9_626CRAmMbX1L64pBkxbvbHR2ACMWmL55mIL0-Gi)
 
-## 🔗 Links
+## 许可证 / License
 
-- [GitHub Repository](https://github.com/ikunkk02-afk/Wishing-Willow)
-- [Bilibili](https://space.bilibili.com/) — Development vlogs
-- [Douyin](https://www.douyin.com/) — Short-form content
-
-## 📄 License
-
-MIT — see [LICENSE](LICENSE) for details.
-
-**Author:** ikunkk02-afk (寿云)
+[MIT](LICENSE) © 2026 ikunkk02-afk（寿云）
