@@ -24,6 +24,9 @@ Hold the willow branch, speak your wish, and an AI will try to change the Minecr
 sometimes faithfully, sometimes literally, sometimes absurdly.
 **Be careful what you wish for.**
 
+> 🎬 Inspired by the 2026 film ***Obsession* (痴迷)** — the "Wishing Willow" is a prop from the movie,
+> brought to life as a fully functional Minecraft mod.
+
 ---
 
 **许愿柳** 是一个基于 AI 的 Minecraft Forge 愿望模组。拿起柳枝，说出你的愿望，
