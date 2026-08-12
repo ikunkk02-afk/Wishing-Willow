@@ -32,7 +32,11 @@ import org.slf4j.Logger;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Mod.EventBusSubscriber(modid = WishingWillow.MOD_ID, value = Dist.CLIENT,
         bus = Mod.EventBusSubscriber.Bus.FORGE)
@@ -41,7 +45,9 @@ public final class ClientAiWishCoordinator {
     private static final WishInterpreter INTERPRETER = new WishInterpreter(AiService.getInstance());
     private static final PendingWishSessionRegistry PENDING = new PendingWishSessionRegistry();
     private static final ConcurrentLinkedQueue<CompletedWish> COMPLETED = new ConcurrentLinkedQueue<>();
-    /** Covers AI retries, planning/research and the longest native execution watchdog plus margin. */
+    /** Hard upper bound for the initial wish interpretation, including provider retry/repair latency. */
+    private static final long AI_INTERPRETATION_TIMEOUT_SECONDS = 60L;
+    /** Covers planning/research and the longest native execution watchdog plus margin. */
     private static final long PIPELINE_TIMEOUT_MS = Duration.ofMinutes(7).toMillis();
     private static volatile long connectionGeneration;
 
@@ -155,12 +161,15 @@ public final class ClientAiWishCoordinator {
             future = CompletableFuture.completedFuture(
                     WishInterpretationResult.requestFailure(AiErrorCategory.NOT_CONFIGURED, 0));
         } else {
-            LOGGER.info("AI request started session={} provider={} model={} wishLength={}",
+            LOGGER.info("AI request started session={} provider={} model={} wishLength={} hardTimeoutSeconds={}",
                     sessionId, session.config().providerType(), safeModel(session.config().model()),
-                    session.wish().length());
+                    session.wish().length(), AI_INTERPRETATION_TIMEOUT_SECONDS);
+            WishLifecycleLog.event(sessionId, "AI_TASK_SUBMITTED",
+                    "timeoutSeconds=" + AI_INTERPRETATION_TIMEOUT_SECONDS);
             future = INTERPRETER.interpret(session.config(), session.wish(),
-                    WishingWillowClientConfig.FULFILLMENT_MODE.get(), sessionId,
-                    ClientWishAiRuntimeContext.capture());
+                            WishingWillowClientConfig.FULFILLMENT_MODE.get(), sessionId,
+                            ClientWishAiRuntimeContext.capture())
+                    .orTimeout(AI_INTERPRETATION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         }
         if (!session.aiStarted(future, System.currentTimeMillis())) return;
         WishLifecycleLog.event(sessionId, "AI_REQUEST_STARTED",
@@ -171,16 +180,32 @@ public final class ClientAiWishCoordinator {
     /** Runs on the AI completion thread. It never touches Minecraft client/player/network state. */
     private static void completeAi(PendingWishSession owner, WishInterpretationResult result,
                                    Throwable throwable) {
+        long now = System.currentTimeMillis();
         WishInterpretationResult completed = result;
+        Throwable root = rootCause(throwable);
         if (throwable != null || completed == null) {
-            completed = WishInterpretationResult.requestFailure(AiErrorCategory.UNKNOWN, 0);
+            AiErrorCategory category = root instanceof TimeoutException
+                    ? AiErrorCategory.TIMEOUT : AiErrorCategory.UNKNOWN;
+            completed = WishInterpretationResult.requestFailure(category, 0);
+            LOGGER.warn("AI request completed exceptionally session={} category={} throwable={} elapsedSinceLastUpdateMs={}",
+                    owner.sessionId(), category,
+                    root == null ? "NONE" : root.getClass().getSimpleName(),
+                    Math.max(0L, now - owner.lastUpdatedAt()));
+            WishLifecycleLog.event(owner.sessionId(), "AI_REQUEST_FAILED",
+                    "category=" + category + " throwable="
+                            + (root == null ? "NONE" : root.getClass().getSimpleName()));
+        } else {
+            LOGGER.info("AI request completed session={} state={} elapsedSinceLastUpdateMs={}",
+                    owner.sessionId(), completed.state(), Math.max(0L, now - owner.lastUpdatedAt()));
+            WishLifecycleLog.event(owner.sessionId(), "AI_REQUEST_COMPLETED",
+                    "state=" + completed.state());
         }
         PendingWishSession current = PENDING.get(owner.sessionId());
         if (current != owner || owner.generation() != connectionGeneration) {
             logDropped(owner.sessionId(), "SESSION_NOT_PENDING", owner);
             return;
         }
-        if (!owner.aiCompleted(completed, System.currentTimeMillis())) {
+        if (!owner.aiCompleted(completed, now)) {
             logDropped(owner.sessionId(), "SESSION_TERMINAL_BEFORE_AI_RESULT", owner);
             return;
         }
@@ -294,6 +319,15 @@ public final class ClientAiWishCoordinator {
                     session.pipelineState(), session.createdAt(), now);
         }
         COMPLETED.clear();
+    }
+
+    private static Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while ((current instanceof CompletionException || current instanceof ExecutionException)
+                && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     private static String safeModel(String model) {
