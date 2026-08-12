@@ -1,0 +1,105 @@
+name: Bug Report
+description: Report a bug in Wishing Willow
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠ Do NOT include your API key in this report.
+        Before uploading logs, check they do not contain your AI provider API key.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: What went wrong?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Configure AI provider
+        2. Type wish "I wish for ..."
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: input
+    id: wish-text
+    attributes:
+      label: Wish Text
+      description: The exact wish that triggered the bug.
+      placeholder: "I wish for ..."
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+
+  - type: input
+    id: mc-version
+    attributes:
+      label: Minecraft Version
+      placeholder: "1.20.1"
+    validations:
+      required: true
+
+  - type: input
+    id: forge-version
+    attributes:
+      label: Forge Version
+      placeholder: "47.4.22"
+    validations:
+      required: true
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: Wishing Willow Version
+      placeholder: "1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: ai-provider
+    attributes:
+      label: AI Provider
+      description: DeepSeek / Ollama / LM Studio / Custom
+      placeholder: "DeepSeek"
+
+  - type: input
+    id: ai-model
+    attributes:
+      label: AI Model
+      placeholder: "deepseek-v4-flash"
+
+  - type: textarea
+    id: mod-list
+    attributes:
+      label: Installed Mods
+      description: List other mods you have installed.
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Attach `latest.log` or `debug.log`.
+        ⚠ Check for API keys before uploading.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context

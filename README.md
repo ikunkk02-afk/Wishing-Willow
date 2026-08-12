@@ -1,78 +1,222 @@
-# Wishing Willow（许愿柳）
+# Wishing Willow / 许愿柳
 
-Wishing Willow is a Minecraft Forge mod built for Minecraft 1.20.1.
+**Wishing Willow** is an AI-powered Minecraft Forge mod. Speak your wish aloud to the Wishing Willow,
+and an AI will try to change the Minecraft world to make it real — sometimes faithfully, sometimes
+literally, sometimes absurdly. Be careful what you wish for.
 
-## Development
+---
 
-- Minecraft 1.20.1
-- Forge 47.4.22
-- Java 17
-- Official mappings 1.20.1
+**许愿柳** 是一个基于 AI 的 Minecraft Forge 愿望模组。向许愿柳说出你的愿望，AI 会理解它，并尝试通过
+Minecraft 世界中的实际行为将它实现。有些愿望会被正常实现，有些会被字面化、夸张化甚至荒诞地实现。
+小心你许下的愿望。
 
-Build the mod on Windows with:
+---
 
-```powershell
-.\gradlew.bat build
-```
+## Features / 主要功能
 
-## Local AI credentials
+### Natural-Language Wishing / 自然语言许愿
 
-Wishing Willow stores player-provided OpenAI-compatible settings in:
+You don't write commands. Just speak. Type any wish and the AI will interpret it:
 
-```text
-.minecraft/config/wishing_willow/ai-client.json
-```
+- "I want lots of diamonds."
+- "Give me a top-tier enchanted diamond sword."
+- "I hope I am never alone again."
 
-The API key is a local client credential. The first version stores it as plain text so the mod can reconnect between
-sessions. Do not share or upload this file, include it in bug reports, or commit it to source control. The credential is
-never sent through Minecraft networking and is never written to a world save or `WishSavedData`.
+The AI understands context, picks appropriate Minecraft actions, and constructs a real execution plan
+using the mod's available capabilities.
 
-## Local mod research
+### Absurd Wish Realization / 荒诞愿望实现
 
-The client builds a read-only knowledge base for the installed modpack under:
+Vague, abstract, or extreme wishes may be interpreted literally and exaggerated. "I hope I am never alone"
+might fill your surroundings with creatures that stay with you — persistently. The mod's absurdity system
+(`absurd_wish_realization`) ensures ambiguous wishes receive creative, unexpected implementations rather
+than failing silently.
 
-```text
-.minecraft/config/wishing_willow/knowledge/
-```
+### Advanced Item Generation / 高级物品生成
 
-It sends only public mod metadata, the mod file name and SHA-512, public project text, and namespaced registry IDs to
-research services and the configured AI provider. It never sends local paths, player or server identifiers, world seeds,
-credentials, chat, or save files. The optional CurseForge API key is stored only in
-`.minecraft/config/wishing_willow/research-client.json`; it is never logged, cached with knowledge, or sent to AI.
+Wishes for items produce real Minecraft `ItemStack` objects with full support for:
 
-## Wish validation and AI pipeline
+- Standard items (blocks, tools, resources)
+- Enchanted equipment (custom enchantments at configurable levels)
+- Top-tier ("treasure") enchantments
+- High-level enchantments above vanilla maxima
+- Advanced `ItemStack` attributes (custom NBT)
 
-The wish pipeline now uses tolerant AI parsing followed by deterministic normalization and then strict server
-validation. In short:
+All generated items pass through server-side validation; impossible combinations are rejected.
 
-`AI response -> loose JSON recovery -> WishProgramNormalizer -> strict WishProgramValidator -> planning -> execution`
+### Persistent Wishes / 持续愿望
 
-The normalizer repairs safe issues locally (for example numeric clamping, type coercion, enum/action name cleanup,
-missing defaults, and harmless unknown fields). Unsafe or ambiguous cases still reject, and the final server executor
-continues to enforce world, registry, permission, and budget limits.
+Some wishes don't end after a single action. They create ongoing effects that persist through logout,
+death, and server restart:
 
-The understanding envelope now has an explicit `decision`: `ACCEPT` carries an interpretation and executable program;
-`REJECT` carries a bounded rejection code/message and no actions. Capability values come from the Java enum, with a
-small whitelist of aliases (including entity-removal synonyms) normalized before strict validation. The server policy
-remains authoritative and can reject an AI-accepted program that violates resource or safety limits.
+- Entity attraction / following behavior
+- World rules (entity suppression, social rules)
+- Never Alone companionship
 
-`ENTITY_REMOVAL` is independent from spawning. `remove_entity` performs bounded nearby type removal, while
-`entity_suppression` stores a persistent world rule for mob groups. Suppression scans only entities in already-loaded
-levels and intercepts future entity joins; it never generates, force-loads, or scans unloaded chunks/dimensions. Players,
-items, projectiles, vehicles, and other non-`Mob` entities are excluded by the server implementation.
+### Wish Outcome Classification / 愿望结果分类
 
-The consumed willow is recorded as an exact count-one `ItemStack` receipt keyed by wish session. Before any core world
-side effect, AI/network/validation/planning/policy rejection requests an idempotent refund. Offline refunds persist until
-login; online delivery tries inventory first and drops the unchanged remainder at the player. Once a successful core
-action reports an affected world object, the payment is committed and no automatic refund is allowed.
+The mod honestly reports what happened:
 
-## Wish planning diagnostics
+- **Granted** — the wish was fully realized.
+- **Partially Granted** — some parts succeeded, others could not be completed.
+- **Unexecutable** — the wish is beyond what the mod or world can safely do. The mod rejects it
+  rather than pretending with particles or buffs.
+- **Failed** — an unexpected technical error occurred.
 
-Agent tool planning is an optional enhancement over the compatibility JSON planner. Unknown or unsupported tool-call
-capability, Agent timeouts, malformed tool responses, repeated tool errors, and contract-review technical failures fall
-back to the JSON planner automatically. A new wish cancels the previous client planning token, and late responses from
-the cancelled wish are ignored.
+No fake "success" messages. If a wish cannot be done, the mod says so.
 
-Use `/wishingwillow agent latest` to inspect the live Agent iteration/tool/fallback state, or
-`/wishingwillow wish latest` to inspect the latest wish from interpretation through execution. Neither command prints
-API keys, authorization headers, or the full local AI configuration.
+### Advancements / 进度系统
+
+An independent "Wishing Willow" advancement page tracks your journey. Includes normal, goal, and
+hidden challenge advancements. The root advancement unlocks automatically when you first log in
+with the mod installed, making the tab discoverable from the start.
+
+### Mod Research / 模组研究
+
+Wishing Willow scans your installed modpack and builds a local knowledge base:
+
+- Vanilla Minecraft content
+- Forge registry entries (items, blocks, entities)
+- Public mod metadata
+- CurseForge / Modrinth project information (optional, API-key gated)
+- Web research for discovery (safety-checked, budget-limited)
+
+This knowledge helps the AI understand what's available in your world when planning wish execution.
+
+### Cinematic Presentation / 影视化呈现
+
+Wishes unfold through a cinematic sequence: screen filters, music states, processing hints, and
+reveal animations. The trade/unboxing experience mirrors the wonder of making a wish.
+
+---
+
+## Requirements / 运行要求
+
+| Requirement | Version |
+|---|---|
+| Minecraft | 1.20.1 |
+| Forge | 47.4.22 (or compatible 47.x) |
+| Java | 17 |
+| GeckoLib | 4.8.4 (Required — install separately) |
+
+**Required dependencies** (must be installed by the player):
+- [GeckoLib](https://www.curseforge.com/minecraft/mc-mods/geckolib) 4.8.4
+
+**Bundled** (shipped inside the mod JAR):
+- Jsoup (HTML parsing, web research)
+- LangChain4j (agent orchestration)
+- Jackson (JSON processing)
+- Apache OpenNLP (text analysis)
+
+---
+
+## Installation / 安装
+
+1. Install Minecraft Forge 1.20.1.
+2. Install GeckoLib 4.8.4 into your `mods` folder.
+3. Place the Wishing Willow JAR into `mods`.
+4. Launch the game.
+5. Open the Wishing Willow Settings screen and configure your AI provider.
+6. **Never share your API key with anyone.**
+
+---
+
+## AI Configuration / AI 配置
+
+Wishing Willow uses an **OpenAI-compatible API** that you provide. No free AI service is bundled.
+
+Supported provider presets:
+- **DeepSeek** — `api.deepseek.com`
+- **Ollama** — local models
+- **LM Studio** — local models
+- **Custom** — any OpenAI-compatible endpoint
+
+To configure: open the Wishing Willow Settings screen, select your provider, enter your API key
+and model name, then test the connection.
+
+---
+
+## Privacy / 隐私安全
+
+- Your API key is stored **locally** in `.minecraft/config/wishing_willow/ai-client.json`.
+- The key is **never** sent through Minecraft networking.
+- The key is **not** written to world saves or server data.
+- Do **not** upload your config files or include your API key in bug reports.
+- Research features only send **public** mod metadata. No world seeds, chat, player identifiers,
+  or save data are transmitted.
+
+For detailed technical documentation, see [`docs/`](docs/).
+
+---
+
+## ⚠ Important Warning / 重要提醒
+
+This mod allows an AI to:
+
+- Modify the world
+- Spawn entities
+- Give items
+- Change player state
+- Establish persistent rules
+
+**Back up your world before using extreme wishes.** Some absurd realizations may spawn many entities,
+modify blocks, or create lasting world rules. The mod includes execution budgets and safety limits,
+but AI is not perfectly predictable.
+
+---
+
+## Commands / 命令
+
+All commands use the `/wishingwillow` prefix:
+
+| Command | Permission | Description |
+|---|---|---|
+| `/wishingwillow agent latest` | Player | Inspect the latest AI agent iteration and tool state |
+| `/wishingwillow program latest` | Player | Inspect the latest Wish Program (interpretation through execution) |
+| `/wishingwillow action latest` | Player | Inspect the latest action step |
+| `/wishingwillow wish latest` | Player | Inspect latest wish pipeline state (interpretation → plan → execution) |
+| `/wishingwillow execution latest` | Player | Inspect latest execution record |
+| `/wishingwillow pipeline inspect <session>` | OP 2 | Full pipeline inspection by session UUID |
+| `/wishingwillow execution list` | OP 2 | List all active executions |
+| `/wishingwillow execution info <id>` | OP 2 | Execution detail by ID |
+| `/wishingwillow execution cancel <id>` | OP 2 | Cancel an execution |
+| `/wishingwillow execution dryrun <planId>` | OP 2 | Validate a plan without executing |
+| `/wishingwillow execution trigger <id> <step>` | Dev only | Debug step trigger (non-production) |
+
+No command prints API keys, authorization headers, or full AI configuration.
+
+---
+
+## Known Limitations / 已知限制
+
+- AI understanding quality depends on your chosen model.
+- Highly complex wishes may only be partially realizable.
+- Infinite-scale world modifications are limited by performance protections.
+- Cross-mod compatibility depends on the target mod's registry and behavior.
+- AI responses take time — a wish may take seconds to minutes depending on complexity.
+- Absurd realizations are creative but not always reversible.
+
+---
+
+## Reporting Bugs / 提交 Bug
+
+Please [open a GitHub Issue](https://github.com/ikunkk02-afk/Wishing-Willow/issues).
+
+Include at minimum:
+
+- Minecraft version
+- Forge version
+- Wishing Willow version
+- AI provider and model
+- The exact wish text
+- `latest.log` / `debug.log`
+- List of installed mods
+- Steps to reproduce
+
+⚠ **Before uploading logs: check for private information. Never include your API key.**
+
+---
+
+## License / 许可证
+
+MIT. See [`LICENSE`](LICENSE).
