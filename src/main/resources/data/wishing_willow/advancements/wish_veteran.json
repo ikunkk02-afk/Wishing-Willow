@@ -1,0 +1,28 @@
+{
+  "parent": "wishing_willow:greedy",
+  "display": {
+    "icon": {
+      "item": "wishing_willow:wishing_willow"
+    },
+    "title": {
+      "translate": "advancement.wishing_willow.wish_veteran.title"
+    },
+    "description": {
+      "translate": "advancement.wishing_willow.wish_veteran.description"
+    },
+    "frame": "challenge",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "server_granted": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "requirements": [
+    [
+      "server_granted"
+    ]
+  ]
+}

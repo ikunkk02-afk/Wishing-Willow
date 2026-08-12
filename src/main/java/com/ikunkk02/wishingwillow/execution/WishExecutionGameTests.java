@@ -14,6 +14,8 @@ import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
 import com.ikunkk02.wishingwillow.ai.AiExecutionMode;
 import com.ikunkk02.wishingwillow.ai.AiProviderType;
+import com.ikunkk02.wishingwillow.advancement.WishAdvancementManager;
+import com.ikunkk02.wishingwillow.advancement.WishAdvancementProgress;
 import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
 import com.ikunkk02.wishingwillow.execution.action.WishExecutionContext;
 import com.ikunkk02.wishingwillow.contract.*;
@@ -541,6 +543,60 @@ public final class WishExecutionGameTests {
             }
             helper.succeed();
         });
+    }
+
+    /** Server-authoritative advancement progress is owner-scoped and session-idempotent. */
+    @GameTest(template="empty",templateNamespace="minecraft",batch="wishAdvancement",timeoutTicks=360)
+    public static void wishAdvancementsUseExecutedProgramAndOwnerOnly(GameTestHelper helper){
+        MinecraftServer server=helper.getLevel().getServer();
+        UUID owner=UUID.randomUUID(),other=UUID.randomUUID(),session=UUID.randomUUID();
+        ServerPlayer player=ownerPlayer(helper,owner),bystander=ownerPlayer(helper,other);
+        place(player,helper.absolutePos(new BlockPos(1,2,1)));
+        place(bystander,helper.absolutePos(new BlockPos(2,2,1)));
+        registerPlayer(server,player);registerPlayer(server,bystander);
+        WishAdvancementManager.onWishSubmitted(player,session);
+        WishAdvancementManager.onWishSubmitted(player,session);
+        WishProgram program=WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"a lasting absurd gift","core_actions":[
+                 {"action":"entity_attraction_aura","parameters":{"radius":8,"strength":0.1,
+                  "permanent":true,"include_hostile":false,"include_passive":true,
+                  "include_villagers":false,"include_modded":false}}],
+                 "presentation_actions":[],"skill":"absurd_wish_realization","unknown_capability":""}""");
+        WishInterpretation interpretation=new WishInterpretation(2,"persistent_absurd","A lasting aura",
+                WishContract.legacy("A lasting aura"),new WishFulfillment(WishFulfillmentMode.ABSURD,
+                "A permanent attraction aura",List.of(FulfillmentStyle.IRONIC),75),"GameTest",
+                WishTone.ABSURD,75,WishDelivery.IMMEDIATE,List.of(WishCapability.WORLD_EVENT));
+        WishRecord wish=new WishRecord(session,owner,"给我一个荒诞的永久愿望",helper.getLevel().dimension().location(),
+                helper.getLevel().getGameTime(),System.currentTimeMillis(),WishState.FINISHED,
+                InterpretationState.SUCCESS,AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,
+                AiProviderType.CUSTOM,"gametest",System.currentTimeMillis(),interpretation).withProgram(program);
+        WishSavedData.get(server).update(wish);
+        ValidatedWishProgram validated=WishProgramValidator.validate(program,new ForgeWishProgramResourceResolver(server));
+        WishExecutionAcceptResult accepted=WishActionManager.startProgram(player,wish,validated);
+        if(!accepted.accepted()){unregisterPlayer(server,bystander);unregisterPlayer(server,player);helper.fail("Advancement program rejected");return;}
+        helper.runAfterDelay(220,()->{
+            WishAdvancementProgress ownerProgress=WishAdvancementManager.progress(server,owner);
+            WishAdvancementProgress otherProgress=WishAdvancementManager.progress(server,other);
+            boolean first=complete(player,WishAdvancementManager.FIRST_WISH);
+            boolean realized=complete(player,WishAdvancementManager.WISH_COME_TRUE);
+            boolean absurd=complete(player,WishAdvancementManager.ABSURD);
+            boolean persistent=complete(player,WishAdvancementManager.PERSISTENT);
+            boolean isolated=!complete(bystander,WishAdvancementManager.FIRST_WISH)
+                    &&otherProgress.totalWishesSubmitted()==0&&otherProgress.successfulWishes()==0;
+            boolean counts=ownerProgress.totalWishesSubmitted()==1&&ownerProgress.successfulWishes()==1
+                    &&ownerProgress.absurdWishes()==1&&ownerProgress.persistentWishes()==1;
+            unregisterPlayer(server,bystander);unregisterPlayer(server,player);
+            if(!(first&&realized&&absurd&&persistent&&isolated&&counts)){
+                helper.fail("Advancement state mismatch first="+first+" realized="+realized+" absurd="+absurd
+                        +" persistent="+persistent+" isolated="+isolated+" counts="+counts);return;
+            }
+            helper.succeed();
+        });
+    }
+
+    private static boolean complete(ServerPlayer player,ResourceLocation id){
+        var advancement=player.server.getAdvancements().getAdvancement(id);
+        return advancement!=null&&player.getAdvancements().getOrStartProgress(advancement).isDone();
     }
 
     private static void registerPlayer(MinecraftServer server,ServerPlayer player){

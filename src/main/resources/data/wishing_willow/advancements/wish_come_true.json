@@ -1,0 +1,28 @@
+{
+  "parent": "wishing_willow:first_wish",
+  "display": {
+    "icon": {
+      "item": "wishing_willow:wishing_willow"
+    },
+    "title": {
+      "translate": "advancement.wishing_willow.wish_come_true.title"
+    },
+    "description": {
+      "translate": "advancement.wishing_willow.wish_come_true.description"
+    },
+    "frame": "task",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "server_granted": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "requirements": [
+    [
+      "server_granted"
+    ]
+  ]
+}

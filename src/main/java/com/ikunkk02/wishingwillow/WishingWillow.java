@@ -43,6 +43,7 @@ public final class WishingWillow {
         WishManager.register();
         UnboxingManager.register();
         WishExecutionManager.register();
+        com.ikunkk02.wishingwillow.advancement.WishAdvancementManager.register();
         com.ikunkk02.wishingwillow.execution.WishEntitySuppressionSavedData.register();
         com.ikunkk02.wishingwillow.wish.WishPipelineConsistencyChecker.register();
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, WishExecutionConfig.SPEC,

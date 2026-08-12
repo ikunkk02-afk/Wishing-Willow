@@ -1,0 +1,28 @@
+{
+  "parent": "wishing_willow:dreamer",
+  "display": {
+    "icon": {
+      "item": "wishing_willow:wishing_willow"
+    },
+    "title": {
+      "translate": "advancement.wishing_willow.greedy.title"
+    },
+    "description": {
+      "translate": "advancement.wishing_willow.greedy.description"
+    },
+    "frame": "goal",
+    "show_toast": true,
+    "announce_to_chat": true,
+    "hidden": false
+  },
+  "criteria": {
+    "server_granted": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "requirements": [
+    [
+      "server_granted"
+    ]
+  ]
+}

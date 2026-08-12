@@ -169,6 +169,8 @@ public final class WishManager {
         WishingWillow.LOGGER.info("Wish received session={} player={}", session.sessionId(), playerId);
         WishLifecycleLog.event(session.sessionId(), "WISH_RECEIVED", "player=" + playerId);
         WishLifecycleLog.event(session.sessionId(), "SESSION_CREATED", "owner=" + playerId);
+        com.ikunkk02.wishingwillow.advancement.WishAdvancementManager.onWishSubmitted(
+                player, session.sessionId());
 
         session.transitionTo(WishState.ANIMATING, gameTime);
         persist(player.server, session);
