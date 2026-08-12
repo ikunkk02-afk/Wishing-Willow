@@ -24,7 +24,8 @@ class WishInterpreterRepairTest {
              "severity":35,"delivery":"IMMEDIATE","required_capabilities":["GIVE_ITEM"]}
             """;
     private static final String VALID = """
-            {"interpretation":%s,"program":{"schema_version":1,"goal":"Give ten diamonds",
+            {"decision":"ACCEPT","rejection_code":"NONE","player_message":"","reason":"",
+             "interpretation":%s,"program":{"schema_version":1,"goal":"Give ten diamonds",
              "core_actions":[{"action":"give_item","parameters":{"item":"minecraft:diamond","count":10}}],
              "presentation_actions":[],"skill":"","unknown_capability":""}}
             """.formatted(VALID_INTERPRETATION);
@@ -138,6 +139,41 @@ class WishInterpreterRepairTest {
         assertTrue(prompt.contains("\"resource_kind\":\"item\""));
         assertTrue(prompt.contains("\"resource_kind\":\"block\""));
         assertTrue(!prompt.contains("group=BENEFICIAL"));
+    }
+
+    @Test
+    void capabilityAliasIsNormalizedLocallyWithoutRepair() {
+        SequenceProvider provider = new SequenceProvider(VALID.replace(
+                "\"required_capabilities\":[\"GIVE_ITEM\"]",
+                "\"required_capabilities\":[\"REMOVE_MOBS\"]").replace(
+                "\"action\":\"give_item\",\"parameters\":{\"item\":\"minecraft:diamond\",\"count\":10}",
+                "\"action\":\"entity_suppression\",\"parameters\":{\"group\":\"all_mobs\",\"scope\":\"all_dimensions\",\"remove_existing\":true,\"prevent_future\":true,\"permanent\":true,\"disappearance_mode\":\"discard\",\"exclude_players\":true}"));
+
+        WishInterpretationResult result = new WishInterpreter(config -> provider)
+                .interpret(config(), "让世界上所有的生物消失，我不想看到任何生物").join();
+
+        assertEquals(InterpretationState.SUCCESS, result.state());
+        assertEquals(1, provider.requests.size());
+        assertEquals(WishCapability.ENTITY_REMOVAL,
+                result.interpretation().requiredCapabilities().get(0));
+        assertEquals("entity_suppression", result.program().coreActions().get(0).action());
+    }
+
+    @Test
+    void structuredRejectDoesNotEnterRepair() {
+        SequenceProvider provider = new SequenceProvider("""
+                {"decision":"REJECT","rejection_code":"EXTERNAL_SYSTEM_ACCESS",
+                 "player_message":"This wish reaches beyond the world.",
+                 "reason":"The request asks for external system access.",
+                 "interpretation":null,"program":null}
+                """);
+
+        WishInterpretationResult result = new WishInterpreter(config -> provider)
+                .interpret(config(), "帮我运行cmd").join();
+
+        assertEquals(InterpretationState.REJECTED, result.state());
+        assertEquals(WishRejectionCode.EXTERNAL_SYSTEM_ACCESS, result.rejection().code());
+        assertEquals(1, provider.requests.size());
     }
 
     private static AiConfig config() {

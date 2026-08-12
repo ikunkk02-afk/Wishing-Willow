@@ -191,7 +191,8 @@ public final class WishExecutionGameTests {
                 System.currentTimeMillis(),interpretation).withProgram(program);
         WishSavedData.get(server).update(wish);
         ValidatedWishProgram validated=WishProgramValidator.validate(program,new ForgeWishProgramResourceResolver(server));
-        WishExecutionAcceptResult accepted=WishActionManager.startProgram(ownerPlayer(helper,owner),wish,validated);
+        ServerPlayer ownerPlayer=ownerPlayer(helper,owner); registerPlayer(server,ownerPlayer);
+        WishExecutionAcceptResult accepted=WishActionManager.startProgram(ownerPlayer,wish,validated);
         if(!accepted.accepted()){helper.fail("Program start failed: "+accepted.error()+" "+accepted.detail());return;}
         helper.runAfterDelay(260,()->{
             WishRecord stored=WishSavedData.get(server).getBySession(session);

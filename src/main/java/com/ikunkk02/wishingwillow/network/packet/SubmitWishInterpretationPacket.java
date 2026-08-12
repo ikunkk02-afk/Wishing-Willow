@@ -4,6 +4,8 @@ import com.ikunkk02.wishingwillow.ai.AiErrorCategory;
 import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishInterpretationValidator;
+import com.ikunkk02.wishingwillow.ai.WishRejection;
+import com.ikunkk02.wishingwillow.ai.WishRejectionCode;
 import com.ikunkk02.wishingwillow.wish.WishManager;
 import com.ikunkk02.wishingwillow.program.WishProgram;
 import com.ikunkk02.wishingwillow.program.WishProgramJson;
@@ -20,12 +22,20 @@ public record SubmitWishInterpretationPacket(
         InterpretationState state,
         AiErrorCategory errorCategory,
         @Nullable WishInterpretation interpretation,
-        @Nullable WishProgram program
+        @Nullable WishProgram program,
+        @Nullable WishRejection rejection
 ) {
     public SubmitWishInterpretationPacket(UUID sessionId, InterpretationState state,
                                           AiErrorCategory errorCategory,
                                           @Nullable WishInterpretation interpretation) {
-        this(sessionId, state, errorCategory, interpretation, null);
+        this(sessionId, state, errorCategory, interpretation, null, null);
+    }
+
+    public SubmitWishInterpretationPacket(UUID sessionId, InterpretationState state,
+                                          AiErrorCategory errorCategory,
+                                          @Nullable WishInterpretation interpretation,
+                                          @Nullable WishProgram program) {
+        this(sessionId, state, errorCategory, interpretation, program, null);
     }
     public static void encode(SubmitWishInterpretationPacket packet, FriendlyByteBuf buffer) {
         buffer.writeUUID(packet.sessionId);
@@ -37,6 +47,12 @@ public record SubmitWishInterpretationPacket(
         }
         buffer.writeBoolean(packet.program != null);
         if (packet.program != null) buffer.writeUtf(WishProgramJson.toJson(packet.program), WishProgramJson.MAX_JSON);
+        buffer.writeBoolean(packet.rejection != null);
+        if (packet.rejection != null) {
+            buffer.writeEnum(packet.rejection.code());
+            buffer.writeUtf(packet.rejection.playerMessage(), WishRejection.MAX_PLAYER_MESSAGE_LENGTH);
+            buffer.writeUtf(packet.rejection.reason(), WishRejection.MAX_REASON_LENGTH);
+        }
     }
 
     public static SubmitWishInterpretationPacket decode(FriendlyByteBuf buffer) {
@@ -49,7 +65,11 @@ public record SubmitWishInterpretationPacket(
         }
         WishProgram program = buffer.readBoolean()
                 ? WishProgramJson.parseAndValidate(buffer.readUtf(WishProgramJson.MAX_JSON)) : null;
-        return new SubmitWishInterpretationPacket(sessionId, state, errorCategory, interpretation, program);
+        WishRejection rejection = buffer.readBoolean()
+                ? WishRejection.sanitized(buffer.readEnum(WishRejectionCode.class),
+                buffer.readUtf(WishRejection.MAX_PLAYER_MESSAGE_LENGTH),
+                buffer.readUtf(WishRejection.MAX_REASON_LENGTH)) : null;
+        return new SubmitWishInterpretationPacket(sessionId, state, errorCategory, interpretation, program, rejection);
     }
 
     public static void handle(
@@ -64,7 +84,8 @@ public record SubmitWishInterpretationPacket(
                     packet.state,
                     packet.errorCategory,
                     packet.interpretation,
-                    packet.program
+                    packet.program,
+                    packet.rejection
             );
         }
     }

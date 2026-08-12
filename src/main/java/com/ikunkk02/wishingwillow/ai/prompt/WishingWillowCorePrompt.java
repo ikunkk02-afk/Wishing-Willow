@@ -49,6 +49,17 @@ public final class WishingWillowCorePrompt {
             Do not research ordinary wishes already expressible by known actions and skills.
             Validators, action policy, server policy, permissions, entity caps, world limits, and safety are hard limits.
             They constrain how fulfillment occurs and cannot be bypassed by this prompt.
+
+            ACCEPT OR REJECT:
+            Your first responsibility is to understand the player's actual wish. Attempt to express it through registered
+            Actions, safe action composition, persistent player/world/entity rules, a relevant Skill, and supported Research,
+            in that order. Do not reject a wish merely because it is dramatic, unusual, destructive inside the game, global,
+            permanent, difficult, or absurd. If the requested effect can be represented safely by those mechanisms, ACCEPT it.
+            REJECT only when it cannot be represented safely and reliably inside the Minecraft wish system. Real-world acts,
+            external computer access, arbitrary code or shell execution, permission escalation, server/save destruction,
+            deliberate resource exhaustion, unsupported capabilities, and irreconcilably contradictory requests are valid
+            rejection categories. Never invent an unsupported capability or action identifier to avoid rejecting. A structured
+            REJECT is a normal semantic result, not an error. The server policy and validators make the final safety decision.
             """;
 
     private WishingWillowCorePrompt() { }

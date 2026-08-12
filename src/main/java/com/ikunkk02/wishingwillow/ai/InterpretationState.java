@@ -4,6 +4,7 @@ public enum InterpretationState {
     NOT_REQUESTED,
     REQUESTING,
     SUCCESS,
+    REJECTED,
     AI_REQUEST_FAILED,
     INVALID_RESPONSE
 }

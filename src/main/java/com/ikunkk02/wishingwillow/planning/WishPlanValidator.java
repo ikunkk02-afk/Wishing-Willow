@@ -239,9 +239,7 @@ public final class WishPlanValidator {
                     WishCapability.FRIENDLY_ENTITY, WishCapability.STALKING_ENTITY,
                     WishCapability.PERSISTENT_FOLLOWER, WishCapability.MIMIC_ENTITY,
                     WishCapability.POWERFUL_ENEMY, WishCapability.ENTITY_RECREATION).contains(capability);
-            case DESPAWN_ENTITY -> Set.of(WishCapability.SPAWN_ENTITY, WishCapability.HOSTILE_ENTITY,
-                    WishCapability.FRIENDLY_ENTITY, WishCapability.STALKING_ENTITY,
-                    WishCapability.PERSISTENT_FOLLOWER, WishCapability.MIMIC_ENTITY).contains(capability);
+            case DESPAWN_ENTITY, ENTITY_SUPPRESSION -> capability == WishCapability.ENTITY_REMOVAL;
             case APPLY_EFFECT, APPLY_EFFECT_CATEGORY -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
                     WishCapability.HEALING, WishCapability.DAMAGE, WishCapability.DARKNESS,
                     WishCapability.IMMORTALITY).contains(capability);

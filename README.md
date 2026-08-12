@@ -51,6 +51,21 @@ The normalizer repairs safe issues locally (for example numeric clamping, type c
 missing defaults, and harmless unknown fields). Unsafe or ambiguous cases still reject, and the final server executor
 continues to enforce world, registry, permission, and budget limits.
 
+The understanding envelope now has an explicit `decision`: `ACCEPT` carries an interpretation and executable program;
+`REJECT` carries a bounded rejection code/message and no actions. Capability values come from the Java enum, with a
+small whitelist of aliases (including entity-removal synonyms) normalized before strict validation. The server policy
+remains authoritative and can reject an AI-accepted program that violates resource or safety limits.
+
+`ENTITY_REMOVAL` is independent from spawning. `remove_entity` performs bounded nearby type removal, while
+`entity_suppression` stores a persistent world rule for mob groups. Suppression scans only entities in already-loaded
+levels and intercepts future entity joins; it never generates, force-loads, or scans unloaded chunks/dimensions. Players,
+items, projectiles, vehicles, and other non-`Mob` entities are excluded by the server implementation.
+
+The consumed willow is recorded as an exact count-one `ItemStack` receipt keyed by wish session. Before any core world
+side effect, AI/network/validation/planning/policy rejection requests an idempotent refund. Offline refunds persist until
+login; online delivery tries inventory first and drops the unchanged remainder at the player. Once a successful core
+action reports an affected world object, the payment is committed and no automatic refund is allowed.
+
 ## Wish planning diagnostics
 
 Agent tool planning is an optional enhancement over the compatibility JSON planner. Unknown or unsupported tool-call

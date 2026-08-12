@@ -6,6 +6,7 @@ public enum WishSessionTerminationReason {
     EXECUTION_COMPLETE,
     EXECUTION_FAILED,
     AI_FAILED,
+    WISH_REJECTED,
     PLANNING_FAILED,
     PROGRAM_REJECTED,
     SERVER_REJECTED,

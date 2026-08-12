@@ -84,7 +84,7 @@ public final class WishInterpretationValidator {
         int severity = exactInteger(object, "severity");
         if (severity < 0 || severity > 100) throw invalid("SEVERITY_RANGE");
         WishDelivery delivery = enumValue(object, "delivery", WishDelivery.class);
-        List<WishCapability> capabilities = enumList(exactArray(object, "required_capabilities", 1, MAX_CAPABILITIES), WishCapability.class);
+        List<WishCapability> capabilities = capabilityList(exactArray(object, "required_capabilities", 1, MAX_CAPABILITIES));
         WishRefusalGuard.requireAllowed(literal, requiredOutcome, method, reasoning);
         return new WishInterpretation(schema, intent, literal, contract, fulfillment, reasoning, tone, severity, delivery, capabilities);
     }
@@ -188,7 +188,8 @@ public final class WishInterpretationValidator {
         enumSchema(fulfillment.getAsJsonObject("styles").getAsJsonObject("items"), FulfillmentStyle.values());
         enumSchema(properties.getAsJsonObject("tone"), WishTone.values());
         enumSchema(properties.getAsJsonObject("delivery"), WishDelivery.values());
-        enumSchema(properties.getAsJsonObject("required_capabilities").getAsJsonObject("items"), WishCapability.values());
+        stringEnumSchema(properties.getAsJsonObject("required_capabilities").getAsJsonObject("items"),
+                WishCapabilityNormalizer.allowedValues());
         return root;
     }
 
@@ -212,6 +213,19 @@ public final class WishInterpretationValidator {
             if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) throw invalid("ENUM_TYPE");
             final E parsed; try { parsed = Enum.valueOf(type, value.getAsString()); } catch (IllegalArgumentException e) { throw invalid("ENUM_VALUE_" + type.getSimpleName()); }
             if (!seen.add(parsed)) throw invalid("DUPLICATE_ENUM_" + type.getSimpleName()); result.add(parsed);
+        }
+        return result;
+    }
+
+    private static List<WishCapability> capabilityList(JsonArray array) {
+        List<WishCapability> result = new ArrayList<>(); Set<WishCapability> seen = new HashSet<>();
+        for (JsonElement value : array) {
+            if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) throw invalid("ENUM_TYPE");
+            final WishCapability parsed;
+            try { parsed = WishCapabilityNormalizer.normalize(value.getAsString()); }
+            catch (IllegalArgumentException error) { throw invalid("ENUM_VALUE_WishCapability"); }
+            if (!seen.add(parsed)) throw invalid("DUPLICATE_ENUM_WishCapability");
+            result.add(parsed);
         }
         return result;
     }
@@ -255,6 +269,9 @@ public final class WishInterpretationValidator {
     }
     private static void enumSchema(JsonObject schema, Enum<?>[] values) {
         JsonArray enums = new JsonArray(); for (Enum<?> value : values) enums.add(value.name()); schema.add("enum", enums);
+    }
+    private static void stringEnumSchema(JsonObject schema, Set<String> values) {
+        JsonArray enums = new JsonArray(); values.forEach(enums::add); schema.add("enum", enums);
     }
     private static JsonElement parseStrict(String json) {
         try { JsonReader reader = new JsonReader(new StringReader(json)); reader.setLenient(false); JsonElement result = Streams.parse(reader);

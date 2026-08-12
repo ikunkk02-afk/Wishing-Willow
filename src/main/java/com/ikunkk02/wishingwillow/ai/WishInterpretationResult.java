@@ -8,23 +8,29 @@ public record WishInterpretationResult(
         AiErrorCategory errorCategory,
         int httpStatus,
         @Nullable WishInterpretation interpretation,
-        @Nullable WishProgram program
+        @Nullable WishProgram program,
+        @Nullable WishRejection rejection
 ) {
     public WishInterpretationResult(InterpretationState state, AiErrorCategory errorCategory,
                                     int httpStatus, @Nullable WishInterpretation interpretation) {
-        this(state, errorCategory, httpStatus, interpretation, null);
+        this(state, errorCategory, httpStatus, interpretation, null, null);
     }
 
     public static WishInterpretationResult success(WishInterpretation interpretation) {
-        return new WishInterpretationResult(InterpretationState.SUCCESS, AiErrorCategory.NONE, 200, interpretation, null);
+        return new WishInterpretationResult(InterpretationState.SUCCESS, AiErrorCategory.NONE, 200, interpretation, null, null);
     }
 
     public static WishInterpretationResult success(WishInterpretation interpretation, WishProgram program) {
-        return new WishInterpretationResult(InterpretationState.SUCCESS, AiErrorCategory.NONE, 200, interpretation, program);
+        return new WishInterpretationResult(InterpretationState.SUCCESS, AiErrorCategory.NONE, 200, interpretation, program, null);
+    }
+
+    public static WishInterpretationResult rejected(WishRejection rejection) {
+        return new WishInterpretationResult(InterpretationState.REJECTED, AiErrorCategory.NONE, 200,
+                null, null, rejection);
     }
 
     public static WishInterpretationResult requestFailure(AiErrorCategory category, int status) {
-        return new WishInterpretationResult(InterpretationState.AI_REQUEST_FAILED, category, status, null, null);
+        return new WishInterpretationResult(InterpretationState.AI_REQUEST_FAILED, category, status, null, null, null);
     }
 
     public static WishInterpretationResult invalidResponse() {
@@ -32,6 +38,7 @@ public record WishInterpretationResult(
                 InterpretationState.INVALID_RESPONSE,
                 AiErrorCategory.MALFORMED_RESPONSE,
                 200,
+                null,
                 null,
                 null
         );

@@ -52,7 +52,8 @@ public final class WishProgramExecutor {
     private static final Set<String> LOGIC_ACTIONS = Set.of(
             "spawn_entity", "follow_player", "avoid_player", "set_entity_target",
             "give_item", "apply_effect", "teleport_player", "modify_attribute",
-            "change_ai", "set_world_time", "set_weather", "entity_attraction_aura");
+            "change_ai", "set_world_time", "set_weather", "entity_attraction_aura", "entity_suppression",
+            "remove_entity");
     /** Actions that benefit from cinematic pacing (presentation). */
     private static final Set<String> PRESENTATION_ACTIONS = Set.of(
             "play_sound", "spawn_particle", "camera_effect", "screen_effect",
@@ -197,6 +198,11 @@ public final class WishProgramExecutor {
         WishPipelineProbe.actionExecution();
         step.result(result);
         if (result.successful()) {
+            if (result.affected() > 0 && stepIndex < record.coreActionCount()
+                    && com.ikunkk02.wishingwillow.payment.WishPaymentManager.get(server)
+                    .markSideEffects(record.wishSessionId())) {
+                WishingWillow.LOGGER.info("Wish side effects started session={}", record.wishSessionId());
+            }
             step.transition(WishStepExecutionState.SUCCEEDED, now);
         } else if (result.status() == WishActionResult.Status.RETRY) {
             boolean batchContinuation = result.shouldRetryNextTick();

@@ -80,8 +80,9 @@ public final class WishInterpreter {
                 }
                 WishUnderstandingJson.Understanding understanding = WishUnderstandingJson.parse(
                         response.assistantContent(), sessionId);
-                return CompletableFuture.completedFuture(WishInterpretationResult.success(
-                        understanding.interpretation(), understanding.program()));
+                return CompletableFuture.completedFuture(understanding.accepted()
+                        ? WishInterpretationResult.success(understanding.interpretation(), understanding.program())
+                        : WishInterpretationResult.rejected(understanding.rejection()));
             } catch (IllegalArgumentException exception) {
                 LOGGER.info("AI interpretation repair started cause=SCHEMA_VALIDATION detail={} attempt=2",
                         validationDetail(exception));
@@ -131,8 +132,9 @@ public final class WishInterpreter {
                 }
                 WishUnderstandingJson.Understanding understanding = WishUnderstandingJson.parse(
                         response.assistantContent(), sessionId);
-                return CompletableFuture.completedFuture(WishInterpretationResult.success(
-                        understanding.interpretation(), understanding.program()));
+                return CompletableFuture.completedFuture(understanding.accepted()
+                        ? WishInterpretationResult.success(understanding.interpretation(), understanding.program())
+                        : WishInterpretationResult.rejected(understanding.rejection()));
             } catch (IllegalArgumentException exception) {
                 if (attempt < MAX_ATTEMPTS) {
                     LOGGER.info("AI interpretation repair retry cause=SCHEMA_VALIDATION detail={} attempt={}",
@@ -173,7 +175,11 @@ public final class WishInterpreter {
                 + (kind == WishingWillowPromptAssembler.RequestKind.REPAIR
                 ? "You are repairing one previous invalid response. Preserve the same wish semantics and replace invalid fields with schema-valid values.\n" : "")
                 + "This is the only normal AI call. Choose executable primitive actions now; do not describe a later plan.\n"
-                + "Return exactly {interpretation:{...},program:{schema_version,goal,core_actions,presentation_actions,skill,unknown_capability}}.\n"
+                + "Return exactly {decision,rejection_code,player_message,reason,interpretation,program}.\n"
+                + "For ACCEPT set rejection_code=NONE, player_message and reason empty, and provide interpretation plus program.\n"
+                + "For REJECT set interpretation=null and program=null, and return a listed rejection_code with a brief player-safe message and reason.\n"
+                + "First try registered actions, compositions, persistent rules, skills, then supported research. Do not reject merely because a wish is dramatic, global, permanent, destructive in-game, unusual, or difficult.\n"
+                + "Reject only when the request cannot be represented safely and reliably inside Minecraft. Never invent an action or capability to avoid rejection.\n"
                 + "All required outcomes belong in core_actions. Optional spectacle belongs in presentation_actions.\n"
                 + "Known primitive -> use it directly. Multiple primitives -> compose them. Known reusable skill -> set skill and include its primitive composition.\n"
                 + "Only when no action or skill can express a genuinely mod-specific capability: leave both action arrays empty and set unknown_capability.\n"
@@ -214,6 +220,8 @@ public final class WishInterpreter {
                     InterpretationState.INVALID_RESPONSE,
                     failure.category(),
                     failure.httpStatus(),
+                    null,
+                    null,
                     null
             );
         }

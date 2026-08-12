@@ -17,7 +17,9 @@ public final class WishingWillowPrompt {
             You are the Wishing Willow inside a fictional Minecraft world.
 
             THE WISH IS SACRED. THE FULFILLMENT METHOD IS NOT.
-            The player's requested core outcome is mandatory. Never punish the player by failing to grant it.
+            For an accepted in-game wish, the player's requested core outcome is mandatory. Never punish the player by
+            pretending to grant it with unrelated actions. If no safe and reliable Minecraft representation exists, use the
+            structured REJECT protocol instead of fabricating actions or capabilities.
             First make the structured Wish Contract completely true. Then choose an absurd, literal, inconvenient,
             ironic, frightening, or dangerous legal method of making it true. Harm and inconvenience may be consequences
             of fulfillment, but never substitutes for fulfillment. A malicious result that fails the contract is invalid.
@@ -65,7 +67,11 @@ public final class WishingWillowPrompt {
               "tone":"ABSURD","severity":62,"delivery":"IMMEDIATE","required_capabilities":["BLOCK_CHANGE"]
             }
             """ + "\nAllowed capability labels:\n" + Arrays.stream(WishCapability.values())
-            .map(Enum::name).collect(Collectors.joining("\n"));
+            .map(Enum::name).collect(Collectors.joining("\n"))
+            + "\nAllowed capability aliases (normalized before validation):\n"
+            + com.ikunkk02.wishingwillow.ai.WishCapabilityNormalizer.aliases().entrySet().stream()
+            .map(entry -> entry.getKey() + " -> " + entry.getValue().name())
+            .collect(Collectors.joining("\n"));
 
     private WishingWillowPrompt() {}
 
@@ -101,6 +107,10 @@ public final class WishingWillowPrompt {
         if (issue.allowedMax() != null) details.add("allowed_max", issue.allowedMax());
         if (!issue.detail().isBlank()) details.addProperty("detail", issue.detail());
         details.addProperty("candidate", candidate);
+        details.add("legal_capabilities", GSON.toJsonTree(
+                Arrays.stream(WishCapability.values()).map(Enum::name).toList()));
+        details.add("capability_aliases", GSON.toJsonTree(
+                com.ikunkk02.wishingwillow.ai.WishCapabilityNormalizer.aliases()));
         return untrustedWishMessage(wish, mode) + "\n<UNTRUSTED_INVALID_INTERPRETATION_JSON>\n"
                 + GSON.toJson(details)
                 + "\n</UNTRUSTED_INVALID_INTERPRETATION_JSON>";

@@ -214,11 +214,14 @@ public final class ClientAiWishCoordinator {
                 result.state() == InterpretationState.SUCCESS ? "success" : "failure");
 
         ModNetworking.sendToServer(new SubmitWishInterpretationPacket(completed.sessionId(),
-                result.state(), result.errorCategory(), result.interpretation(), result.program()));
+                result.state(), result.errorCategory(), result.interpretation(), result.program(), result.rejection()));
         if (result.state() == InterpretationState.SUCCESS) {
             session.transition(WishPipelineState.INTERPRETATION_SENT, System.currentTimeMillis());
             WishLifecycleLog.event(completed.sessionId(), "INTERPRETATION_COMPLETED",
                     "status=SUCCESS submittedTo=SERVER");
+        } else if (result.state() == InterpretationState.REJECTED) {
+            terminateSession(completed.sessionId(), WishSessionTerminationReason.WISH_REJECTED,
+                    "code=" + result.rejection().code());
         } else {
             terminateSession(completed.sessionId(), WishSessionTerminationReason.AI_FAILED,
                     "state=" + result.state() + " error=" + result.errorCategory());

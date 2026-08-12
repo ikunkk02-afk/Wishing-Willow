@@ -63,11 +63,12 @@ public final class WishActionPolicy {
             case ITEM_RAIN -> provided == WishCapability.GIVE_ITEM
                     || provided == WishCapability.INVENTORY_CHANGE
                     || provided == WishCapability.WORLD_EVENT;
-            case SPAWN_ENTITY, DESPAWN_ENTITY -> Set.of(WishCapability.SPAWN_ENTITY,
+            case SPAWN_ENTITY -> Set.of(WishCapability.SPAWN_ENTITY,
                     WishCapability.HOSTILE_ENTITY, WishCapability.FRIENDLY_ENTITY,
                     WishCapability.STALKING_ENTITY, WishCapability.PERSISTENT_FOLLOWER,
                     WishCapability.MIMIC_ENTITY, WishCapability.POWERFUL_ENEMY,
                     WishCapability.ENTITY_RECREATION).contains(provided);
+            case DESPAWN_ENTITY, ENTITY_SUPPRESSION -> provided == WishCapability.ENTITY_REMOVAL;
             case APPLY_EFFECT, APPLY_EFFECT_CATEGORY -> Set.of(WishCapability.POWER_BUFF, WishCapability.POWER_DEBUFF,
                     WishCapability.HEALING, WishCapability.DAMAGE, WishCapability.DARKNESS,
                     WishCapability.IMMORTALITY).contains(provided);

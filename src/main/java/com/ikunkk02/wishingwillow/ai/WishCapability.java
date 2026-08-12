@@ -4,6 +4,7 @@ public enum WishCapability {
     GIVE_ITEM,
     REMOVE_ITEM,
     SPAWN_ENTITY,
+    ENTITY_REMOVAL,
     HOSTILE_ENTITY,
     FRIENDLY_ENTITY,
     STALKING_ENTITY,

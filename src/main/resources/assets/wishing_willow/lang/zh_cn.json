@@ -4,6 +4,8 @@
   "screen.wishing_willow.execution.safe_mode_warning_2": "高强度爆炸受到限制；普通愿望不受影响",
   "message.wishing_willow.technical_failure": "许愿过程遇到了技术故障，请检查日志后重试。",
   "message.wishing_willow.planning_failed": "愿望解析成功，但执行规划失败。",
+  "message.wishing_willow.wish_rejected": "✦ 许愿柳沉默了片刻……这个愿望超出了它能够实现的范围。",
+  "message.wishing_willow.wish_refunded": "✦ 愿望没有被接受，许愿柳已将枝条归还给你。",
   "item.wishing_willow.wishing_willow": "一愿柳",
   "item.wishing_willow.packaged_wishing_willow": "未拆封的一愿柳",
   "tooltip.wishing_willow.wishing_willow": "这似乎只是一截普通的柳枝。",

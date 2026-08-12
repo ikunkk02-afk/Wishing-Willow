@@ -23,6 +23,8 @@
   "screen.wishing_willow.confirm.accept": "Confirm",
   "screen.wishing_willow.confirm.back": "Back",
   "message.wishing_willow.heard": "Your wish has been heard.",
+  "message.wishing_willow.wish_rejected": "✦ The Wishing Willow falls silent... This wish is beyond what it can safely realize.",
+  "message.wishing_willow.wish_refunded": "✦ The wish was not accepted. The Wishing Willow has returned your branch.",
   "message.wishing_willow.rejected.empty": "A wish cannot be empty.",
   "message.wishing_willow.rejected.too_long": "That wish is too long.",
   "message.wishing_willow.rejected.invalid_characters": "That wish contains invalid characters.",

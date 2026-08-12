@@ -8,6 +8,9 @@ import com.ikunkk02.wishingwillow.ai.AiProviderType;
 import com.ikunkk02.wishingwillow.ai.InterpretationState;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.ai.WishInterpretationValidator;
+import com.ikunkk02.wishingwillow.ai.WishRejection;
+import com.ikunkk02.wishingwillow.ai.WishDecision;
+import com.ikunkk02.wishingwillow.ai.WishDecisionPolicy;
 import com.ikunkk02.wishingwillow.network.packet.WishPlanningRequestPacket;
 import com.ikunkk02.wishingwillow.planning.CapabilityCatalog;
 import com.ikunkk02.wishingwillow.planning.WishContextCollector;
@@ -38,6 +41,7 @@ import com.ikunkk02.wishingwillow.program.WishProgramJson;
 import com.ikunkk02.wishingwillow.program.WishProgramValidator;
 import com.ikunkk02.wishingwillow.program.ValidatedWishProgram;
 import com.ikunkk02.wishingwillow.registry.ModItems;
+import com.ikunkk02.wishingwillow.payment.WishPaymentManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -200,8 +204,13 @@ public final class WishManager {
             InterpretationState state,
             AiErrorCategory errorCategory,
             @Nullable WishInterpretation interpretation,
-            @Nullable WishProgram program
+            @Nullable WishProgram program,
+            @Nullable WishRejection rejection
     ) {
+        if (state == InterpretationState.REJECTED) {
+            handleSemanticRejection(player, sessionId, rejection);
+            return;
+        }
         if (state != InterpretationState.SUCCESS
                 && state != InterpretationState.AI_REQUEST_FAILED
                 && state != InterpretationState.INVALID_RESPONSE) {
@@ -260,6 +269,26 @@ public final class WishManager {
                     "status=SUCCESS goal=" + program.goal());
             WishPipelineAudit.success(sessionId,"INTERPRETATION",
                     "severity="+acceptedInterpretation.severity()+" capabilities="+acceptedInterpretation.requiredCapabilities().size());
+            try {
+                var validated = WishProgramValidator.validate(program,
+                        new ForgeWishProgramResourceResolver(player.server));
+                var policy = new WishDecisionPolicy().evaluate(WishDecision.ACCEPT, null, validated);
+                WishingWillow.LOGGER.info("Wish decision session={} decision={} reason={}",
+                        sessionId, policy.decision(), policy.code());
+                if (!policy.accepted()) {
+                    WishSavedData.get(player.server).updateUnderstanding(sessionId, InterpretationState.REJECTED,
+                            AiErrorCategory.NONE, null, program, System.currentTimeMillis());
+                    ModNetworking.sendToPlayer(player, WishPipelineStatePacket.terminal(sessionId,
+                            WishPipelineState.REJECTED, WishSessionTerminationReason.WISH_REJECTED,
+                            "code=" + policy.rejectionCode()));
+                    player.sendSystemMessage(Component.translatable("message.wishing_willow.wish_rejected"));
+                    refundBeforeSideEffects(player.server, sessionId, "SERVER_POLICY_" + policy.code());
+                    return;
+                }
+            } catch (IllegalArgumentException ignored) {
+                refundBeforeSideEffects(player.server, sessionId, "VALIDATION_FAILED");
+                return;
+            }
             beginPlanning(player, sessionId, acceptedInterpretation);
         } else {
             WishPipelineAudit.failure(sessionId,"INTERPRETATION",acceptedError.name(),state.name());
@@ -277,7 +306,30 @@ public final class WishManager {
     public static void handleInterpretationResult(ServerPlayer player, UUID sessionId,
                                                   InterpretationState state, AiErrorCategory errorCategory,
                                                   @Nullable WishInterpretation interpretation) {
-        handleInterpretationResult(player, sessionId, state, errorCategory, interpretation, null);
+        handleInterpretationResult(player, sessionId, state, errorCategory, interpretation, null, null);
+    }
+
+    public static void handleInterpretationResult(ServerPlayer player, UUID sessionId,
+                                                  InterpretationState state, AiErrorCategory errorCategory,
+                                                  @Nullable WishInterpretation interpretation,
+                                                  @Nullable WishProgram program) {
+        handleInterpretationResult(player, sessionId, state, errorCategory, interpretation, program, null);
+    }
+
+    private static void handleSemanticRejection(ServerPlayer player, UUID sessionId,
+                                                @Nullable WishRejection rejection) {
+        WishRecord record = WishSavedData.get(player.server).getBySession(sessionId);
+        if (record == null || !record.playerId().equals(player.getUUID())
+                || record.interpretationState() != InterpretationState.REQUESTING || rejection == null) return;
+        WishSavedData.get(player.server).updateUnderstanding(sessionId, InterpretationState.REJECTED,
+                AiErrorCategory.NONE, null, null, System.currentTimeMillis());
+        WishingWillow.LOGGER.info("Wish rejected session={} code={}", sessionId, rejection.code());
+        WishLifecycleLog.event(sessionId, "WISH_REJECTED", "code=" + rejection.code());
+        ModNetworking.sendToPlayer(player, WishPipelineStatePacket.terminal(sessionId,
+                WishPipelineState.REJECTED, WishSessionTerminationReason.WISH_REJECTED,
+                "code=" + rejection.code()));
+        player.sendSystemMessage(Component.translatable("message.wishing_willow.wish_rejected"));
+        refundBeforeSideEffects(player.server, sessionId, "WISH_REJECTED_" + rejection.code());
     }
 
     public static void handlePlanningProgress(ServerPlayer player, UUID sessionId, UUID attemptId,
@@ -464,6 +516,10 @@ public final class WishManager {
 
         ItemStack stack = player.getItemInHand(session.hand());
         if (!player.getAbilities().instabuild) {
+            ItemStack consumed = stack.copy();
+            consumed.setCount(1);
+            WishPaymentManager.get(player.server).reserve(session.sessionId(), player.getUUID(), consumed);
+            WishingWillow.LOGGER.info("Wish payment reserved session={} item={}", session.sessionId(), consumed);
             stack.shrink(1);
         }
         session.transitionTo(WishState.SNAPPED, gameTime);
@@ -561,7 +617,10 @@ public final class WishManager {
     }
 
     private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
-        // AI/planning states are not replayable. Persisted low-level executions rebuild independently.
+        if (event.getEntity() instanceof ServerPlayer player) {
+            int delivered = WishPaymentManager.get(player.server).deliverPending(player.server, player.getUUID());
+            if (delivered > 0) player.sendSystemMessage(Component.translatable("message.wishing_willow.wish_refunded"));
+        }
     }
 
     private static void onLivingDeath(LivingDeathEvent event) {
@@ -716,6 +775,7 @@ public final class WishManager {
     }
 
     private static void sendPlanningFailure(ServerPlayer player, UUID sessionId) {
+        refundBeforeSideEffects(player.server, sessionId, "PLANNING_FAILED");
         player.sendSystemMessage(Component.translatable("message.wishing_willow.planning_failed"));
         if (!FMLEnvironment.production) {
             var debug = WishAgentDebugStore.latest(player.getUUID());
@@ -725,6 +785,19 @@ public final class WishManager {
                         + " finalization=" + debug.finalizationState()));
             }
         }
+    }
+
+    private static boolean refundBeforeSideEffects(MinecraftServer server, UUID sessionId, String reason) {
+        WishingWillow.LOGGER.info("Wish refund requested session={} reason={}", sessionId, reason);
+        boolean requested = WishPaymentManager.get(server).requestRefund(server, sessionId);
+        if (!requested) {
+            WishingWillow.LOGGER.info("Wish refund skipped session={} reason=ALREADY_REFUNDED_OR_COMMITTED", sessionId);
+            return false;
+        }
+        WishRecord record = WishSavedData.get(server).getBySession(sessionId);
+        ServerPlayer player = record == null ? null : server.getPlayerList().getPlayer(record.playerId());
+        if (player != null) player.sendSystemMessage(Component.translatable("message.wishing_willow.wish_refunded"));
+        return true;
     }
 
     private record PlanningAttempt(UUID attemptId, UUID playerId) { }
