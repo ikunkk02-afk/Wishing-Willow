@@ -184,7 +184,10 @@ tasks.named('processResources', ProcessResources).configure {
     }
 }
 
+// Thin JAR (no bundled deps) — kept for development reference but NOT for distribution.
+// The jarJar output below is the player-facing artifact.
 tasks.named('jar', Jar).configure {
+    archiveClassifier = 'slim'
     manifest {
         attributes([
                 'Specification-Title'      : mod_id,
@@ -198,6 +201,12 @@ tasks.named('jar', Jar).configure {
     }
 
     finalizedBy 'reobfJar'
+}
+
+// jarJar produces the player-facing JAR with all runtime dependencies bundled.
+// Players do NOT need to install LangChain4j, Jackson, OpenNLP, or Jsoup separately.
+tasks.jarJar.configure {
+    archiveClassifier = ''
 }
 
 tasks.withType(JavaCompile).configureEach {

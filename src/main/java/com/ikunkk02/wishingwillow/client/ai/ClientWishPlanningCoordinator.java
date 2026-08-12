@@ -1,6 +1,5 @@
 package com.ikunkk02.wishingwillow.client.ai;
 
-import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.ai.*;
 import com.ikunkk02.wishingwillow.agent.ai.WishingWillowChatModelAdapter;
 import com.ikunkk02.wishingwillow.agent.core.*;
@@ -27,10 +26,7 @@ import com.ikunkk02.wishingwillow.research.ModResearchManager;
 import com.ikunkk02.wishingwillow.research.registry.RegistrySnapshot;
 import com.mojang.logging.LogUtils;
 import net.minecraft.client.Minecraft;
-import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
@@ -52,7 +48,6 @@ import java.util.concurrent.atomic.AtomicReference;
  * result is converted OLD-to-NEW into a {@link WishProgram} and submitted through the same
  * packet, so every wish converges on the one native server executor.</p>
  */
-@Mod.EventBusSubscriber(modid = WishingWillow.MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ClientWishPlanningCoordinator {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final CapabilityMatcher MATCHER = new CapabilityMatcher();
@@ -382,8 +377,11 @@ public final class ClientWishPlanningCoordinator {
         };
     }
 
-    @SubscribeEvent
-    public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+    /**
+     * Called by {@link ClientWishPlanningEvents} when the player logs out.
+     * Clears active planning state to prevent stale sessions.
+     */
+    static void onLogout() {
         ACTIVE_REQUEST.set(null);
         GENERATION.cancelAll();
     }
