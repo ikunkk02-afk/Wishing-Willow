@@ -48,6 +48,40 @@ class WishInterpreterRepairTest {
     }
 
     @Test
+    void locallyNormalizesOutOfRangeProgramWithoutAnotherAiRequest() {
+        SequenceProvider provider = new SequenceProvider(
+                VALID.replace("\"action\":\"give_item\",\"parameters\":{\"item\":\"minecraft:diamond\",\"count\":10}",
+                        "\"action\":\"FOLLOW-PLAYER\",\"parameters\":{\"max_entities\":100}")
+        );
+
+        WishInterpretationResult result = new WishInterpreter(config -> provider)
+                .interpret(config(), "让附近的生物跟着我").join();
+
+        assertEquals(InterpretationState.SUCCESS, result.state());
+        assertEquals(1, provider.requests.size());
+        assertEquals("follow_player", result.program().coreActions().get(0).action());
+        assertEquals(16, result.program().coreActions().get(0).parameters()
+                .get("max_entities").getAsInt());
+    }
+
+    @Test
+    void sendsStructuredUnrecoverableValidationDetailToAiRepair() {
+        String missingItem = VALID.replace(
+                "{\"item\":\"minecraft:diamond\",\"count\":10}", "{\"count\":10}");
+        SequenceProvider provider = new SequenceProvider(missingItem, VALID);
+
+        WishInterpretationResult result = new WishInterpreter(config -> provider)
+                .interpret(config(), "我想要十颗钻石").join();
+
+        assertEquals(InterpretationState.SUCCESS, result.state());
+        assertEquals(2, provider.requests.size());
+        String repairMessage = provider.requests.get(1).userMessage();
+        assertTrue(repairMessage.contains("INVALID_WISH_PROGRAM:MISSING_REQUIRED_PARAMETER_item"));
+        assertTrue(repairMessage.contains("\"action\":\"give_item\""));
+        assertTrue(repairMessage.contains("\"parameter\":\"item\""));
+    }
+
+    @Test
     void thirdAttemptCanRecoverAfterTwoSchemaInvalidResponses() {
         SequenceProvider provider = new SequenceProvider(
                 VALID.replace("\"IRONIC\"", "\"MISCHIEVOUS\""),

@@ -4,6 +4,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.ikunkk02.wishingwillow.WishingWillow;
 import com.ikunkk02.wishingwillow.ai.WishCapability;
+import com.ikunkk02.wishingwillow.execution.action.WishActionDefinition;
+import com.ikunkk02.wishingwillow.execution.action.WishActionRegistry;
 import com.ikunkk02.wishingwillow.planning.CandidateReference;
 import com.ikunkk02.wishingwillow.planning.CandidateSourceKind;
 import com.ikunkk02.wishingwillow.planning.CapabilityRelationGraph;
@@ -235,8 +237,8 @@ public final class WishActionPolicy {
                 range(p, "amount", operation.equals("ADD") ? -20 : -1, operation.equals("ADD") ? 20 : 1);
                 rangeInt(p, "duration_seconds", 1, 3600);
             }
-            case CHANGE_MOB_TARGET -> { keys(p, Set.of("radius", "max_entities", "disposition")); rangeInt(p, "radius", 2, 64); rangeInt(p, "max_entities", 1, 32); oneOf(p, "disposition", Set.of("PLAYER", "NEAREST_HOSTILE", "CLEAR")); }
-            case FOLLOW_PLAYER, AVOID_PLAYER -> { keys(p, Set.of("radius", "max_entities", "duration_seconds")); rangeInt(p, "radius", 2, 64); rangeInt(p, "max_entities", 1, 16); rangeInt(p, "duration_seconds", 1, 3600); }
+            case CHANGE_MOB_TARGET -> { keys(p, Set.of("radius", "max_entities", "disposition")); schemaRangeInt(action, p, "radius"); schemaRangeInt(action, p, "max_entities"); oneOf(p, "disposition", Set.of("PLAYER", "NEAREST_HOSTILE", "CLEAR")); }
+            case FOLLOW_PLAYER, AVOID_PLAYER -> { keys(p, Set.of("radius", "max_entities", "duration_seconds")); schemaRangeInt(action, p, "radius"); schemaRangeInt(action, p, "max_entities"); schemaRangeInt(action, p, "duration_seconds"); }
             case CHANGE_REPUTATION -> { keys(p, Set.of("delta", "radius")); rangeInt(p, "delta", -100, 100); rangeInt(p, "radius", 2, 64); }
             case START_PREDEFINED_EVENT -> { keys(p, Set.of("intensity")); rangeInt(p, "intensity", 1, 5); }
         }
@@ -251,6 +253,15 @@ public final class WishActionPolicy {
     }
     private static void distance(JsonObject p, int max) { rangeInt(p, "distance_min", 2, max); rangeInt(p, "distance_max", 2, max); if (integer(p, "distance_min") > integer(p, "distance_max")) reject(WishExecutionAcceptError.INVALID_PARAMETER, "Minimum distance exceeds maximum distance"); }
     private static void rangeInt(JsonObject p, String key, int min, int max) { int value = integer(p, key); if (value < min || value > max) reject(WishExecutionAcceptError.INVALID_PARAMETER, key + " is outside allowed range"); }
+    private static void schemaRangeInt(WishActionType action, JsonObject p, String key) {
+        WishActionDefinition definition = WishActionRegistry.defaults().definition(action);
+        JsonObject property = definition == null ? null
+                : definition.parameterSchema().getAsJsonObject("properties").getAsJsonObject(key);
+        if (property == null || !property.has("minimum") || !property.has("maximum")) {
+            reject(WishExecutionAcceptError.INVALID_PARAMETER, "Missing schema range for " + action + "." + key);
+        }
+        rangeInt(p, key, property.get("minimum").getAsInt(), property.get("maximum").getAsInt());
+    }
     private static void range(JsonObject p, String key, double min, double max) { double value = number(p, key); if (!Double.isFinite(value) || value < min || value > max) reject(WishExecutionAcceptError.INVALID_PARAMETER, key + " is outside allowed range"); }
     private static int integer(JsonObject p, String key) { JsonElement e = p.get(key); if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) reject(WishExecutionAcceptError.INVALID_PARAMETER, "Missing integer " + key); String raw=e.getAsString(); if(!raw.matches("-?(0|[1-9][0-9]*)")) reject(WishExecutionAcceptError.INVALID_PARAMETER,"Invalid integer "+key); try{return Integer.parseInt(raw);}catch(NumberFormatException ex){reject(WishExecutionAcceptError.INVALID_PARAMETER,"Invalid integer "+key);return 0;} }
     private static double number(JsonObject p, String key) { JsonElement e = p.get(key); if (e == null || !e.isJsonPrimitive() || !e.getAsJsonPrimitive().isNumber()) reject(WishExecutionAcceptError.INVALID_PARAMETER, "Missing number " + key); return e.getAsDouble(); }

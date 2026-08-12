@@ -49,6 +49,11 @@ public final class WishProgramJson {
         return program;
     }
 
+    /** Tolerant boundary for raw AI output. Network, save, and server inputs remain strict. */
+    public static WishProgramNormalizationResult normalizeAiResponse(String raw) {
+        return WishProgramNormalizer.normalize(raw);
+    }
+
     public static void validate(WishProgram program, WishActionRegistry registry) {
         for (WishProgramAction action : concat(program.coreActions(), program.presentationActions())) {
             WishActionDefinition definition = registry.find(action.action());

@@ -56,6 +56,12 @@ public final class WishProgramValidator {
         return new ValidatedWishProgram(program, List.copyOf(core), List.copyOf(presentation));
     }
 
+    /** Final strict server validation after deterministic AI normalization. */
+    public static ValidatedWishProgram normalizeAndValidate(String raw,
+                                                            WishProgramResourceResolver resolver) {
+        return validate(WishProgramJson.normalizeAiResponse(raw).requireProgram(), resolver);
+    }
+
     private static ProgramAction resolve(ProgramAction leaf, WishProgramResourceResolver resolver) {
         WishActionDefinition definition = ACTIONS.find(leaf.actionId());
         if (definition == null || definition.legacyType() == null) {

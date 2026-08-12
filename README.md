@@ -40,6 +40,17 @@ research services and the configured AI provider. It never sends local paths, pl
 credentials, chat, or save files. The optional CurseForge API key is stored only in
 `.minecraft/config/wishing_willow/research-client.json`; it is never logged, cached with knowledge, or sent to AI.
 
+## Wish validation and AI pipeline
+
+The wish pipeline now uses tolerant AI parsing followed by deterministic normalization and then strict server
+validation. In short:
+
+`AI response -> loose JSON recovery -> WishProgramNormalizer -> strict WishProgramValidator -> planning -> execution`
+
+The normalizer repairs safe issues locally (for example numeric clamping, type coercion, enum/action name cleanup,
+missing defaults, and harmless unknown fields). Unsafe or ambiguous cases still reject, and the final server executor
+continues to enforce world, registry, permission, and budget limits.
+
 ## Wish planning diagnostics
 
 Agent tool planning is an optional enhancement over the compatibility JSON planner. Unknown or unsupported tool-call

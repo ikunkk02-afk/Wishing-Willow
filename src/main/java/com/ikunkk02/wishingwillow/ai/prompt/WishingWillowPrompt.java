@@ -1,8 +1,10 @@
 package com.ikunkk02.wishingwillow.ai.prompt;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.ikunkk02.wishingwillow.ai.WishCapability;
 import com.ikunkk02.wishingwillow.ai.WishFulfillmentMode;
+import com.ikunkk02.wishingwillow.program.WishProgramValidationIssue;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -81,10 +83,26 @@ public final class WishingWillowPrompt {
     }
 
     public static String repairMessage(String wish, WishFulfillmentMode mode, String invalidCandidate) {
+        return repairMessage(wish, mode, invalidCandidate,
+                new WishProgramValidationIssue("MALFORMED_RESPONSE", "", "", null,
+                        null, null, false, "AI response could not be parsed"));
+    }
+
+    public static String repairMessage(String wish, WishFulfillmentMode mode, String invalidCandidate,
+                                       WishProgramValidationIssue issue) {
         String candidate = invalidCandidate == null ? "" : invalidCandidate;
         if (candidate.length() > 32 * 1024) candidate = candidate.substring(0, 32 * 1024);
+        JsonObject details = new JsonObject();
+        details.addProperty("validation_error", issue.validationError());
+        if (!issue.action().isBlank()) details.addProperty("action", issue.action());
+        if (!issue.parameter().isBlank()) details.addProperty("parameter", issue.parameter());
+        if (issue.provided() != null) details.add("provided", issue.provided());
+        if (issue.allowedMin() != null) details.add("allowed_min", issue.allowedMin());
+        if (issue.allowedMax() != null) details.add("allowed_max", issue.allowedMax());
+        if (!issue.detail().isBlank()) details.addProperty("detail", issue.detail());
+        details.addProperty("candidate", candidate);
         return untrustedWishMessage(wish, mode) + "\n<UNTRUSTED_INVALID_INTERPRETATION_JSON>\n"
-                + GSON.toJson(Map.of("validation_error", "MALFORMED_RESPONSE", "candidate", candidate))
+                + GSON.toJson(details)
                 + "\n</UNTRUSTED_INVALID_INTERPRETATION_JSON>";
     }
 }

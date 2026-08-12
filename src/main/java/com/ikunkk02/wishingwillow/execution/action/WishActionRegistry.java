@@ -176,18 +176,22 @@ public final class WishActionRegistry {
                 description("remove nearby entities matching a validated type", "items or blocks are targeted", "移除附近的僵尸", "spawn_entity"));
         add(values, "set_entity_target", WishActionType.CHANGE_MOB_TARGET, StandardWishActionExecutors.changeMobTarget(), 5,
                 Set.of(WishCapability.MOB_BEHAVIOR),
-                schema(p("disposition", "string", false, null, null, "player", "clear"),
-                        p("max_entities", "integer", false, 1d, 32d), p("radius", "number", false, 1d, 64d)),
+                schema(pd("disposition", "string", "player", null, null,
+                                "player", "nearest_hostile", "clear"),
+                        pd("max_entities", "integer", 8, 1d, 32d),
+                        pd("radius", "integer", 16, 2d, 64d)),
                 description("set a generic mob target using vanilla behavior controls", "the request requires a third-party mod's unique AI implementation", "让附近僵尸攻击我", "follow_player, avoid_player"));
         add(values, "follow_player", WishActionType.FOLLOW_PLAYER, StandardWishActionExecutors.followPlayer(), 5,
                 Set.of(WishCapability.PERSISTENT_FOLLOWER, WishCapability.MOB_BEHAVIOR),
-                schema(p("max_entities", "integer", false, 1d, 32d), p("radius", "number", false, 1d, 64d),
-                        p("duration_seconds", "integer", false, 1d, 72000d)),
+                schema(pd("max_entities", "integer", 8, 1d, 16d),
+                        pd("radius", "integer", 16, 2d, 64d),
+                        pd("duration_seconds", "integer", 600, 1d, 3600d)),
                 description("make selected vanilla mobs follow the player", "a named mod-specific tracking AI must be preserved", "让狼一直跟着我", "set_entity_target, avoid_player"));
         add(values, "avoid_player", WishActionType.AVOID_PLAYER, StandardWishActionExecutors.avoidPlayer(), 5,
                 Set.of(WishCapability.MOB_BEHAVIOR),
-                schema(p("max_entities", "integer", false, 1d, 32d), p("radius", "number", false, 1d, 64d),
-                        p("duration_seconds", "integer", false, 1d, 72000d)),
+                schema(pd("max_entities", "integer", 8, 1d, 16d),
+                        pd("radius", "integer", 16, 2d, 64d),
+                        pd("duration_seconds", "integer", 600, 1d, 3600d)),
                 description("make selected mobs keep away from the player", "the entity should attack or follow", "make creepers avoid me", "follow_player, set_entity_target"));
         add(values, "modify_reputation", WishActionType.CHANGE_REPUTATION, StandardWishActionExecutors.changeReputation(), 3,
                 Set.of(WishCapability.REPUTATION),
@@ -289,15 +293,20 @@ public final class WishActionRegistry {
     }
 
     private record Param(String name, String type, boolean required, Double min, Double max,
-                         String... enums) { }
+                         Object defaultValue, String... enums) { }
 
     private static Param p(String name, String type, boolean required) {
-        return new Param(name, type, required, null, null);
+        return new Param(name, type, required, null, null, null);
     }
 
     private static Param p(String name, String type, boolean required, Double min, Double max,
                            String... enums) {
-        return new Param(name, type, required, min, max, enums);
+        return new Param(name, type, required, min, max, null, enums);
+    }
+
+    private static Param pd(String name, String type, Object defaultValue, Double min, Double max,
+                            String... enums) {
+        return new Param(name, type, false, min, max, defaultValue, enums);
     }
 
     /** Strict parameter boundary: every declared property is typed and bounded. */
@@ -312,6 +321,9 @@ public final class WishActionRegistry {
             property.addProperty("type", param.type);
             if (param.min != null) property.addProperty("minimum", param.min);
             if (param.max != null) property.addProperty("maximum", param.max);
+            if (param.defaultValue instanceof Number value) property.addProperty("default", value);
+            else if (param.defaultValue instanceof Boolean value) property.addProperty("default", value);
+            else if (param.defaultValue instanceof String value) property.addProperty("default", value);
             if (param.enums.length > 0) {
                 JsonArray values = new JsonArray();
                 for (String value : param.enums) values.add(value);

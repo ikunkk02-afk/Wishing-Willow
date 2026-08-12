@@ -6,6 +6,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.ikunkk02.wishingwillow.program.WishProgram;
 import com.ikunkk02.wishingwillow.program.WishProgramJson;
+import com.ikunkk02.wishingwillow.program.WishProgramNormalizer;
+import com.ikunkk02.wishingwillow.program.WishProgramNormalizationException;
+import com.ikunkk02.wishingwillow.program.WishProgramNormalizationResult;
+import com.ikunkk02.wishingwillow.program.WishProgramValidationIssue;
 
 import java.util.Set;
 
@@ -18,15 +22,26 @@ public final class WishUnderstandingJson {
 
     public static Understanding parse(String raw) {
         JsonElement parsed;
-        try { parsed = JsonParser.parseString(stripFence(raw)); }
-        catch (RuntimeException error) { throw new IllegalArgumentException("MALFORMED_RESPONSE:UNDERSTANDING_JSON", error); }
-        if (!parsed.isJsonObject() || !parsed.getAsJsonObject().keySet().equals(FIELDS)) {
+        try {
+            parsed = com.ikunkk02.wishingwillow.program.LlmJsonRecovery
+                    .parseObject(raw, FIELDS, "MALFORMED_RESPONSE:UNDERSTANDING_JSON").object();
+        } catch (RuntimeException error) {
+            if (error instanceof IllegalArgumentException illegal) throw illegal;
+            throw new IllegalArgumentException("MALFORMED_RESPONSE:UNDERSTANDING_JSON", error);
+        }
+        if (!parsed.isJsonObject() || !parsed.getAsJsonObject().keySet().containsAll(FIELDS)) {
             throw new IllegalArgumentException("MALFORMED_RESPONSE:UNDERSTANDING_FIELDS");
         }
         JsonObject root = parsed.getAsJsonObject();
         WishInterpretation interpretation = WishInterpretationValidator.parseAndValidate(GSON.toJson(root.get("interpretation")));
-        WishProgram program = WishProgramJson.parseAndValidate(GSON.toJson(root.get("program")));
-        return new Understanding(interpretation, program);
+        WishProgramNormalizationResult normalized = WishProgramNormalizer.normalize(root.get("program"));
+        if (normalized.status() == com.ikunkk02.wishingwillow.program.WishProgramValidationStatus.REJECT) {
+            WishProgramValidationIssue issue = normalized.issue();
+            throw new WishProgramNormalizationException(issue == null
+                    ? new WishProgramValidationIssue("INVALID_WISH_PROGRAM:UNKNOWN", "", "",
+                    null, null, null, false, "normalizer rejected the program") : issue);
+        }
+        return new Understanding(interpretation, normalized.requireProgram());
     }
 
     public static JsonObject jsonSchema() {

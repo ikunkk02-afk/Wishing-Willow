@@ -245,6 +245,10 @@ public final class WishManager {
                     state == InterpretationState.SUCCESS ? program : null, now);
         }
         if (state == InterpretationState.SUCCESS && acceptedInterpretation != null) {
+            WishPipelineAudit.success(sessionId, "NORMALIZATION",
+                    "status=ACCEPTED goal=" + program.goal());
+            WishPipelineAudit.success(sessionId, "VALIDATION",
+                    "actions=" + (program.coreActions().size() + program.presentationActions().size()));
             WishingWillow.LOGGER.info("Wish interpreted session={} goal={}", sessionId, program.goal());
             WishPipelineAudit.success(sessionId,"INTERPRETATION",
                     "severity="+acceptedInterpretation.severity()+" capabilities="+acceptedInterpretation.requiredCapabilities().size());
@@ -650,6 +654,7 @@ public final class WishManager {
         if (existing != null) return;
         UUID attemptId = UUID.randomUUID();
         PLANNING_ATTEMPTS.put(sessionId, new PlanningAttempt(attemptId, player.getUUID()));
+        WishPipelineAudit.success(sessionId, "PLANNING", "status=STARTED attempt=" + attemptId);
         if (record.program() == null) {
             WishPlanStore.fail(player.server, sessionId, WishPlanError.INVALID_JSON);
             PLANNING_ATTEMPTS.remove(sessionId);
