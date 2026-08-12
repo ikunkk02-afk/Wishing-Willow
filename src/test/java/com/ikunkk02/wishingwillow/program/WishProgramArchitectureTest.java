@@ -152,6 +152,21 @@ class WishProgramArchitectureTest {
     }
 
     @Test
+    void advancedItemSkillRequiresRealItemStackRealizationAndForbidsBuffSubstitution() {
+        JsonObject candidate = JsonParser.parseString(
+                        WishSkillRegistry.defaults().candidatePrompt("我想要一把顶级附魔的钻石剑"))
+                .getAsJsonArray().get(0).getAsJsonObject();
+
+        assertEquals("advanced_item_realization", candidate.get("id").getAsString());
+        assertTrue(candidate.getAsJsonArray("required_actions").toString().contains("give_item"));
+        String template = candidate.get("parameter_template").getAsString();
+        assertTrue(template.contains("ItemStack"));
+        assertTrue(template.contains("Do not substitute player potion effects"));
+        assertTrue(template.contains("MAXED"));
+        assertTrue(template.contains("allow_incompatible_enchantments"));
+    }
+
+    @Test
     void unknownModCapabilityIsTheOnlyAgentRoute() {
         WishProgram program = new WishProgram(1, "use the mod's original tracking AI",
                 List.of(), List.of(), "", "mod_specific_entity_ai");

@@ -22,6 +22,11 @@ public interface WishProgramResourceResolver {
     /** Maximum legal stack size for the resolved resource; used for bounded item-entity budgets. */
     default int maxStackSize(RegistryEntryType type, String id) { return 1; }
 
+    @Nullable default String resolveEnchantment(String id) { return null; }
+    default int enchantmentMaxLevel(String id) { return 0; }
+    default boolean enchantmentCanApply(String enchantmentId, String itemId) { return false; }
+    default boolean enchantmentsCompatible(String firstId, String secondId) { return false; }
+
     /** Whether a built-in predefined event is registered. */
     boolean containsPredefinedEvent(String event);
 }

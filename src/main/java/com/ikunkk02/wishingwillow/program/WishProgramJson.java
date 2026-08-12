@@ -227,6 +227,40 @@ public final class WishProgramJson {
             }
             if (!matched) throw invalid("PARAMETER_ENUM_" + key);
         }
+        if ("array".equals(type)) {
+            JsonArray array = value.getAsJsonArray();
+            if (property.has("minItems") && array.size() < property.get("minItems").getAsInt()) {
+                throw invalid("PARAMETER_MIN_ITEMS_" + key);
+            }
+            if (property.has("maxItems") && array.size() > property.get("maxItems").getAsInt()) {
+                throw invalid("PARAMETER_MAX_ITEMS_" + key);
+            }
+            if (property.has("items")) {
+                for (JsonElement item : array) {
+                    validateProperty(actionId, key, property.getAsJsonObject("items"), item);
+                }
+            }
+        }
+        if ("object".equals(type)) {
+            JsonObject object = value.getAsJsonObject();
+            JsonObject nestedProperties = property.getAsJsonObject("properties");
+            if (property.has("additionalProperties") && !property.get("additionalProperties").getAsBoolean()
+                    && nestedProperties != null && !nestedProperties.keySet().containsAll(object.keySet())) {
+                throw invalid("UNDECLARED_PARAMETER_" + actionId);
+            }
+            JsonArray nestedRequired = property.getAsJsonArray("required");
+            if (nestedRequired != null) for (JsonElement required : nestedRequired) {
+                if (!object.has(required.getAsString())) {
+                    throw invalid("MISSING_REQUIRED_PARAMETER_" + required.getAsString());
+                }
+            }
+            if (nestedProperties != null) for (String nestedKey : object.keySet()) {
+                JsonObject nestedSchema = nestedProperties.getAsJsonObject(nestedKey);
+                if (nestedSchema != null) {
+                    validateProperty(actionId, nestedKey, nestedSchema, object.get(nestedKey));
+                }
+            }
+        }
     }
 
     private static boolean integral(String value) {

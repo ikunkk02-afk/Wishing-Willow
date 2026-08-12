@@ -98,10 +98,8 @@ public final class WishActionRegistry {
     private static WishActionRegistry createDefault() {
         List<WishActionDefinition> values = new ArrayList<>();
         add(values, "give_item", WishActionType.GIVE_ITEM, StandardWishActionExecutors.giveItem(), 2,
-                Set.of(WishCapability.GIVE_ITEM, WishCapability.INVENTORY_CHANGE),
-                schema(p("item", "string", true), p("count", "integer", true, 1d, 4096d),
-                        p("target", "string", false, null, null, "self")),
-                description("put a real item stack in the player's inventory", "a block must exist in the world or fall physically", "给我64颗钻石 | give me bread", "remove_item, place_block"));
+                Set.of(WishCapability.GIVE_ITEM, WishCapability.INVENTORY_CHANGE), advancedItemSchema(),
+                description("put a real ordinary or advanced ItemStack in the player's inventory; requested enchantments, name, durability, unbreakable state, attributes and custom data belong on the ItemStack itself", "a block must exist in the world, or player potion/attribute effects would substitute for requested item properties", "give me 64 diamonds | give me a Sharpness V diamond sword | give me an unbreakable named bow", "remove_item, place_block, apply_effect"));
         add(values, "remove_item", WishActionType.REMOVE_ITEM, StandardWishActionExecutors.removeItem(), 2,
                 Set.of(WishCapability.REMOVE_ITEM, WishCapability.INVENTORY_CHANGE),
                 schema(p("item", "string", true), p("count", "integer", true, 1d, 4096d)),
@@ -366,6 +364,43 @@ public final class WishActionRegistry {
                             String... enums) {
         return new Param(name, type, false, min, max, defaultValue, enums);
     }
+
+    private static JsonObject advancedItemSchema() {
+        JsonObject root = schema(p("item", "string", true), p("count", "integer", true, 1d, 4096d),
+                p("target", "string", false, null, null, "self"), p("custom_name", "string", false),
+                p("damage", "integer", false, 0d, 2147483647d), p("unbreakable", "boolean", false),
+                p("allow_unsafe_enchantment_levels", "boolean", false),
+                p("allow_incompatible_enchantments", "boolean", false));
+        JsonObject properties = root.getAsJsonObject("properties");
+        properties.add("enchantments", arraySchema(objectSchema(
+                Map.of("id", stringSchema(), "level", integerSchema(1, 10)), Set.of("id", "level")), 0, 64));
+        properties.add("attributes", arraySchema(objectSchema(Map.of(
+                "id", stringSchema(), "amount", numberSchema(-1024, 1024),
+                "operation", enumSchema("addition", "multiply_base", "multiply_total"),
+                "slot", enumSchema("mainhand", "offhand", "head", "chest", "legs", "feet")),
+                Set.of("id", "amount", "operation", "slot")), 0, 32));
+        JsonObject customData = new JsonObject();
+        customData.addProperty("type", "object"); customData.addProperty("additionalProperties", true);
+        properties.add("custom_data", customData);
+        return root;
+    }
+
+    private static JsonObject arraySchema(JsonObject items, int min, int max) {
+        JsonObject value = new JsonObject(); value.addProperty("type", "array");
+        value.addProperty("minItems", min); value.addProperty("maxItems", max); value.add("items", items); return value;
+    }
+
+    private static JsonObject objectSchema(Map<String, JsonObject> properties, Set<String> requiredFields) {
+        JsonObject value = new JsonObject(); value.addProperty("type", "object");
+        value.addProperty("additionalProperties", false); JsonObject nested = new JsonObject();
+        properties.forEach(nested::add); value.add("properties", nested); JsonArray required = new JsonArray();
+        requiredFields.stream().sorted().forEach(required::add); value.add("required", required); return value;
+    }
+
+    private static JsonObject stringSchema() { JsonObject value = new JsonObject(); value.addProperty("type", "string"); return value; }
+    private static JsonObject integerSchema(int min, int max) { JsonObject value = new JsonObject(); value.addProperty("type", "integer"); value.addProperty("minimum", min); value.addProperty("maximum", max); return value; }
+    private static JsonObject numberSchema(double min, double max) { JsonObject value = new JsonObject(); value.addProperty("type", "number"); value.addProperty("minimum", min); value.addProperty("maximum", max); return value; }
+    private static JsonObject enumSchema(String... allowed) { JsonObject value = stringSchema(); JsonArray enums = new JsonArray(); for (String item : allowed) enums.add(item); value.add("enum", enums); return value; }
 
     /** Strict parameter boundary: every declared property is typed and bounded. */
     private static JsonObject schema(Param... params) {

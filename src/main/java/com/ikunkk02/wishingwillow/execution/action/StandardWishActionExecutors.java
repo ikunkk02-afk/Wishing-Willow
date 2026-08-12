@@ -9,6 +9,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleType;
 import net.minecraft.core.particles.SimpleParticleType;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -28,6 +31,8 @@ import net.minecraft.world.entity.ai.gossip.GossipType;
 import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -52,7 +57,63 @@ final class StandardWishActionExecutors {
     private static ResourceLocation id(WishExecutionContext c){VerifiedRegistryResource r=c.candidate()==null?null:c.candidate().registryResource();return r==null?null:ResourceLocation.tryParse(r.id());}
     private static int i(JsonObject p,String k){return p.get(k).getAsInt();}private static double d(JsonObject p,String k){return p.get(k).getAsDouble();}private static boolean b(JsonObject p,String k){return p.get(k).getAsBoolean();}
 
-    static WishActionExecutor giveItem(){return executor(c->{ServerPlayer p=c.player();Item item=ForgeRegistries.ITEMS.getValue(id(c));if(item==null)return WishActionResult.stale("ITEM_NOT_FOUND");int left=i(c.parameters(),"count"),given=0;while(left>0){int amount=Math.min(left,item.getMaxStackSize());ItemStack stack=new ItemStack(item,amount);p.getInventory().add(stack);int accepted=amount-stack.getCount();given+=accepted;left-=amount;if(!stack.isEmpty()){p.drop(stack,false);given+=stack.getCount();}}return WishActionResult.success(given);});}
+    static WishActionExecutor giveItem(){return executor(c->{
+        ServerPlayer player=c.player();Item item=ForgeRegistries.ITEMS.getValue(id(c));
+        if(item==null)return WishActionResult.stale("ITEM_NOT_FOUND");
+        JsonObject parameters=c.parameters();int left=i(parameters,"count"),given=0;
+        WishingWillow.LOGGER.info("Advanced item build started item={} advanced={} requested={}",id(c),advanced(parameters),left);
+        while(left>0){
+            int amount=Math.min(left,item.getMaxStackSize());ItemStack stack=new ItemStack(item,amount);
+            WishActionResult built=buildAdvancedItem(stack,parameters,id(c));if(!built.successful())return built;
+            player.getInventory().add(stack);int accepted=amount-stack.getCount();given+=accepted;left-=amount;
+            if(!stack.isEmpty()){player.drop(stack,false);given+=stack.getCount();}
+        }
+        WishingWillow.LOGGER.info("Advanced item completed item={} enchantments={} given={}",id(c),
+                parameters.has("enchantments")?parameters.getAsJsonArray("enchantments").size():0,given);
+        return given==i(parameters,"count")?WishActionResult.success(given):WishActionResult.partial("ITEM_DELIVERY_PARTIAL",given);
+    });}
+
+    private static boolean advanced(JsonObject p){return p.has("enchantments")||p.has("custom_name")||p.has("damage")
+            ||p.has("unbreakable")||p.has("attributes")||p.has("custom_data");}
+
+    private static WishActionResult buildAdvancedItem(ItemStack stack,JsonObject p,ResourceLocation itemId){
+        Map<Enchantment,Integer> enchantments=new LinkedHashMap<>();
+        if(p.has("enchantments"))for(var element:p.getAsJsonArray("enchantments")){
+            JsonObject requested=element.getAsJsonObject();ResourceLocation enchantmentId=ResourceLocation.tryParse(requested.get("id").getAsString());
+            Enchantment enchantment=ForgeRegistries.ENCHANTMENTS.getValue(enchantmentId);if(enchantment==null)return WishActionResult.stale("INVALID_ENCHANTMENT_RESOURCE");
+            int level=requested.get("level").getAsInt();enchantments.put(enchantment,level);
+            WishingWillow.LOGGER.info("Item enchantment resolved enchantment={} level={}",enchantmentId,level);
+        }
+        if(!enchantments.isEmpty()){
+            EnchantmentHelper.setEnchantments(enchantments,stack);
+            for(var entry:enchantments.entrySet()){
+                ResourceLocation enchantmentId=ForgeRegistries.ENCHANTMENTS.getKey(entry.getKey());
+                if(EnchantmentHelper.getItemEnchantmentLevel(entry.getKey(),stack)!=entry.getValue())return WishActionResult.failed("ITEM_ENCHANTMENT_VERIFICATION_FAILED");
+                WishingWillow.LOGGER.info("Item enchantment applied enchantment={} level={}",enchantmentId,entry.getValue());
+            }
+        }
+        if(p.has("custom_name"))stack.setHoverName(Component.literal(p.get("custom_name").getAsString()));
+        if(p.has("damage")){if(!stack.isDamageableItem())return WishActionResult.failed("ITEM_NOT_DAMAGEABLE");stack.setDamageValue(Math.min(p.get("damage").getAsInt(),stack.getMaxDamage()));}
+        if(p.has("unbreakable")&&p.get("unbreakable").getAsBoolean())stack.getOrCreateTag().putBoolean("Unbreakable",true);
+        if(p.has("attributes")){
+            int index=0;for(var element:p.getAsJsonArray("attributes")){
+                JsonObject attributeJson=element.getAsJsonObject();ResourceLocation attributeId=ResourceLocation.tryParse(attributeJson.get("id").getAsString());
+                Attribute attribute=ForgeRegistries.ATTRIBUTES.getValue(attributeId);if(attribute==null)return WishActionResult.stale("INVALID_ATTRIBUTE_RESOURCE");
+                AttributeModifier.Operation operation=switch(attributeJson.get("operation").getAsString()){
+                    case "multiply_base"->AttributeModifier.Operation.MULTIPLY_BASE;case "multiply_total"->AttributeModifier.Operation.MULTIPLY_TOTAL;default->AttributeModifier.Operation.ADDITION;};
+                EquipmentSlot slot=switch(attributeJson.get("slot").getAsString()){
+                    case "offhand"->EquipmentSlot.OFFHAND;case "head"->EquipmentSlot.HEAD;case "chest"->EquipmentSlot.CHEST;
+                    case "legs"->EquipmentSlot.LEGS;case "feet"->EquipmentSlot.FEET;default->EquipmentSlot.MAINHAND;};
+                UUID uuid=UUID.nameUUIDFromBytes((itemId+"|"+attributeId+"|"+slot+"|"+index++).getBytes(StandardCharsets.UTF_8));
+                stack.addAttributeModifier(attribute,new AttributeModifier(uuid,"Wishing Willow advanced item",attributeJson.get("amount").getAsDouble(),operation),slot);
+            }
+        }
+        if(p.has("custom_data"))try{
+            CompoundTag custom=TagParser.parseTag(p.get("custom_data").toString());stack.getOrCreateTag().merge(custom);
+        }catch(com.mojang.brigadier.exceptions.CommandSyntaxException error){return WishActionResult.failed("INVALID_CUSTOM_DATA");}
+        if(stack.isEmpty()||ForgeRegistries.ITEMS.getKey(stack.getItem())==null||!ForgeRegistries.ITEMS.getKey(stack.getItem()).equals(itemId))return WishActionResult.failed("ITEM_STACK_VERIFICATION_FAILED");
+        return WishActionResult.success(stack.getCount());
+    }
     static WishActionExecutor removeItem(){return executor(c->{ServerPlayer p=c.player();Item item=ForgeRegistries.ITEMS.getValue(id(c));if(item==null)return WishActionResult.stale("ITEM_NOT_FOUND");int wanted=i(c.parameters(),"count"),removed=0;for(int slot=0;slot<p.getInventory().getContainerSize()&&removed<wanted;slot++){ItemStack stack=p.getInventory().getItem(slot);if(!stack.is(item))continue;int take=Math.min(stack.getCount(),wanted-removed);stack.shrink(take);removed+=take;}return removed==wanted?WishActionResult.success(removed):WishActionResult.partial("INSUFFICIENT_ITEMS",removed);});}
     static WishActionExecutor spawnEntity(){return executor(c->{ResourceLocation resource=id(c);EntityType<?> type=ForgeRegistries.ENTITY_TYPES.getValue(resource);if(type==null)return WishActionResult.stale("ENTITY_NOT_FOUND");if(!resource.getNamespace().equals("minecraft")&&!WishExecutionConfig.THIRD_PARTY_ENTITIES.get())return WishActionResult.failed("THIRD_PARTY_ENTITIES_DISABLED");ServerPlayer player=c.player();int count=i(c.parameters(),"count"),spawned=0;for(int n=0;n<count;n++){Entity entity;try{entity=type.create(c.level());}catch(Throwable error){return spawned>0?WishActionResult.partial("ENTITY_CREATE_FAILED",spawned):WishActionResult.failed("ENTITY_CREATE_FAILED");}if(entity==null)return spawned>0?WishActionResult.partial("ENTITY_CREATE_NULL",spawned):WishActionResult.failed("ENTITY_CREATE_FAILED");Vec3 pos=SafeSpawnPositionFinder.find(c.level(),entity,player.position(),i(c.parameters(),"distance_min"),i(c.parameters(),"distance_max"),c.capability()==com.ikunkk02.wishingwillow.ai.WishCapability.STALKING_ENTITY,player.getYRot(),c.execution().executionId().getLeastSignificantBits()+c.stepIndex()*31L+n);if(pos==null)continue;entity.moveTo(pos.x,pos.y,pos.z,player.getYRot()+180,0);if(c.capability()==com.ikunkk02.wishingwillow.ai.WishCapability.PERSISTENT_FOLLOWER||c.capability()==com.ikunkk02.wishingwillow.ai.WishCapability.FRIENDLY_ENTITY){if(entity instanceof Mob mob)mob.setPersistenceRequired();if(entity instanceof TamableAnimal tame)tame.tame(player);}try{if(c.level().addFreshEntity(entity)){c.execution().bindEntity(c.stepIndex(),entity.getUUID());spawned++;}}catch(Throwable ignored){entity.discard();}}return spawned==count?WishActionResult.success(spawned):spawned>0?WishActionResult.partial("SAFE_POSITION_OR_SPAWN_FAILED",spawned):WishActionResult.failed("ENTITY_SPAWN_FAILED");});}
     static WishActionExecutor despawnEntity(){return executor(c->{EntityType<?> expected=ForgeRegistries.ENTITY_TYPES.getValue(id(c));int max=i(c.parameters(),"max_count"),removed=0;for(UUID uuid:c.execution().allEntities()){Entity entity=c.level().getEntity(uuid);if(entity!=null&&entity.getType()==expected&&entity.distanceToSqr(c.player())<=Math.pow(i(c.parameters(),"radius"),2)&&removed<max){entity.discard();removed++;}}return WishActionResult.success(removed);});}

@@ -47,6 +47,52 @@ class NewProgramMustNotUseLegacyPlanningTest {
     }
 
     @Test
+    void advancedGiveItemResolvesEnchantmentsAndPreservesExplicitUnsafeLevel() {
+        WishProgram program = program("give me a sharpness ten diamond sword",
+                "{\"action\":\"give_item\",\"parameters\":{\"item\":\"minecraft:diamond_sword\",\"count\":1,"
+                        + "\"enchantments\":[{\"id\":\"minecraft:sharpness\",\"level\":10}],"
+                        + "\"allow_unsafe_enchantment_levels\":true}}");
+
+        ProgramAction leaf = WishProgramValidator.validate(program, RESOLVER).coreActions().get(0);
+
+        assertEquals("minecraft:sharpness", leaf.parameters().getAsJsonArray("enchantments")
+                .get(0).getAsJsonObject().get("id").getAsString());
+        assertEquals(10, leaf.parameters().getAsJsonArray("enchantments")
+                .get(0).getAsJsonObject().get("level").getAsInt());
+        assertTrue(leaf.parameters().get("allow_unsafe_enchantment_levels").getAsBoolean());
+        assertFalse(leaf.parameters().get("allow_incompatible_enchantments").getAsBoolean());
+        assertLegacyCountersZero();
+    }
+
+    @Test
+    void advancedGiveItemRejectsUnknownExcessiveInapplicableAndConflictingEnchantments() {
+        assertEquals("INVALID_ENCHANTMENT_RESOURCE:evil:not_registered",
+                validationError("[{\"id\":\"evil:not_registered\",\"level\":1}]", false, false));
+        assertEquals("ENCHANTMENT_LEVEL_EXCEEDS_MAX:minecraft:sharpness level=10 max=5",
+                validationError("[{\"id\":\"minecraft:sharpness\",\"level\":10}]", false, false));
+        assertEquals("ENCHANTMENT_NOT_APPLICABLE:minecraft:power item=minecraft:diamond_sword",
+                validationError("[{\"id\":\"minecraft:power\",\"level\":5}]", false, false));
+        assertEquals("INCOMPATIBLE_ENCHANTMENTS:minecraft:sharpness,minecraft:smite",
+                validationError("[{\"id\":\"minecraft:sharpness\",\"level\":5},{\"id\":\"minecraft:smite\",\"level\":5}]", false, false));
+        assertDoesNotThrow(() -> validateEnchantments(
+                "[{\"id\":\"minecraft:sharpness\",\"level\":5},{\"id\":\"minecraft:smite\",\"level\":5}]", false, true));
+    }
+
+    private static String validationError(String enchantments, boolean unsafe, boolean incompatible) {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> validateEnchantments(enchantments, unsafe, incompatible));
+        return error.getMessage();
+    }
+
+    private static void validateEnchantments(String enchantments, boolean unsafe, boolean incompatible) {
+        WishProgram program = program("advanced sword", "{\"action\":\"give_item\",\"parameters\":{"
+                + "\"item\":\"minecraft:diamond_sword\",\"count\":1,\"enchantments\":" + enchantments
+                + ",\"allow_unsafe_enchantment_levels\":" + unsafe
+                + ",\"allow_incompatible_enchantments\":" + incompatible + "}}");
+        WishProgramValidator.validate(program, RESOLVER);
+    }
+
+    @Test
     void applyEffectGroupProgramNeverTouchesLegacyPlanning() {
         WishProgram program = program("all beneficial effects",
                 "{\"action\":\"apply_effect_group\",\"parameters\":{\"group\":\"beneficial\",\"duration_seconds\":600}}");
@@ -232,7 +278,7 @@ class NewProgramMustNotUseLegacyPlanningTest {
 
     private static final class FakeResolver implements WishProgramResourceResolver {
         private final Map<RegistryEntryType, Set<String>> entries = Map.of(
-                RegistryEntryType.ITEM, Set.of("minecraft:diamond", "minecraft:apple", "minecraft:wooden_sword"),
+                RegistryEntryType.ITEM, Set.of("minecraft:diamond", "minecraft:apple", "minecraft:wooden_sword", "minecraft:diamond_sword"),
                 RegistryEntryType.BLOCK, Set.of("minecraft:diamond_block", "minecraft:sand"),
                 RegistryEntryType.ENTITY, Set.of("minecraft:chicken"),
                 RegistryEntryType.EFFECT, Set.of("minecraft:speed"));
@@ -250,6 +296,25 @@ class NewProgramMustNotUseLegacyPlanningTest {
         @Override
         public int maxStackSize(RegistryEntryType type, String id) {
             return "minecraft:wooden_sword".equals(id) ? 1 : 64;
+        }
+
+        @Override
+        public String resolveEnchantment(String id) {
+            String exact = id != null && id.contains(":") ? id : "minecraft:" + id;
+            return Set.of("minecraft:sharpness", "minecraft:smite", "minecraft:power").contains(exact) ? exact : null;
+        }
+
+        @Override
+        public int enchantmentMaxLevel(String id) { return 5; }
+
+        @Override
+        public boolean enchantmentCanApply(String enchantmentId, String itemId) {
+            return !"minecraft:power".equals(enchantmentId);
+        }
+
+        @Override
+        public boolean enchantmentsCompatible(String firstId, String secondId) {
+            return !Set.of(firstId, secondId).equals(Set.of("minecraft:sharpness", "minecraft:smite"));
         }
 
         @Override

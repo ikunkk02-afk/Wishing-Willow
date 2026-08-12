@@ -167,6 +167,18 @@ public final class WishSkillRegistry {
                 "give_item is core; sound/particle/lightning are optional presentation actions.",
                 List.of("\u7ed9\u621164\u9897\u94bb\u77f3\u7136\u540e\u5e86\u795d",
                         "reward me with emeralds and effects"), Duration.ofSeconds(30)));
+        values.add(new WishSkillDefinition("advanced_item_realization",
+                "Realize enchantments, maxed or overpowered equipment, names, durability, unbreakable state, attributes, custom data, modded items, and other properties on the actual ItemStack.",
+                Set.of("enchanted", "enchantment", "maxed", "max enchant", "best gear", "god weapon",
+                        "overpowered weapon", "unbreakable", "named weapon", "durability",
+                        "附魔", "顶级", "满配", "毕业", "最高级", "神器", "逆天", "无敌", "离谱",
+                        "不会损坏", "不可破坏", "耐久", "改名", "锋利", "抢夺", "时运", "无限"),
+                WishSkillType.STRATEGY,
+                Set.of("give_item"), Set.of("play_sound", "spawn_particle", "spawn_lightning"), List.of(),
+                "Encode every requested item property into the give_item ItemStack parameters. Do not substitute player potion effects, apply_effect, apply_effect_group, modify_health, modify_speed, or modify_attribute for requested item properties. NORMAL has no metadata; ENCHANTED uses requested normal enchantments; MAXED means an excellent mutually compatible non-curse combination at each enchantment's normal maximum level; OVERPOWERED may exceed vanilla levels only with allow_unsafe_enchantment_levels=true and the configured hard cap; ABSURD may also set allow_incompatible_enchantments=true only when the player explicitly asks for all/illegal/incompatible enchantments. Explicit requested levels such as Sharpness 10 must be preserved. Use structured enchantments, never raw NBT text. ItemStack verification must confirm item id, required enchantment ids, and levels. Presentation actions are optional and never replace give_item.",
+                List.of("我想要一把锋利V钻石剑", "我想要一把顶级附魔的钻石剑", "给我一把顶级附魔弓",
+                        "给我一套顶级下界合金装备", "给我一把锋利10钻石剑", "give me an unbreakable sword named Godslayer"),
+                Duration.ofSeconds(45)));
         values.add(new WishSkillDefinition("absurd_wish_realization",
                 "Realize abstract, emotional, exaggerated, or extreme wishes through narrative escalation, absurd literalization, and global rules instead of minimal single-entity satisfaction. For wishes containing words like \"never\", \"forever\", \"always\", \"everyone\", \"the whole world\", \"all living things\", \"never be alone\", \"everybody loves me\", \"become the luckiest\", etc.",
                 Set.of("forever", "never", "always", "everlasting", "eternal", "permanent",

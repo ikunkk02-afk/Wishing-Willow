@@ -73,6 +73,9 @@ public final class WishProgramValidator {
         WishCapability capability = definition.capabilities().isEmpty()
                 ? WishCapability.WORLD_EVENT : definition.capabilities().iterator().next();
         policy(definition, parameters, resource, resolver);
+        if (definition.legacyType() == WishActionType.GIVE_ITEM) {
+            validateEnchantments(parameters, resource, resolver);
+        }
         CandidateReference candidate = candidate(definition, capability, parameters,
                 resource, target, resolver);
         return new ProgramAction(leaf.actionId(), parameters, leaf.presentation(), leaf.group(),
@@ -201,6 +204,35 @@ public final class WishProgramValidator {
         }
     }
 
+    private static void validateEnchantments(JsonObject parameters, String itemId,
+                                             WishProgramResourceResolver resolver) {
+        if (!parameters.has("enchantments")) return;
+        boolean unsafe = parameters.get("allow_unsafe_enchantment_levels").getAsBoolean();
+        boolean incompatible = parameters.get("allow_incompatible_enchantments").getAsBoolean();
+        List<String> resolvedIds = new ArrayList<>();
+        for (var element : parameters.getAsJsonArray("enchantments")) {
+            JsonObject requested = element.getAsJsonObject();
+            String requestedId = requested.get("id").getAsString();
+            String resolved = resolver.resolveEnchantment(requestedId);
+            if (resolved == null) throw error("INVALID_ENCHANTMENT_RESOURCE", requestedId);
+            int level = requested.get("level").getAsInt();
+            int max = resolver.enchantmentMaxLevel(resolved);
+            if (!unsafe && level > max) {
+                throw error("ENCHANTMENT_LEVEL_EXCEEDS_MAX", resolved + " level=" + level + " max=" + max);
+            }
+            if (!incompatible && !resolver.enchantmentCanApply(resolved, itemId)) {
+                throw error("ENCHANTMENT_NOT_APPLICABLE", resolved + " item=" + itemId);
+            }
+            for (String previous : resolvedIds) {
+                if (!incompatible && !resolver.enchantmentsCompatible(previous, resolved)) {
+                    throw error("INCOMPATIBLE_ENCHANTMENTS", previous + "," + resolved);
+                }
+            }
+            requested.addProperty("id", resolved);
+            resolvedIds.add(resolved);
+        }
+    }
+
     /** Config gates apply only once the server config is actually loaded (in-game). */
     private static boolean configEnabled(ForgeConfigSpec.BooleanValue value) {
         return !WishExecutionConfig.SPEC.isLoaded() || value.get();
@@ -244,6 +276,10 @@ public final class WishProgramValidator {
             case RESTORE_ENTITY_SPAWNING -> { defaultInt(parameters, "initial_count", 12); defaultInt(parameters, "radius", 16); }
             case CHANGE_REPUTATION -> { defaultInt(parameters, "delta", 10); defaultInt(parameters, "radius", 16); }
             case START_PREDEFINED_EVENT -> defaultInt(parameters, "intensity", 3);
+            case GIVE_ITEM -> {
+                defaultBoolean(parameters, "allow_unsafe_enchantment_levels", false);
+                defaultBoolean(parameters, "allow_incompatible_enchantments", false);
+            }
             default -> { }
         }
         if (type == WishActionType.FALLING_BLOCK_SHOWER) {
@@ -363,5 +399,9 @@ public final class WishProgramValidator {
 
     private static IllegalArgumentException error(WishProgramError error, String detail) {
         return new IllegalArgumentException(error.name() + ":" + detail);
+    }
+
+    private static IllegalArgumentException error(String error, String detail) {
+        return new IllegalArgumentException(error + ":" + detail);
     }
 }

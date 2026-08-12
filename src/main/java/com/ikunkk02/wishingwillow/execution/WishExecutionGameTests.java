@@ -45,6 +45,8 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraftforge.event.RegisterGameTestsEvent;
@@ -242,6 +244,95 @@ public final class WishExecutionGameTests {
                     +(execution==null?"none":execution.state())+" diamonds="+player.getInventory().countItem(Items.DIAMOND));return;}
             helper.succeed();
         });
+    }
+
+    /** NEW path: structured metadata becomes a real verified ItemStack, never a player buff. */
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=300)
+    public static void nativeProgramAdvancedItemStacksExecuteThroughTickLoop(GameTestHelper helper){
+        var server=helper.getLevel().getServer();UUID session=UUID.randomUUID(),owner=UUID.randomUUID();
+        ServerPlayer player=ownerPlayer(helper,owner);place(player,helper.absolutePos(new BlockPos(1,2,1)));
+        registerPlayer(server,player);
+        WishProgram program=WishProgramJson.parseAndValidate("""
+                {"schema_version":1,"goal":"give maxed sword and bow plus sharpness ten sword","core_actions":[
+                 {"action":"give_item","parameters":{"item":"minecraft:diamond_sword","count":1,
+                  "custom_name":"弑神","unbreakable":true,"enchantments":[
+                   {"id":"minecraft:sharpness","level":5},{"id":"minecraft:looting","level":3},
+                   {"id":"minecraft:sweeping","level":3},{"id":"minecraft:fire_aspect","level":2},
+                   {"id":"minecraft:knockback","level":2},{"id":"minecraft:unbreaking","level":3},
+                   {"id":"minecraft:mending","level":1}]}},
+                 {"action":"give_item","parameters":{"item":"minecraft:bow","count":1,"enchantments":[
+                   {"id":"minecraft:power","level":5},{"id":"minecraft:punch","level":2},
+                   {"id":"minecraft:flame","level":1},{"id":"minecraft:unbreaking","level":3},
+                   {"id":"minecraft:mending","level":1}]}},
+                 {"action":"give_item","parameters":{"item":"minecraft:diamond_sword","count":1,
+                  "allow_unsafe_enchantment_levels":true,
+                  "enchantments":[{"id":"minecraft:sharpness","level":10}]}}],
+                 "presentation_actions":[],"skill":"advanced_item_realization","unknown_capability":""}""");
+        WishInterpretation interpretation=new WishInterpretation(1,"advanced_item","Advanced equipment","",
+                "Advanced equipment granted","GameTest",WishTone.ABSURD,60,WishDelivery.IMMEDIATE,
+                List.of(WishCapability.GIVE_ITEM));
+        WishRecord wish=new WishRecord(session,owner,"我想要顶级附魔剑、弓和锋利10钻石剑",
+                helper.getLevel().dimension().location(),helper.getLevel().getGameTime(),System.currentTimeMillis(),
+                WishState.FINISHED,InterpretationState.SUCCESS,AiErrorCategory.NONE,AiExecutionMode.PLAYER_PROVIDED,
+                AiProviderType.CUSTOM,"gametest",System.currentTimeMillis(),interpretation).withProgram(program);
+        WishSavedData.get(server).update(wish);
+        ValidatedWishProgram validated=WishProgramValidator.validate(program,new ForgeWishProgramResourceResolver(server));
+        WishExecutionAcceptResult accepted=WishActionManager.startProgram(player,wish,validated);
+        if(!accepted.accepted()){unregisterPlayer(server,player);helper.fail("Advanced item program start failed: "+accepted);return;}
+        helper.runAfterDelay(240,()->{
+            WishRecord stored=WishSavedData.get(server).getBySession(session);
+            WishExecutionRecord execution=stored==null||stored.executionId()==null?null:
+                    WishExecutionSavedData.get(server).get(stored.executionId());
+            List<ItemStack> swords=player.getInventory().items.stream().filter(stack->stack.is(Items.DIAMOND_SWORD)).toList();
+            ItemStack maxed=swords.stream().filter(ItemStack::hasCustomHoverName).findFirst().orElse(ItemStack.EMPTY);
+            ItemStack unsafe=swords.stream().filter(stack->level(stack,"minecraft:sharpness")==10).findFirst().orElse(ItemStack.EMPTY);
+            ItemStack bow=player.getInventory().items.stream().filter(stack->stack.is(Items.BOW)).findFirst().orElse(ItemStack.EMPTY);
+            boolean swordOk=!maxed.isEmpty()&&"弑神".equals(maxed.getHoverName().getString())
+                    &&maxed.getOrCreateTag().getBoolean("Unbreakable")
+                    &&level(maxed,"minecraft:sharpness")==5&&level(maxed,"minecraft:looting")==3
+                    &&level(maxed,"minecraft:sweeping")==3&&level(maxed,"minecraft:fire_aspect")==2
+                    &&level(maxed,"minecraft:knockback")==2&&level(maxed,"minecraft:unbreaking")==3
+                    &&level(maxed,"minecraft:mending")==1;
+            boolean bowOk=!bow.isEmpty()&&level(bow,"minecraft:power")==5&&level(bow,"minecraft:punch")==2
+                    &&level(bow,"minecraft:flame")==1&&level(bow,"minecraft:unbreaking")==3
+                    &&level(bow,"minecraft:mending")==1&&level(bow,"minecraft:infinity")==0;
+            boolean noBuff=!player.hasEffect(MobEffects.DAMAGE_BOOST)&&!player.hasEffect(MobEffects.DIG_SPEED);
+            boolean ok=execution!=null&&execution.source()==ExecutionSource.WISH_PROGRAM&&stored.plan()==null
+                    &&execution.state()==WishExecutionState.COMPLETED&&swordOk&&bowOk&&!unsafe.isEmpty()&&noBuff;
+            unregisterPlayer(server,player);
+            if(!ok){helper.fail("Advanced ItemStack failed state="+(execution==null?"none":execution.state()+" "+execution.lastError())
+                    +" sword="+maxed+" unsafe="+unsafe+" bow="+bow+" noBuff="+noBuff);return;}
+            helper.succeed();
+        });
+    }
+
+    private static int level(ItemStack stack,String id){
+        var enchantment=ForgeRegistries.ENCHANTMENTS.getValue(ResourceLocation.tryParse(id));
+        return enchantment==null?0:EnchantmentHelper.getItemEnchantmentLevel(enchantment,stack);
+    }
+
+    /** Registry-generic proof for installed mod items/enchantments; no mod id is hard-coded. */
+    @GameTest(template="empty",templateNamespace="minecraft",timeoutTicks=80)
+    public static void moddedItemAndEnchantmentRegistriesAreDiscoveredDynamically(GameTestHelper helper){
+        var moddedEnchantments=ForgeRegistries.ENCHANTMENTS.getValues().stream()
+                .filter(enchantment->{ResourceLocation key=ForgeRegistries.ENCHANTMENTS.getKey(enchantment);
+                    return key!=null&&!"minecraft".equals(key.getNamespace());}).toList();
+        var moddedItems=ForgeRegistries.ITEMS.getValues().stream()
+                .filter(item->{ResourceLocation key=ForgeRegistries.ITEMS.getKey(item);
+                    return key!=null&&!"minecraft".equals(key.getNamespace());}).toList();
+        if(moddedItems.isEmpty()){helper.fail("Installed test environment exposed no modded item registry entries");return;}
+        for(var enchantment:moddedEnchantments)for(var item:ForgeRegistries.ITEMS.getValues()){
+            ItemStack stack=new ItemStack(item);if(!enchantment.canEnchant(stack))continue;
+            EnchantmentHelper.setEnchantments(Map.of(enchantment,enchantment.getMaxLevel()),stack);
+            if(EnchantmentHelper.getItemEnchantmentLevel(enchantment,stack)!=enchantment.getMaxLevel()){
+                helper.fail("Modded enchantment round-trip failed: "+ForgeRegistries.ENCHANTMENTS.getKey(enchantment));return;
+            }
+            WishingWillow.LOGGER.info("Modded advanced item registry verified item={} enchantment={} level={}",
+                    ForgeRegistries.ITEMS.getKey(item),ForgeRegistries.ENCHANTMENTS.getKey(enchantment),enchantment.getMaxLevel());
+            helper.succeed();return;
+        }
+        WishingWillow.LOGGER.info("Modded item registry verified entries={} but installed mods registered no applicable non-minecraft enchantment",moddedItems.size());
+        helper.succeed();
     }
 
     /**

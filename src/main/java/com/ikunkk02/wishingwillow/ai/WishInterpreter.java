@@ -191,6 +191,8 @@ public final class WishInterpreter {
                 + "Creative wording is never an unknown capability. Never output Minecraft commands, Java, scripts, code, NBT or shell text.\n"
                 + "For permanent loneliness/companionship wishes such as never alone, always accompanied, do not emit only a weak aura: use entity_attraction_aura with permanent=true and never_alone=true, radius=256, strength=3, and all include flags true.\n"
                 + "For all beneficial effects use apply_effect_group group=beneficial.\n"
+                + "When the player's wish explicitly requests properties of an item, those properties MUST be encoded into or attached to the ItemStack through give_item. Do NOT substitute player potion effects or player attributes for enchanted, sharp, powerful, named, unbreakable, high-durability, or otherwise enhanced equipment.\n"
+                + "For MAXED/top-tier/full-build/graduation enchantment wording, choose a normally compatible, non-curse, excellent combination at registered max levels from AVAILABLE_ENCHANTMENTS. Do not combine mutually exclusive enchantments unless the player explicitly requests all/illegal/incompatible enchantments. Preserve explicit requested levels and set allow_unsafe_enchantment_levels=true only when they exceed normal max level.\n"
                 + "RESOURCE KIND MATTERS. Determine what the resource is independently from how it is delivered.\n"
                 + "ITEM + physical falling from above -> spawn_item_rain. BLOCK + physical falling from above -> spawn_falling_block.\n"
                 + "Never put an item registry id into a block parameter. Never put a block registry id into an item parameter merely because the names are related.\n"
@@ -202,7 +204,8 @@ public final class WishInterpreter {
                 + "The JSON schema supplied with this request is the authoritative parameter contract.";
         return WishingWillowPromptAssembler.assemble(kind, context,
                 WishActionRegistry.defaults().summaryPrompt(), WishSkillRegistry.defaults().candidatePrompt(wish),
-                "Server validator, action policy, entity caps, world limits and permissions remain authoritative.",
+                "Server validator, action policy, entity caps, world limits and permissions remain authoritative.\nAVAILABLE_ENCHANTMENTS="
+                        + AdvancedItemEnchantmentContext.prompt(wish),
                 contract, wish, (repairPayload == null ? "" : repairPayload)
                         + "\nFULFILLMENT_MODE=" + mode.name());
     }

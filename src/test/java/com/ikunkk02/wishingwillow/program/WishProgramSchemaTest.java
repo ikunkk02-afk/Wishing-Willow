@@ -33,6 +33,55 @@ class WishProgramSchemaTest {
     }
 
     @Test
+    void giveItemSchemaSupportsStructuredAdvancedItemMetadataWithoutBreakingLegacyCalls() {
+        JsonArray oneOf = WishProgramJson.jsonSchema().getAsJsonObject("properties")
+                .getAsJsonObject("core_actions").getAsJsonObject("items").getAsJsonArray("oneOf");
+        JsonObject parameters = variant(oneOf, "give_item").getAsJsonObject("properties")
+                .getAsJsonObject("parameters");
+        JsonObject properties = parameters.getAsJsonObject("properties");
+
+        assertTrue(requiredContains(parameters, "item"));
+        assertTrue(requiredContains(parameters, "count"));
+        assertFalse(requiredContains(parameters, "enchantments"));
+        assertEquals("array", properties.getAsJsonObject("enchantments").get("type").getAsString());
+        JsonObject enchantment = properties.getAsJsonObject("enchantments").getAsJsonObject("items");
+        assertTrue(requiredContains(enchantment, "id"));
+        assertTrue(requiredContains(enchantment, "level"));
+        assertEquals(10, enchantment.getAsJsonObject("properties").getAsJsonObject("level")
+                .get("maximum").getAsInt());
+        assertEquals("array", properties.getAsJsonObject("attributes").get("type").getAsString());
+        assertEquals("object", properties.getAsJsonObject("custom_data").get("type").getAsString());
+
+        assertDoesNotThrow(() -> parse("give_item",
+                "{\"item\":\"minecraft:diamond_sword\",\"count\":1}"));
+        assertDoesNotThrow(() -> parse("give_item", """
+                {"item":"minecraft:diamond_sword","count":1,
+                 "enchantments":[{"id":"minecraft:sharpness","level":5}],
+                 "custom_name":"弑神","damage":12,"unbreakable":true,
+                 "allow_unsafe_enchantment_levels":false,
+                 "allow_incompatible_enchantments":false,
+                 "attributes":[{"id":"minecraft:generic.attack_damage","amount":3.0,
+                  "operation":"addition","slot":"mainhand"}],
+                 "custom_data":{"WishingWillow":{"quality":"MAXED"}}}
+                """));
+    }
+
+    @Test
+    void advancedItemNestedSchemaRejectsMalformedEnchantmentsAndUnsafeOverflow() {
+        assertInvalidParameterType("give_item", """
+                {"item":"minecraft:diamond_sword","count":1,
+                 "enchantments":[{"id":"minecraft:sharpness","level":"V"}]}
+                """, "level");
+        IllegalArgumentException overflow = assertThrows(IllegalArgumentException.class,
+                () -> parse("give_item", """
+                        {"item":"minecraft:diamond_sword","count":1,
+                         "enchantments":[{"id":"minecraft:sharpness","level":11}],
+                         "allow_unsafe_enchantment_levels":true}
+                        """));
+        assertEquals("INVALID_WISH_PROGRAM:PARAMETER_MAX_level", overflow.getMessage());
+    }
+
+    @Test
     void fallingBlockSchemaBindsEveryParameter() {
         JsonObject schema = WishProgramJson.jsonSchema();
         JsonArray oneOf = schema.getAsJsonObject("properties").getAsJsonObject("core_actions")
