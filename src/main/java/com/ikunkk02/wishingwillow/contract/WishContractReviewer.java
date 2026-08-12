@@ -6,6 +6,7 @@ import com.ikunkk02.wishingwillow.ai.*;
 import com.ikunkk02.wishingwillow.planning.WishPlanDraft;
 import com.ikunkk02.wishingwillow.planning.WishPlanJson;
 import com.ikunkk02.wishingwillow.execution.WishPipelineProbe;
+import com.ikunkk02.wishingwillow.ai.prompt.WishingWillowCorePrompt;
 
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -37,10 +38,11 @@ public final class WishContractReviewer {
         input.add("wish_contract", JsonParser.parseString(WishInterpretationValidator.toJson(interpretation))
                 .getAsJsonObject().get("contract"));
         input.add("plan", JsonParser.parseString(WishPlanJson.toAiJson(plan)));
-        AiRequest request = new AiRequest("""
-                You are the independent Wish Contract reviewer. Decide only whether the supplied plan necessarily
+        AiRequest request = new AiRequest(WishingWillowCorePrompt.TEXT + "\n\nCONTRACT REVIEW ROLE:\n" + """
+                You are the independent Wishing Willow Wish Contract reviewer. Decide whether the supplied plan necessarily
                 makes required_outcome and every hard constraint true. Punishment, mood, danger, or partial progress
-                never substitutes for fulfillment. Echo both hashes exactly. Return only the JSON object.
+                never substitutes for real gameplay fulfillment. Presentation-only output is not fulfillment.
+                Echo both hashes exactly. Return only the JSON object.
                 """, "<UNTRUSTED_CONTRACT_REVIEW_JSON>\n" + input + "\n</UNTRUSTED_CONTRACT_REVIEW_JSON>",
                 500, AiOutputMode.JSON_SCHEMA, schema());
         return provider.complete(request)

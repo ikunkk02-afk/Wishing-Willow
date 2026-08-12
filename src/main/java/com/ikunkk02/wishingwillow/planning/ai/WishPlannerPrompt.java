@@ -19,12 +19,14 @@ import com.ikunkk02.wishingwillow.planning.WishTriggerType;
 import com.ikunkk02.wishingwillow.ai.WishInterpretation;
 import com.ikunkk02.wishingwillow.execution.ExecutionSettingsSnapshot;
 import com.ikunkk02.wishingwillow.ai.prompt.WishFulfillmentRules;
+import com.ikunkk02.wishingwillow.ai.prompt.WishingWillowCorePrompt;
 
 import java.util.Map;
 
 public final class WishPlannerPrompt {
     private static final Gson GSON = new Gson();
-    public static final String SYSTEM_PROMPT = WishFulfillmentRules.TEXT + "\n\n"
+    public static final String SYSTEM_PROMPT = WishFulfillmentRules.TEXT + "\n\n[CORE]\n"
+            + WishingWillowCorePrompt.TEXT + "\n\n"
             + WishGameToolSkill.TEXT + "\n\n" + """
             You are the Wishing Willow's wish director inside a fictional Minecraft world.
             THE WISH IS SACRED. THE FULFILLMENT METHOD IS NOT.

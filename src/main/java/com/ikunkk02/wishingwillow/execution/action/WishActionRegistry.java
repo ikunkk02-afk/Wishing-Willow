@@ -77,6 +77,24 @@ public final class WishActionRegistry {
 
     public String catalogPrompt() { return GSON.toJson(catalogJson()); }
 
+    /** Prompt-budget catalog: schemas remain authoritative in the independent JSON output contract. */
+    public String summaryPrompt() {
+        JsonArray result = new JsonArray();
+        definitions.values().forEach(definition -> {
+            JsonObject value = new JsonObject();
+            value.addProperty("id", definition.id());
+            String description = definition.description();
+            int boundary = description.indexOf("\nDO NOT USE WHEN:");
+            value.addProperty("capability", boundary < 0 ? description : description.substring(0, boundary));
+            if (definition.resourceKind() != null) {
+                value.addProperty("resource_kind", definition.resourceKind().name().toLowerCase(java.util.Locale.ROOT));
+                value.addProperty("resource_parameter", definition.resourceParameter());
+            }
+            result.add(value);
+        });
+        return GSON.toJson(result);
+    }
+
     private static WishActionRegistry createDefault() {
         List<WishActionDefinition> values = new ArrayList<>();
         add(values, "give_item", WishActionType.GIVE_ITEM, StandardWishActionExecutors.giveItem(), 2,

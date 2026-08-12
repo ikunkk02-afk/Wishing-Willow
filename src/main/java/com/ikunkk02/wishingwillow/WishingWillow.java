@@ -55,6 +55,12 @@ public final class WishingWillow {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(ModNetworking::register);
+        event.enqueueWork(() -> {
+            ModNetworking.register();
+            com.ikunkk02.wishingwillow.ai.prompt.WishAiContextSnapshot context =
+                    com.ikunkk02.wishingwillow.ai.prompt.WishAiContextCache.initialize();
+            LOGGER.info("Wish AI context cache initialized corePromptVersion=1 installedModsDigest={} actionsDigest={} skillsDigest={}",
+                    context.installedModsDigest(), context.actionsDigest(), context.skillsDigest());
+        });
     }
 }

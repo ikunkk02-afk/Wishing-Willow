@@ -159,7 +159,8 @@ public final class ClientAiWishCoordinator {
                     sessionId, session.config().providerType(), safeModel(session.config().model()),
                     session.wish().length());
             future = INTERPRETER.interpret(session.config(), session.wish(),
-                    WishingWillowClientConfig.FULFILLMENT_MODE.get(), sessionId);
+                    WishingWillowClientConfig.FULFILLMENT_MODE.get(), sessionId,
+                    ClientWishAiRuntimeContext.capture());
         }
         if (!session.aiStarted(future, System.currentTimeMillis())) return;
         WishLifecycleLog.event(sessionId, "AI_REQUEST_STARTED",
