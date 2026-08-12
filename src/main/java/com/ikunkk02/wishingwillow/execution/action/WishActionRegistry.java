@@ -282,7 +282,7 @@ public final class WishActionRegistry {
                 schema(p("radius", "number", false, 8d, 256d), p("strength", "number", false, 0.1d, 3d),
                         p("permanent", "boolean", false), p("include_hostile", "boolean", false),
                         p("include_passive", "boolean", false), p("include_villagers", "boolean", false),
-                        p("include_modded", "boolean", false)),
+                        p("include_modded", "boolean", false), p("never_alone", "boolean", false)),
                 description("create a permanent or long-lasting attraction aura that pulls all nearby living entities toward the player",
                         "each entity should be handled individually by a follow action",
                         "make all nearby creatures gather around me forever", "follow_player, avoid_player"));

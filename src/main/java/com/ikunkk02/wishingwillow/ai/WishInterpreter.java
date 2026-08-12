@@ -189,6 +189,7 @@ public final class WishInterpreter {
                 + "program.skill is optional metadata and must be a JSON string skill id, never a copied Skill object or array. Example: \"skill\":\"absurd_wish_realization\". Use \"skill\":\"\" when no Skill applies.\n"
                 + "Only when no action or skill can express a genuinely mod-specific capability: leave both action arrays empty and set unknown_capability.\n"
                 + "Creative wording is never an unknown capability. Never output Minecraft commands, Java, scripts, code, NBT or shell text.\n"
+                + "For permanent loneliness/companionship wishes such as never alone, always accompanied, do not emit only a weak aura: use entity_attraction_aura with permanent=true and never_alone=true, radius=256, strength=3, and all include flags true.\n"
                 + "For all beneficial effects use apply_effect_group group=beneficial.\n"
                 + "RESOURCE KIND MATTERS. Determine what the resource is independently from how it is delivered.\n"
                 + "ITEM + physical falling from above -> spawn_item_rain. BLOCK + physical falling from above -> spawn_falling_block.\n"

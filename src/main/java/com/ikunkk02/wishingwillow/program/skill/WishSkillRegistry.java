@@ -188,7 +188,7 @@ public final class WishSkillRegistry {
                         "apply_effect", "apply_effect_group", "set_entity_target",
                         "play_sound", "spawn_particle", "place_pattern"),
                 List.of(),
-                "Use entity_attraction_aura with permanent=true for wishes about \"never being alone\" or \"all creatures coming to me\". Use spawn_entity plus follow_player with permanent=true for a single dedicated follower. Recommended actions are optional tools, not a list that must all appear. Prefer global rules over single-entity spawns for abstract global wishes. The absurdity is that the wish is fulfilled literally, potentially with overwhelming consequences.",
+                "For never lonely, never alone, always accompanied, or all creatures staying with me wishes, use entity_attraction_aura as a core action with permanent=true, never_alone=true, radius=256, strength=3, include_hostile=true, include_passive=true, include_villagers=true, include_modded=true. This creates an immediate bounded gathering, permanent follow behavior, safe teleport recovery, and low-frequency companion refill. Do not use this escalation for ordinary temporary attraction wishes. Use spawn_entity plus follow_player with permanent=true for a single dedicated follower. Recommended actions are optional tools, not a list that must all appear. Prefer global rules over single-entity spawns for abstract global wishes. The absurdity is that the wish is fulfilled literally, potentially with overwhelming consequences.",
                 List.of("I wish I would never be lonely",
                         "\u6211\u5e0c\u671b\u6c38\u8fdc\u4e0d\u5b64\u5355",
                         "\u8ba9\u6240\u6709\u751f\u7269\u90fd\u88ab\u6211\u5438\u5f15",
